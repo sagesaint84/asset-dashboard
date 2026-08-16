@@ -61,10 +61,20 @@ class TossOpenAPI:
         if response.is_error:
             try:
                 payload = response.json()
-                detail = payload.get("error", {}).get("message") or payload.get("error_description") or payload
             except ValueError:
-                detail = response.text
-            raise TossOpenAPIError(f"토스증권 OpenAPI 요청 실패 ({response.status_code}): {detail}")
+                payload = response.text
+            if isinstance(payload, dict):
+                error_obj = payload.get("error")
+                if isinstance(error_obj, dict):
+                    detail = error_obj.get("message") or payload.get("error_description") or payload
+                else:
+                    detail = error_obj or payload.get("error_description") or payload
+            else:
+                # 응답이 dict가 아니라 문자열 등 다른 형태로 온 경우 그대로 노출
+                detail = payload
+            raise TossOpenAPIError(
+                f"토스증권 OpenAPI 요청 실패 ({response.status_code}) [{response.request.method} {response.request.url}]: {detail}"
+            )
 
     async def _get(self, path: str, params: dict[str, Any] | None = None, account_seq: int | None = None) -> Any:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -152,6 +162,7 @@ class TossOpenAPI:
         """
         indicator_prices = await self._get("/api/v1/market-indicators/prices", params={"symbols": "KOSPI"})
         stock_prices = await self._get("/api/v1/prices", params={"symbols": "SPY,QQQ"})
+
         async def candle_pair(path: str, params: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             daily = await self._get(path, params={**params, "interval": "1d", "count": 2})
             try:
