@@ -1,0 +1,351 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from app.services.kb_openapi import KBOpenAPI, KBOpenAPIError
+from app.services.nhplug_openapi import NhPlugOpenAPI, NhPlugOpenAPIError
+from app.services.toss_openapi import TossOpenAPI, TossOpenAPIError
+from app.services.portfolio import (
+    clear_portfolio, get_dashboard, get_or_add_account, import_rows, normalize_holding,
+    read_portfolio, seed_demo, upsert_holdings, write_portfolio,
+)
+from app.services.asset_records import delete_asset_record, list_asset_records, upsert_asset_record
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+STATIC_DIR = ROOT_DIR / "app" / "static"
+
+
+def load_env_file() -> None:
+    env_path = ROOT_DIR / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+load_env_file()
+app = FastAPI(title="내 자산 대시보드", docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+class HoldingCreate(BaseModel):
+    broker: str = Field(min_length=1, max_length=60)
+    account_name: str = Field(min_length=1, max_length=80)
+    code: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=80)
+    quantity: float = Field(gt=0)
+    avg_price: float = Field(ge=0)
+    current_price: float = Field(ge=0)
+    currency: str = "KRW"
+    market: str = ""
+
+
+@app.get("/", include_in_schema=False)
+async def index() -> FileResponse:
+    return FileResponse(ROOT_DIR / "index.html")
+
+
+@app.get("/dashboard", include_in_schema=False)
+async def dashboard_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/api/dashboard")
+async def dashboard() -> dict:
+    data = get_dashboard()
+    day = data.get("day_change") or {}
+    if data["summary"]["holding_count"] and day.get("date"):
+        snapshot = {
+            "date": day["date"],
+            "total_value_krw": data["summary"]["total_value_krw"],
+            "total_cost_krw": data["summary"]["total_cost_krw"],
+            "profit_krw": data["summary"]["profit_krw"],
+            "return_rate": data["summary"]["return_rate"],
+            "day_profit_krw": day.get("change_krw") or 0,
+            "krw_value_krw": data.get("currency_summary", {}).get("KRW", {}).get("market_value_krw", 0),
+            "usd_value_krw": data.get("currency_summary", {}).get("USD", {}).get("market_value_krw", 0),
+            "holding_count": data["summary"]["holding_count"],
+            "currency": "KRW",
+            "source": "auto",
+            "memo": "대시보드 자동 기록",
+        }
+        upsert_asset_record(snapshot, by_date=True)
+    return data
+
+
+@app.get("/api/status")
+async def status() -> dict:
+    return {
+        "kb_configured": KBOpenAPI().configured,
+        "toss_configured": TossOpenAPI().configured,
+        "namoo_configured": NhPlugOpenAPI().configured,
+        "storage": "local",
+    }
+
+
+@app.get("/api/market-overview")
+async def market_overview() -> dict:
+    client = TossOpenAPI()
+    try:
+        markets = await client.get_market_overview()
+        exchange_rate = await client.get_usd_krw_rate()
+    except TossOpenAPIError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"markets": markets, "exchange_rate": exchange_rate, "source": "토스증권 OpenAPI"}
+
+
+@app.post("/api/holdings", status_code=201)
+async def create_holding(payload: HoldingCreate) -> dict:
+    data = read_portfolio()
+    account_id = get_or_add_account(data, payload.broker.strip(), payload.account_name.strip(), "manual")
+    item = normalize_holding(payload.model_dump(), account_id, payload.broker.strip(), payload.account_name.strip(), "manual")
+    upsert_holdings(data, [item])
+    write_portfolio(data)
+    return {"message": "보유종목을 저장했습니다.", "dashboard": get_dashboard()}
+
+
+@app.delete("/api/holdings/{holding_id}")
+async def delete_holding(holding_id: str) -> dict:
+    data = read_portfolio()
+    before = len(data["holdings"])
+    data["holdings"] = [holding for holding in data["holdings"] if holding["id"] != holding_id]
+    if before == len(data["holdings"]):
+        raise HTTPException(404, "보유종목을 찾지 못했습니다.")
+    used_accounts = {holding["account_id"] for holding in data["holdings"]}
+    data["accounts"] = [account for account in data["accounts"] if account["id"] in used_accounts]
+    write_portfolio(data)
+    return {"message": "보유종목을 삭제했습니다."}
+
+
+@app.delete("/api/accounts/{account_id}")
+async def delete_account(account_id: str) -> dict:
+    data = read_portfolio()
+    if not any(account.get("id") == account_id for account in data["accounts"]):
+        raise HTTPException(404, "계좌를 찾지 못했습니다.")
+    data["accounts"] = [account for account in data["accounts"] if account.get("id") != account_id]
+    data["holdings"] = [holding for holding in data["holdings"] if holding.get("account_id") != account_id]
+    write_portfolio(data)
+    return {"message": "증권사 계좌와 연결된 보유종목을 삭제했습니다."}
+
+
+@app.put("/api/holdings/{holding_id}")
+async def update_holding(holding_id: str, payload: HoldingCreate) -> dict:
+    data = read_portfolio()
+    current = next((item for item in data["holdings"] if item["id"] == holding_id), None)
+    if current is None:
+        raise HTTPException(404, "보유종목을 찾지 못했습니다.")
+    broker = payload.broker.strip()
+    account_name = payload.account_name.strip()
+    account_id = get_or_add_account(data, broker, account_name, current.get("source", "manual"))
+    item = normalize_holding(payload.model_dump(), account_id, broker, account_name, current.get("source", "manual"))
+    item["id"] = holding_id
+    data["holdings"] = [item if holding["id"] == holding_id else holding for holding in data["holdings"]]
+    write_portfolio(data)
+    return {"message": "보유종목을 수정했습니다.", "dashboard": get_dashboard()}
+
+
+@app.post("/api/import")
+async def import_portfolio(file: UploadFile = File(...), broker: str = "기타 증권사") -> dict:
+    if Path(file.filename or "").suffix.lower() not in {".csv", ".xlsx", ".xlsm"}:
+        raise HTTPException(400, "CSV 또는 XLSX 파일만 가져올 수 있습니다.")
+    try:
+        count, warnings = import_rows(file.filename or "portfolio.csv", await file.read(), broker)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"message": f"{count}개 보유종목을 반영했습니다.", "count": count, "warnings": warnings}
+
+
+@app.post("/api/demo")
+async def load_demo() -> dict:
+    seed_demo()
+    return {"message": "예시 데이터를 불러왔습니다."}
+
+
+@app.post("/api/clear")
+async def clear_all() -> dict:
+    clear_portfolio()
+    return {"message": "저장된 보유내역을 모두 지웠습니다."}
+
+
+@app.get("/api/asset-records")
+async def get_asset_records() -> dict:
+    return {"records": list_asset_records()}
+
+
+@app.post("/api/asset-records")
+async def create_asset_record(payload: dict) -> dict:
+    record = upsert_asset_record(payload, by_date=bool(payload.get("date")))
+    return {"message": "자산기록을 저장했습니다.", "record": record}
+
+
+@app.put("/api/asset-records/{record_id}")
+async def update_asset_record(record_id: str, payload: dict) -> dict:
+    payload["id"] = record_id
+    record = upsert_asset_record(payload)
+    return {"message": "자산기록을 수정했습니다.", "record": record}
+
+
+@app.delete("/api/asset-records/{record_id}")
+async def remove_asset_record(record_id: str) -> dict:
+    if not delete_asset_record(record_id):
+        raise HTTPException(404, "자산기록을 찾지 못했습니다.")
+    return {"message": "자산기록을 삭제했습니다."}
+
+
+@app.post("/api/asset-records/snapshot")
+async def snapshot_asset_record() -> dict:
+    data = get_dashboard()
+    if not data["summary"]["holding_count"]:
+        raise HTTPException(400, "저장할 보유자산이 없습니다.")
+    day = data.get("day_change") or {}
+    record = upsert_asset_record(
+        {
+            # 수동 스냅샷은 사용자가 누른 실제 날짜를 기록합니다.
+            "date": datetime.now().astimezone().date().isoformat(),
+            "total_value_krw": data["summary"]["total_value_krw"],
+            "total_cost_krw": data["summary"]["total_cost_krw"],
+            "profit_krw": data["summary"]["profit_krw"],
+            "return_rate": data["summary"]["return_rate"],
+            "day_profit_krw": day.get("change_krw") or 0,
+            "krw_value_krw": data.get("currency_summary", {}).get("KRW", {}).get("market_value_krw", 0),
+            "usd_value_krw": data.get("currency_summary", {}).get("USD", {}).get("market_value_krw", 0),
+            "holding_count": data["summary"]["holding_count"],
+            "currency": "KRW",
+            "source": "snapshot",
+            "memo": "수동 스냅샷",
+        },
+        by_date=True,
+    )
+    return {"message": "오늘 자산을 기록했습니다.", "record": record}
+
+
+@app.post("/api/sync/kb")
+async def sync_kb() -> dict:
+    client = KBOpenAPI()
+    try:
+        records = await client.sync_holdings()
+    except KBOpenAPIError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    data = read_portfolio()
+    account_id = get_or_add_account(data, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api")
+    holdings = [normalize_holding(record, account_id, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api") for record in records]
+    prices, warnings = await client.refresh_prices(holdings)
+    for holding in holdings:
+        price = prices.get(holding["id"])
+        if price:
+            holding["current_price"] = price
+            # SSQM1801 명세에는 국내 종목별 평균매입가가 포함되지 않아,
+            # 손익을 실제값처럼 보이지 않도록 현재가를 기준값으로 둡니다.
+            if holding["avg_price"] == 0:
+                holding["avg_price"] = price
+    upsert_holdings(data, holdings, replace_source="kb_api")
+    write_portfolio(data)
+    return {"message": f"KB증권 보유종목 {len(holdings)}개를 동기화했습니다.", "count": len(holdings), "warnings": warnings[:10]}
+
+
+@app.post("/api/sync/toss")
+async def sync_toss() -> dict:
+    client = TossOpenAPI()
+    try:
+        records = await client.sync_holdings()
+    except TossOpenAPIError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    data = read_portfolio()
+    holdings = []
+    for record in records:
+        account_id = get_or_add_account(data, "토스증권", record["account_name"], "toss_api")
+        holdings.append(normalize_holding(record, account_id, "토스증권", record["account_name"], "toss_api"))
+    upsert_holdings(data, holdings, replace_source="toss_api")
+    write_portfolio(data)
+    return {"message": f"토스증권 보유종목 {len(holdings)}개를 동기화했습니다.", "count": len(holdings)}
+
+
+@app.post("/api/sync/namoo")
+async def sync_namoo() -> dict:
+    client = NhPlugOpenAPI()
+    try:
+        records = await client.sync_holdings()
+    except NhPlugOpenAPIError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    data = read_portfolio()
+    holdings = []
+    for record in records:
+        account_id = get_or_add_account(data, "NH투자증권(나무)", record["account_name"], "nhplug_api")
+        holdings.append(normalize_holding(record, account_id, "NH투자증권(나무)", record["account_name"], "nhplug_api"))
+    upsert_holdings(data, holdings, replace_source="nhplug_api")
+    write_portfolio(data)
+    return {"message": f"나무증권 보유종목 {len(holdings)}개를 동기화했습니다.", "count": len(holdings)}
+
+
+@app.post("/api/fx/refresh")
+async def refresh_fx_rate() -> dict:
+    client = TossOpenAPI()
+    data = read_portfolio()
+    currencies = sorted({str(holding.get("currency", "")).upper() for holding in data["holdings"] if holding.get("currency") not in {"", "KRW"}})
+    if not currencies:
+        currencies = ["USD"]
+    quotes: dict[str, dict] = {}
+    warnings: list[str] = []
+    for currency in currencies:
+        try:
+            quotes[currency] = await client.get_exchange_rate(currency, "KRW")
+        except TossOpenAPIError as exc:
+            warnings.append(str(exc))
+    if not quotes:
+        raise HTTPException(400, " / ".join(warnings) or "토스증권 환율을 가져오지 못했습니다.")
+    for currency, quote in quotes.items():
+        data["settings"]["fx_rates"][currency] = quote["rate"]
+    usd_quote = quotes.get("USD", {})
+    data["settings"]["fx_info"] = {"source": "토스증권 OpenAPI", "quotes": quotes, **usd_quote}
+    write_portfolio(data)
+    updated = ", ".join(f"{currency}/KRW" for currency in quotes)
+    return {"message": f"토스증권 실시간 환율({updated})을 반영했습니다.", "quotes": quotes, "warnings": warnings}
+
+
+@app.post("/api/refresh-prices")
+async def refresh_prices() -> dict:
+    data = read_portfolio()
+    if not data["holdings"]:
+        raise HTTPException(400, "갱신할 보유종목이 없습니다.")
+    kb_client = KBOpenAPI()
+    toss_client = TossOpenAPI()
+    namoo_client = NhPlugOpenAPI()
+    if not kb_client.configured and not toss_client.configured and not namoo_client.configured:
+        raise HTTPException(400, "KB·토스·나무증권 OpenAPI 키 중 하나를 .env에 설정하세요.")
+    prices: dict[str, float] = {}
+    warnings: list[str] = []
+    if kb_client.configured:
+        kb_holdings = [holding for holding in data["holdings"] if not str(holding.get("market", "")).startswith(("TOSS_", "NH_"))]
+        try:
+            kb_prices, kb_warnings = await kb_client.refresh_prices(kb_holdings)
+            prices.update(kb_prices)
+            warnings.extend(kb_warnings)
+        except KBOpenAPIError as exc:
+            warnings.append(str(exc))
+    if toss_client.configured:
+        try:
+            toss_holdings = [holding for holding in data["holdings"] if holding.get("currency") in {"KRW", "USD"}]
+            toss_prices, toss_warnings = await toss_client.refresh_prices(toss_holdings)
+            prices.update(toss_prices)
+            warnings.extend(toss_warnings)
+        except TossOpenAPIError as exc:
+            warnings.append(str(exc))
+    if namoo_client.configured:
+        warnings.append("나무증권 보유종목·시세는 ‘나무 계좌 동기화’ 버튼으로 함께 갱신됩니다.")
+    for holding in data["holdings"]:
+        if holding["id"] in prices:
+            holding["current_price"] = prices[holding["id"]]
+            holding["price_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    write_portfolio(data)
+    return {"message": f"{len(prices)}개 종목의 시세를 갱신했습니다.", "count": len(prices), "warnings": warnings[:10]}

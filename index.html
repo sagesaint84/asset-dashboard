@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>내 자산 대시보드 시작</title>
+    <style>
+      body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;color:#14213d;font-family:"Malgun Gothic","Segoe UI",sans-serif}
+      main{max-width:500px;margin:24px;padding:38px;background:#fff;border:1px solid #e6eaf1;border-radius:18px;box-shadow:0 14px 42px #24315114;text-align:center}
+      .mark{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 16px;border-radius:13px;background:#2a62f2;color:#fff;font-size:26px;font-weight:800}
+      h1{font-size:24px;margin:0 0 10px;letter-spacing:-1px}p{color:#65738d;line-height:1.7;font-size:14px}.button{display:inline-block;margin-top:14px;padding:11px 16px;border-radius:9px;background:#2a62f2;color:#fff;text-decoration:none;font-weight:700;font-size:14px}.hint{margin-top:19px;padding:12px;background:#edf2ff;border-radius:9px;color:#536a9e;font-size:12px;line-height:1.6}
+    </style>
+  </head>
+  <body>
+    <main data-dashboard-entry>
+      <div class="mark">₩</div>
+      <h1>내 자산 대시보드</h1>
+      <p>대시보드를 여는 중입니다.</p>
+      <a class="button" href="http://127.0.0.1:8000/dashboard">대시보드 열기</a>
+      <div class="hint">이 파일을 직접 열었다면 먼저 같은 폴더의 <strong>대시보드_실행.cmd</strong>를 더블클릭해 주세요. FastAPI 서버가 실행된 후 위 버튼을 누르면 됩니다.</div>
+    </main>
+    <script>
+      if (location.protocol !== "file:") location.replace("/dashboard");
+    </script>
+  </body>
+</html>

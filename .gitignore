@@ -1,0 +1,20 @@
+# Python 가상환경 / 캐시
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 민감 정보 - 절대 커밋 금지
+.env
+data/
+
+# 로그
+*.log
+
+# 에디터
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
