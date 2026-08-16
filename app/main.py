@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import BaseModel, Field
 
 from app.services.kb_openapi import KBOpenAPI, KBOpenAPIError
@@ -37,6 +39,128 @@ def load_env_file() -> None:
 load_env_file()
 app = FastAPI(title="내 자산 대시보드", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+# ---------------------------------------------------------------------------
+# 로그인 / 인증
+# ---------------------------------------------------------------------------
+
+AUTH_USERNAME = os.getenv("DASHBOARD_USERNAME", "")
+AUTH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+SECRET_KEY = os.getenv("DASHBOARD_SECRET_KEY", "")
+SESSION_MAX_AGE = 60 * 60 * 24 * 14  # 14일 동안 로그인 유지
+COOKIE_NAME = "dashboard_session"
+
+_serializer = URLSafeTimedSerializer(SECRET_KEY) if SECRET_KEY else None
+AUTH_CONFIGURED = bool(AUTH_USERNAME and AUTH_PASSWORD and SECRET_KEY)
+
+PUBLIC_PATHS = {"/login"}
+
+LOGIN_PAGE_HTML = """<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>로그인 - 내 자산 대시보드</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#0f1115; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .card { background:#181b22; padding:36px 32px; border-radius:14px; width:320px;
+          box-shadow:0 10px 30px rgba(0,0,0,0.4); }
+  h1 { color:#f5f6f8; font-size:20px; margin:0 0 24px; text-align:center; }
+  label { display:block; color:#9aa1ac; font-size:13px; margin:14px 0 6px; }
+  input { width:100%; box-sizing:border-box; padding:10px 12px; border-radius:8px;
+          border:1px solid #2a2f3a; background:#0f1115; color:#f5f6f8; font-size:14px; }
+  input:focus { outline:none; border-color:#5b8cff; }
+  button { width:100%; margin-top:22px; padding:11px; border:none; border-radius:8px;
+           background:#5b8cff; color:white; font-size:15px; font-weight:600; cursor:pointer; }
+  button:hover { background:#4a7bef; }
+  .error { color:#ff6b6b; font-size:13px; margin-top:14px; text-align:center; }
+  .notice { color:#e0a742; font-size:13px; margin-top:14px; text-align:center; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>내 자산 대시보드</h1>
+    <form method="post" action="/login">
+      <label>아이디</label>
+      <input type="text" name="username" autocomplete="username" required autofocus />
+      <label>비밀번호</label>
+      <input type="password" name="password" autocomplete="current-password" required />
+      <button type="submit">로그인</button>
+    </form>
+    {{message}}
+  </div>
+</body>
+</html>"""
+
+
+def _is_authenticated(request: Request) -> bool:
+    if not AUTH_CONFIGURED:
+        return False
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return False
+    try:
+        data = _serializer.loads(token, max_age=SESSION_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return False
+    return data.get("user") == AUTH_USERNAME
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    path = request.url.path
+    if path in PUBLIC_PATHS or path.startswith("/static/") or path == "/favicon.ico":
+        return await call_next(request)
+    if not _is_authenticated(request):
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "로그인이 필요합니다."}, status_code=401)
+        return RedirectResponse("/login")
+    return await call_next(request)
+
+
+@app.get("/login", include_in_schema=False)
+async def login_page(error: str | None = None) -> HTMLResponse:
+    if not AUTH_CONFIGURED:
+        message = (
+            "<p class='notice'>로그인 정보가 설정되지 않았습니다.<br>"
+            "서버의 .env 파일에 DASHBOARD_USERNAME, DASHBOARD_PASSWORD, "
+            "DASHBOARD_SECRET_KEY를 입력한 뒤 다시 시작하세요.</p>"
+        )
+    elif error:
+        message = "<p class='error'>아이디 또는 비밀번호가 올바르지 않습니다.</p>"
+    else:
+        message = ""
+    return HTMLResponse(LOGIN_PAGE_HTML.replace("{{message}}", message))
+
+
+@app.post("/login", include_in_schema=False)
+async def login_submit(username: str = Form(...), password: str = Form(...)):
+    if not AUTH_CONFIGURED:
+        return RedirectResponse("/login", status_code=303)
+    ok_user = secrets.compare_digest(username, AUTH_USERNAME)
+    ok_pass = secrets.compare_digest(password, AUTH_PASSWORD)
+    if ok_user and ok_pass:
+        token = _serializer.dumps({"user": AUTH_USERNAME})
+        response = RedirectResponse("/dashboard", status_code=303)
+        response.set_cookie(
+            COOKIE_NAME, token, httponly=True, samesite="lax", max_age=SESSION_MAX_AGE
+        )
+        return response
+    return RedirectResponse("/login?error=1", status_code=303)
+
+
+@app.get("/logout", include_in_schema=False)
+async def logout() -> RedirectResponse:
+    response = RedirectResponse("/login")
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+
+# ---------------------------------------------------------------------------
+# 기존 기능
+# ---------------------------------------------------------------------------
 
 
 class HoldingCreate(BaseModel):
@@ -211,7 +335,6 @@ async def snapshot_asset_record() -> dict:
     day = data.get("day_change") or {}
     record = upsert_asset_record(
         {
-            # 수동 스냅샷은 사용자가 누른 실제 날짜를 기록합니다.
             "date": datetime.now().astimezone().date().isoformat(),
             "total_value_krw": data["summary"]["total_value_krw"],
             "total_cost_krw": data["summary"]["total_cost_krw"],
@@ -245,8 +368,6 @@ async def sync_kb() -> dict:
         price = prices.get(holding["id"])
         if price:
             holding["current_price"] = price
-            # SSQM1801 명세에는 국내 종목별 평균매입가가 포함되지 않아,
-            # 손익을 실제값처럼 보이지 않도록 현재가를 기준값으로 둡니다.
             if holding["avg_price"] == 0:
                 holding["avg_price"] = price
     upsert_holdings(data, holdings, replace_source="kb_api")
@@ -342,7 +463,7 @@ async def refresh_prices() -> dict:
         except TossOpenAPIError as exc:
             warnings.append(str(exc))
     if namoo_client.configured:
-        warnings.append("나무증권 보유종목·시세는 ‘나무 계좌 동기화’ 버튼으로 함께 갱신됩니다.")
+        warnings.append("나무증권 보유종목·시세는 '나무 계좌 동기화' 버튼으로 함께 갱신됩니다.")
     for holding in data["holdings"]:
         if holding["id"] in prices:
             holding["current_price"] = prices[holding["id"]]
