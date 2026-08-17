@@ -49,7 +49,8 @@ AUTH_USERNAME = os.getenv("DASHBOARD_USERNAME", "")
 AUTH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 SECRET_KEY = os.getenv("DASHBOARD_SECRET_KEY", "")
 SESSION_MAX_AGE = 60 * 60 * 24 * 14  # 14일 동안 로그인 유지
-COOKIE_NAME = "dashboard_session"
+# 인증 동작을 다시 적용하기 위해 기존에 발급된 세션 쿠키와 분리합니다.
+COOKIE_NAME = "dashboard_session_v2"
 
 _serializer = URLSafeTimedSerializer(SECRET_KEY) if SECRET_KEY else None
 AUTH_CONFIGURED = bool(AUTH_USERNAME and AUTH_PASSWORD and SECRET_KEY)
@@ -189,9 +190,11 @@ async def dashboard_page() -> FileResponse:
 async def dashboard() -> dict:
     data = get_dashboard()
     day = data.get("day_change") or {}
-    if data["summary"]["holding_count"] and day.get("date"):
+    today = datetime.now().astimezone().date().isoformat()
+    if data["summary"]["holding_count"]:
         snapshot = {
-            "date": day["date"],
+            # 시장 종가 날짜와 무관하게, 접속한 실제 날짜별로 한 번만 자동 기록합니다.
+            "date": today,
             "total_value_krw": data["summary"]["total_value_krw"],
             "total_cost_krw": data["summary"]["total_cost_krw"],
             "profit_krw": data["summary"]["profit_krw"],
@@ -202,7 +205,7 @@ async def dashboard() -> dict:
             "holding_count": data["summary"]["holding_count"],
             "currency": "KRW",
             "source": "auto",
-            "memo": "대시보드 자동 기록",
+            "memo": "대시보드 접속 자동 기록",
         }
         upsert_asset_record(snapshot, by_date=True)
     return data
