@@ -55,7 +55,7 @@ function chartPath(points, width = 900, height = 260, pad = 24) {
 }
 
 function renderAssetRecords(records) {
-  assetRecords = [...records].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  assetRecords = [...records].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const wrap = $("#assetChart");
   if (!assetRecords.length) {
     wrap.innerHTML = '<div class="empty">아직 자산기록이 없습니다. 오늘 기록을 저장해 보세요.</div>';
@@ -63,13 +63,14 @@ function renderAssetRecords(records) {
     $("#recordCount").textContent = "0개 기록";
     return;
   }
-  const values = assetRecords.map((item) => Number(item.total_value_krw || 0));
+  const chartRecords = [...assetRecords].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const values = chartRecords.map((item) => Number(item.total_value_krw || 0));
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const path = chartPath(assetRecords);
+  const path = chartPath(chartRecords);
   const baseline = `${24},${236} ${876},${236}`;
-  const last = assetRecords.at(-1);
-  const first = assetRecords[0];
+  const first = chartRecords[0];
+  const last = chartRecords.at(-1);
   wrap.innerHTML = `
     <svg class="record-chart" viewBox="0 0 900 260" preserveAspectRatio="none" aria-label="자산 기록 차트">
       <defs>
@@ -155,7 +156,10 @@ function renderClassifications(items) {
   list.innerHTML = items.length ? items.map((item) => `<div class="classification-row"><div class="classification-title"><strong>${html(item.name)}</strong><span>${number(item.holding_count, 0)}종목 · ${number(item.weight)}%</span></div><div class="classification-value"><span>${money(item.market_value_krw)}</span><b class="${signClass(item.profit_krw)}">${item.return_rate >= 0 ? "+" : ""}${number(item.return_rate)}%</b></div><div class="bar"><i style="width:${Math.min(item.weight, 100)}%"></i></div></div>`).join("") : '<div class="empty">자산을 불러오면 분류별 수익률을 표시합니다.</div>';
 }
 function renderAccounts(items) {
-  $("#accountList").innerHTML = items.length ? items.map((item) => `<div class="account-row"><div><strong>${html(item.broker)}</strong><small>${html(item.name)} · ${number(item.holding_count, 0)}종목</small></div><div class="account-row-values"><strong>${money(item.market_value_krw)}</strong><small class="${signClass(item.profit_krw)}">${item.profit_krw >= 0 ? "+" : ""}${money(item.profit_krw)}</small></div><button class="icon-button account-delete-button" data-account-id="${item.id}" title="계좌 삭제" type="button">×</button></div>`).join("") : '<div class="empty">동기화된 계좌가 없습니다.</div>';
+  if (!items.length) { $("#accountList").innerHTML = '<div class="empty">동기화된 계좌가 없습니다.</div>'; return; }
+  const groups = new Map();
+  items.forEach((item) => { const group = groups.get(item.broker) || { broker: item.broker, accounts: [], market_value_krw: 0, profit_krw: 0, holding_count: 0 }; group.accounts.push(item); group.market_value_krw += Number(item.market_value_krw || 0); group.profit_krw += Number(item.profit_krw || 0); group.holding_count += Number(item.holding_count || 0); groups.set(item.broker, group); });
+  $("#accountList").innerHTML = [...groups.values()].map((group) => `<div class="account-group"><div class="account-group-title"><span>${html(group.broker)} <small>${number(group.holding_count, 0)}종목</small></span><span>${money(group.market_value_krw)}</span></div>${group.accounts.map((item) => `<div class="account-subrow"><span>${html(item.name)} · ${number(item.holding_count, 0)}종목</span><strong>${money(item.market_value_krw)}</strong><button class="icon-button account-edit-button" data-account-id="${item.id}" title="계좌 이름 수정" type="button">✎</button><button class="icon-button account-delete-button" data-account-id="${item.id}" title="계좌 삭제" type="button">×</button></div>`).join("")}</div>`).join("");
 }
 function renderHoldings(data) {
   const query = $("#searchInput").value.trim().toLowerCase();
@@ -236,6 +240,7 @@ $("#searchInput").addEventListener("input", () => dashboard && renderHoldings(da
 $("#clearButton").addEventListener("click", () => { if (confirm("저장된 보유내역을 모두 지울까요?")) action($("#clearButton"), () => api("/api/clear", { method: "POST" })); });
 $("#holdingsBody").addEventListener("click", (e) => { const edit = e.target.closest(".edit-button"); const button = e.target.closest(".delete-button"); if (edit) { const item = dashboard?.holdings.find((row) => row.id === edit.dataset.id); if (item) openHoldingDialog(item); return; } if (button && confirm("이 보유종목을 삭제할까요?")) action(button, () => api(`/api/holdings/${button.dataset.id}`, { method: "DELETE" })); });
 $("#accountList").addEventListener("click", (e) => { const button = e.target.closest(".account-delete-button"); if (button && confirm("이 계좌와 연결된 보유종목을 모두 삭제할까요?")) action(button, () => api(`/api/accounts/${button.dataset.accountId}`, { method: "DELETE" })); });
+$("#accountList").addEventListener("click", async (e) => { const button = e.target.closest(".account-edit-button"); if (!button) return; const account = dashboard?.accounts.find((item) => item.id === button.dataset.accountId); if (!account) return; const name = prompt("계좌 이름을 입력하세요.", account.name); if (name && name.trim() && name.trim() !== account.name) await action(button, () => api(`/api/accounts/${account.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) })); });
 $("#assetRecordList").addEventListener("click", async (e) => {
   const editButton = e.target.closest("[data-record-edit]");
   const deleteButton = e.target.closest("[data-record-delete]");

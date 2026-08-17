@@ -205,7 +205,7 @@ async def dashboard() -> dict:
             "holding_count": data["summary"]["holding_count"],
             "currency": "KRW",
             "source": "auto",
-            "memo": "대시보드 접속 자동 기록",
+            "memo": "자동 기록",
         }
         upsert_asset_record(snapshot, by_date=True)
     return data
@@ -264,6 +264,23 @@ async def delete_account(account_id: str) -> dict:
     data["holdings"] = [holding for holding in data["holdings"] if holding.get("account_id") != account_id]
     write_portfolio(data)
     return {"message": "증권사 계좌와 연결된 보유종목을 삭제했습니다."}
+
+
+@app.put("/api/accounts/{account_id}")
+async def rename_account(account_id: str, payload: dict) -> dict:
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "계좌 이름을 입력해 주세요.")
+    data = read_portfolio()
+    account = next((item for item in data["accounts"] if item.get("id") == account_id), None)
+    if account is None:
+        raise HTTPException(404, "계좌를 찾지 못했습니다.")
+    account["name"] = name
+    for holding in data["holdings"]:
+        if holding.get("account_id") == account_id:
+            holding["account_name"] = name
+    write_portfolio(data)
+    return {"message": "계좌 이름을 수정했습니다."}
 
 
 @app.put("/api/holdings/{holding_id}")
@@ -364,7 +381,8 @@ async def sync_kb() -> dict:
     except KBOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
     data = read_portfolio()
-    account_id = get_or_add_account(data, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api")
+    existing = next((a for a in data["accounts"] if a.get("broker") == "KB증권" and a.get("source") == "kb_api"), None)
+    account_id = existing["id"] if existing else get_or_add_account(data, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api")
     holdings = [normalize_holding(record, account_id, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api") for record in records]
     prices, warnings = await client.refresh_prices(holdings)
     for holding in holdings:
@@ -388,7 +406,9 @@ async def sync_toss() -> dict:
     data = read_portfolio()
     holdings = []
     for record in records:
-        account_id = get_or_add_account(data, "토스증권", record["account_name"], "toss_api")
+        existing = next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api" and a.get("name") == record["account_name"]), None)
+        existing = existing or next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api"), None)
+        account_id = existing["id"] if existing else get_or_add_account(data, "토스증권", record["account_name"], "toss_api")
         holdings.append(normalize_holding(record, account_id, "토스증권", record["account_name"], "toss_api"))
     upsert_holdings(data, holdings, replace_source="toss_api")
     write_portfolio(data)
@@ -405,7 +425,9 @@ async def sync_namoo() -> dict:
     data = read_portfolio()
     holdings = []
     for record in records:
-        account_id = get_or_add_account(data, "NH투자증권(나무)", record["account_name"], "nhplug_api")
+        existing = next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == record["account_name"]), None)
+        existing = existing or next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api"), None)
+        account_id = existing["id"] if existing else get_or_add_account(data, "NH투자증권(나무)", record["account_name"], "nhplug_api")
         holdings.append(normalize_holding(record, account_id, "NH투자증권(나무)", record["account_name"], "nhplug_api"))
     upsert_holdings(data, holdings, replace_source="nhplug_api")
     write_portfolio(data)

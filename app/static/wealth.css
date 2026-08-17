@@ -3,3 +3,12 @@
  .holding-accounts { min-width: 260px; }
  .holding-account-detail { display: block; white-space: nowrap; color: #c3cbea; font-size: 12px; line-height: 1.8; }
  .mini-edit-button { border: 0; background: transparent; color: #9f8cff; cursor: pointer; padding: 0 3px; font-size: 12px; }
+input[type="date"] { color-scheme: dark; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(68%) sepia(58%) saturate(950%) hue-rotate(214deg); opacity: 1; cursor: pointer; }
+.account-row { position: relative; }
+.account-row-values { min-width: 145px; text-align: right; }
+.account-group { border-bottom: 1px solid #273354; padding: 8px 0; }
+.account-group-title { display: grid; grid-template-columns: 1fr auto; align-items: center; color: #f2f4ff; font-size: 22px; font-weight: 700; padding: 12px 12px 8px; letter-spacing: -0.03em; }
+.account-group-title small { color: #aeb8d8; font-size: 14px; margin-left: 6px; font-weight: 600; }
+.account-subrow { display: grid; grid-template-columns: 1fr 170px 28px; align-items: center; padding: 8px 12px 8px 28px; color: #aeb8d8; font-size: 14px; }
+.account-subrow strong { color: #dce2fb; text-align: right; font-size: 14px; }
