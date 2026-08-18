@@ -421,8 +421,17 @@ async def sync_namoo() -> dict:
     try:
         records = await client.sync_holdings()
     except NhPlugOpenAPIError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        detail = str(exc)
+        if "IGW42903" in detail or "거래건수를 초과" in detail:
+            detail = "나무증권 API 호출 한도를 초과했습니다(IGW42903). 잠시 후 다시 시도하거나 나무 OpenAPI 포털에서 호출 한도·계정별 제한을 확인해 주세요. 인증키 오류가 아닙니다."
+        raise HTTPException(429 if "IGW42903" in str(exc) else 400, detail) from exc
     data = read_portfolio()
+    # 잔고가 0원인 계좌도 계좌 목록에는 표시합니다.
+    for account in client.last_accounts:
+        account_no = str(account.get("acct_no", ""))
+        account_name = client._account_name(account)
+        if account_no and not any(a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == account_name for a in data["accounts"]):
+            get_or_add_account(data, "NH투자증권(나무)", account_name, "nhplug_api")
     holdings = []
     for record in records:
         existing = next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == record["account_name"]), None)

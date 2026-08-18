@@ -22,4 +22,10 @@ Thumbs.db
 # 데이터
 *.xls
 *.xlsx
+!샘플_타증권사_보유종목.xlsx
 *.csv
+
+# 기타
+node_modules/
+*.ndjson
+샘플_타증권사_보유종목_가져오기.mjs

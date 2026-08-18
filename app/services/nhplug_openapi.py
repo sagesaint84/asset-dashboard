@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
+import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -38,6 +41,8 @@ class NhPlugOpenAPI:
         self.app_secret = os.getenv("NHPLUG_APP_SECRET", "")
         self._validate_url(self.base_url, "NHPLUG_BASE_URL")
         self._validate_url(self.auth_url, "NHPLUG_AUTH_URL")
+        self.token_cache_file = Path(__file__).resolve().parents[2] / "data" / "nhplug_token_cache.json"
+        self.last_accounts: list[dict[str, Any]] = []
 
     @staticmethod
     def _validate_url(value: str, setting: str) -> None:
@@ -56,6 +61,14 @@ class NhPlugOpenAPI:
     async def _access_token(self, client: httpx.AsyncClient) -> str:
         if not self.configured:
             raise NhPlugOpenAPIError("나무증권 NHPLUG 앱 키가 설정되지 않았습니다. .env에 app key와 secret을 입력하세요.")
+        try:
+            cached = json.loads(self.token_cache_file.read_text(encoding="utf-8"))
+            if (cached.get("app_key_prefix") == self.app_key[:8]
+                    and float(cached.get("expires_at", 0)) > time.time() + 60
+                    and cached.get("access_token")):
+                return str(cached["access_token"])
+        except (OSError, ValueError, TypeError):
+            pass
         response = await client.post(
             f"{self.auth_url}/oauth2/token",
             params={
@@ -70,6 +83,12 @@ class NhPlugOpenAPI:
         token = response.json().get("access_token")
         if not token:
             raise NhPlugOpenAPIError("나무증권 토큰 응답에 access_token이 없습니다.")
+        try:
+            self.token_cache_file.parent.mkdir(parents=True, exist_ok=True)
+            expires_in = float(response.json().get("expires_in", 86400))
+            self.token_cache_file.write_text(json.dumps({"app_key_prefix": self.app_key[:8], "access_token": token, "expires_at": time.time() + expires_in}, ensure_ascii=False), encoding="utf-8")
+        except (OSError, ValueError, TypeError):
+            pass
         return token
 
     @staticmethod
@@ -117,7 +136,8 @@ class NhPlugOpenAPI:
 
     async def sync_holdings(self) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
-        for account in await self._accounts():
+        self.last_accounts = await self._accounts()
+        for account in self.last_accounts:
             account_no = str(account.get("acct_no", ""))
             if not account_no:
                 continue

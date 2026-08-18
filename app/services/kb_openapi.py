@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -34,6 +36,7 @@ class KBOpenAPI:
         self.app_key = os.getenv("KB_OPENAPI_APP_KEY", "")
         self.app_secret = os.getenv("KB_OPENAPI_APP_SECRET", "")
         self._token: Token | None = None
+        self.token_cache_file = Path(__file__).resolve().parents[2] / "data" / "kb_token_cache.json"
 
     @property
     def configured(self) -> bool:
@@ -48,6 +51,15 @@ class KBOpenAPI:
             raise KBOpenAPIError("KB OpenAPI 키가 설정되지 않았습니다. .env에 appKey와 appSecret을 입력하세요.")
         if self._token and self._token.expires_at > time.time() + 60:
             return self._token.value
+        try:
+            cached = json.loads(self.token_cache_file.read_text(encoding="utf-8"))
+            if (cached.get("app_key_prefix") == self.app_key[:8]
+                    and float(cached.get("expires_at", 0)) > time.time() + 60
+                    and cached.get("access_token")):
+                self._token = Token(str(cached["access_token"]), float(cached["expires_at"]))
+                return self._token.value
+        except (OSError, ValueError, TypeError):
+            pass
         response = await client.post(
             f"{self.base_url}/oauth2/token",
             json=self._payload({"appKey": self.app_key, "appSecret": self.app_secret, "grantType": "client_credentials"}),
@@ -58,6 +70,11 @@ class KBOpenAPI:
         if not token:
             raise KBOpenAPIError("KB OpenAPI 토큰 응답에 access_token이 없습니다.")
         self._token = Token(token, time.time() + as_float(body.get("expires_in", 3600)))
+        try:
+            self.token_cache_file.parent.mkdir(parents=True, exist_ok=True)
+            self.token_cache_file.write_text(json.dumps({"app_key_prefix": self.app_key[:8], "access_token": token, "expires_at": self._token.expires_at}), encoding="utf-8")
+        except (OSError, ValueError, TypeError):
+            pass
         return token
 
     @staticmethod

@@ -1,6 +1,14 @@
 const $ = (selector) => document.querySelector(selector);
 let dashboard = null;
 
+// 다이얼로그의 X/취소 버튼은 항상 명시적으로 창을 닫습니다.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".dialog .close, .dialog .dialog-actions button[value='cancel']");
+  if (!button) return;
+  event.preventDefault();
+  button.closest("dialog")?.close();
+});
+
 const number = (value, digits = 2) => Number(value || 0).toLocaleString("ko-KR", { maximumFractionDigits: digits });
 const money = (value, currency = "KRW") => {
   try { return new Intl.NumberFormat("ko-KR", { style: "currency", currency, maximumFractionDigits: currency === "KRW" ? 0 : 2 }).format(Number(value || 0)); }
@@ -253,7 +261,7 @@ $("#assetRecordList").addEventListener("click", async (e) => {
   }
 });
 $("#holdingForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget, payload = Object.fromEntries(new FormData(form)); ["quantity", "avg_price", "current_price"].forEach((key) => { payload[key] = Number(payload[key]); }); try { const id = form.dataset.recordId; const result = await api(id ? `/api/holdings/${id}` : "/api/holdings", { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); form.closest("dialog").close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
-$("#importForm").addEventListener("submit", async (e) => { e.preventDefault(); const file = $("#importFile").files[0]; if (!file) return; const formData = new FormData(); formData.append("file", file); try { const result = await api(`/api/import?broker=${encodeURIComponent($("#importBroker").value || "기타 증권사")}`, { method: "POST", body: formData }); e.currentTarget.closest("dialog").close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
+$("#importForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget; const file = $("#importFile").files[0]; if (!file) return; const formData = new FormData(); formData.append("file", file); try { const result = await api(`/api/import?broker=${encodeURIComponent($("#importBroker").value || "기타 증권사")}`, { method: "POST", body: formData }); form.closest("dialog")?.close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
 $("#assetRecordForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.currentTarget;

@@ -14,10 +14,12 @@
         <a class="brand" href="/" aria-label="시작 화면">W</a>
         <div class="title"><p>Human Index  INVESTMENT</p><h1>인간지표의 투자 대시보드</h1></div>
         <div class="top-actions">
-          <button id="syncKbButton" class="button secondary" type="button">KB 자산 연결</button>
-          <button id="syncTossButton" class="button secondary" type="button">토스 자산 연결</button>
-          <button id="syncNamooButton" class="button secondary" type="button">나무 자산 연결</button>
+          <button id="syncKbButton" class="button secondary" type="button">KB</button>
+          <button id="syncTossButton" class="button secondary" type="button">토스</button>
+          <button id="syncNamooButton" class="button secondary" type="button">나무</button>
           <button id="refreshButton" class="button primary" type="button">시세 갱신</button>
+          <button id="refreshFxButton" class="button primary" type="button">환율 갱신</button>
+          <button id="clearButton" class="button text danger" type="button">로컬 데이터 지우기</button>
         </div>
       </header>
 
@@ -26,8 +28,8 @@
         <article class="summary-card featured"><span class="card-icon">◈</span><p>총 투자자산</p><strong id="totalValue">₩0</strong><small id="holdingCaption">보유 종목 0개</small></article>
         <article class="summary-card"><span class="card-icon">↗</span><p>총 수익</p><strong id="totalProfit">₩0</strong><small id="profitCaption">수익률 0.00% · 원화 환산</small></article>
         <article class="summary-card"><span class="card-icon">☀</span><p>일간 수익</p><strong id="dayProfit">₩0</strong><small id="dayCaption">전일 기준 데이터 수집 중</small></article>
-        <article class="summary-card"><span class="card-icon">₩</span><p>원화 자산</p><strong id="krwValue">₩0</strong><small id="krwCaption">국내·원화 보유</small></article>
-        <article class="summary-card"><span class="card-icon">$</span><p>달러 자산</p><strong id="usdValue">US$0</strong><small id="usdCaption">USD/KRW —</small></article>
+        <article class="summary-card"><span class="card-icon">₩</span><p>원화 예수금</p><strong id="krwValue">₩0</strong><small id="krwCaption">국내·원화 보유</small></article>
+        <article class="summary-card"><span class="card-icon">$</span><p>달러 예수금</p><strong id="usdValue">US$0</strong><small id="usdCaption">USD/KRW —</small></article>
       </section>
 
       <section class="panel records-panel">
@@ -68,13 +70,12 @@
         <div id="emptyHoldings" class="empty"><strong>아직 불러온 보유종목이 없습니다.</strong><p>각 증권사 동기화 또는 파일 가져오기로 시작하세요.</p><button id="demoButton" class="button text" type="button">예시 화면 보기</button></div>
       </section>
 
-      <section class="connect-card"><div><p class="eyebrow">DATA CONNECTION</p><h2>내 컴퓨터에만 저장되는 개인 대시보드</h2><p>토스증권은 보유종목·시장 스냅샷·실시간 환율을, KB증권과 나무증권은 보유종목을 읽어옵니다. 주문 기능은 사용하지 않습니다.</p></div><div><button id="refreshFxButton" class="button primary" type="button">토스 환율 갱신</button><button id="clearButton" class="button text danger" type="button">로컬 데이터 지우기</button></div></section>
     </main>
 
     <dialog id="holdingDialog" class="dialog"><form id="holdingForm" method="dialog"><div class="dialog-head"><h2>보유종목 직접 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><div class="form-grid"><label>증권사<input name="broker" value="기타 증권사" required /></label><label>계좌 이름<input name="account_name" value="내 주식 계좌" required /></label><label>종목 코드<input name="code" placeholder="005930 또는 AAPL" required /></label><label>종목명<input name="name" required /></label><label>보유 수량<input name="quantity" type="number" min="0.000001" step="any" required /></label><label>평균매입가<input name="avg_price" type="number" min="0" step="any" required /></label><label>현재가<input name="current_price" type="number" min="0" step="any" required /></label><label>통화<select name="currency"><option>KRW</option><option>USD</option><option>JPY</option><option>HKD</option><option>CNY</option></select></label><label>거래소<input name="market" placeholder="KRX, NAS, NYS 등" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
     <dialog id="importDialog" class="dialog"><form id="importForm" method="dialog"><div class="dialog-head"><h2>증권사 잔고 파일 가져오기</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">CSV 또는 XLSX 파일의 첫 줄에 종목코드와 수량을 포함해 주세요.</p><label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label><label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">가져오기</button></div></form></dialog>
     <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/wealth.js?v=20260817-6"></script>
+    <script src="/static/wealth.js?v=20260818-1"></script>
   </body>
 </html>
