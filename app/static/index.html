@@ -28,8 +28,8 @@
         <article class="summary-card featured"><span class="card-icon">◈</span><p>총 투자자산</p><strong id="totalValue">₩0</strong><small id="holdingCaption">보유 종목 0개</small></article>
         <article class="summary-card"><span class="card-icon">↗</span><p>총 수익</p><strong id="totalProfit">₩0</strong><small id="profitCaption">수익률 0.00% · 원화 환산</small></article>
         <article class="summary-card"><span class="card-icon">☀</span><p>일간 수익</p><strong id="dayProfit">₩0</strong><small id="dayCaption">전일 기준 데이터 수집 중</small></article>
-        <article class="summary-card"><span class="card-icon">₩</span><p>원화 예수금</p><strong id="krwValue">₩0</strong><small id="krwCaption">국내·원화 보유</small></article>
-        <article class="summary-card"><span class="card-icon">$</span><p>달러 예수금</p><strong id="usdValue">US$0</strong><small id="usdCaption">USD/KRW —</small></article>
+        <article class="summary-card"><span class="card-icon">₩</span><p>원화 자산</p><strong id="krwValue">₩0</strong><small id="krwCaption">국내·원화 보유</small></article>
+        <article class="summary-card"><span class="card-icon">$</span><p>달러 자산</p><strong id="usdValue">US$0</strong><small id="usdCaption">USD/KRW —</small></article>
       </section>
 
       <section class="panel records-panel">
@@ -76,6 +76,6 @@
     <dialog id="importDialog" class="dialog"><form id="importForm" method="dialog"><div class="dialog-head"><h2>증권사 잔고 파일 가져오기</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">CSV 또는 XLSX 파일의 첫 줄에 종목코드와 수량을 포함해 주세요.</p><label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label><label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">가져오기</button></div></form></dialog>
     <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/wealth.js?v=20260818-1"></script>
+    <script src="/static/wealth.js?v=20260818-6"></script>
   </body>
 </html>

@@ -122,13 +122,14 @@ function renderAssetRecords(records) {
 function renderMarkets(result) {
   const rows = [...result.markets, {
     symbol: "USD/KRW", label: "달러/원", note: "토스 실시간 환율", price: result.exchange_rate.rate,
-    currency: "KRW", change_rate: null, updated_at: result.exchange_rate.valid_until,
+    currency: "KRW", change: result.exchange_rate.change, change_rate: result.exchange_rate.change_rate, note: "토스 1일 변동", updated_at: result.exchange_rate.valid_until, series: result.exchange_rate.series || [result.exchange_rate.rate],
   }];
   $("#marketGrid").innerHTML = rows.map((item) => {
     const currency = item.symbol === "KOSPI" || item.symbol === "USD/KRW" ? null : item.currency;
     const price = currency ? money(item.price, currency) : number(item.price);
-    const change = item.change_rate == null ? "실시간 기준가" : `${item.change_rate >= 0 ? "+" : ""}${number(item.change_rate)}%`;
-    return `<article class="market-card"><div class="market-copy"><span class="symbol">${html(item.symbol)}</span><p>${html(item.label)}</p><strong>${price}</strong><small class="${item.change_rate == null ? "" : signClass(item.change_rate)}">${change} · ${html(item.note)}</small></div><div class="spark-wrap">${sparkline(item.series, item.change_rate)}</div></article>`;
+    const change = item.change_rate == null ? "실시간 기준가" : item.change != null ? `${item.change >= 0 ? "+" : ""}${number(item.change, 1)} (${item.change_rate >= 0 ? "+" : ""}${number(item.change_rate)}%)` : `${item.change_rate >= 0 ? "+" : ""}${number(item.change_rate)}%`;
+    const chart = item.symbol === "USD/KRW" ? "" : `<div class="spark-wrap">${sparkline(item.series, item.change_rate)}</div>`;
+    return `<article class="market-card"><div class="market-copy"><span class="symbol">${html(item.symbol)}</span><p>${html(item.label)}</p><strong>${price}</strong><small class="${item.change_rate == null ? "" : signClass(item.change_rate)}">${change} · ${html(item.note)}</small></div>${chart}</article>`;
   }).join("");
 }
 async function loadMarkets() {
@@ -145,10 +146,10 @@ function renderSummary(data) {
   $("#holdingCaption").textContent = `보유 종목 ${number(s.holding_count, 0)}개 · ${number(s.account_count, 0)}개 계좌`;
   $("#profitCaption").innerHTML = `수익률 ${s.return_rate >= 0 ? "+" : ""}${number(s.return_rate)}%<br>총 매입 ${money(s.total_cost_krw)}`;
   $("#krwValue").textContent = money(krw.market_value_krw);
-  $("#krwCaption").textContent = `${number(krw.market_value || 0, 0)}원 보유`;
+  $("#krwCaption").innerHTML = `원화 예수금 ${money(krw.cash || 0)}<br>${number(krw.market_value || 0, 0)}원 보유`;
   $("#usdValue").textContent = money(usd.market_value, "USD");
   const rate = data.fx_rates?.USD;
-  $("#usdCaption").innerHTML = rate ? `원화 환산 ${money(usd.market_value_krw)}<br>$1 = ${number(rate)}원` : "환율 갱신이 필요합니다";
+  $("#usdCaption").innerHTML = `달러 예수금 ${money(usd.cash || 0, "USD")}<br>원화 환산 ${money(usd.market_value_krw)}`;
   $("#updatedAt").textContent = data.updated_at ? `마지막 자산 반영 ${new Date(data.updated_at).toLocaleString("ko-KR")}` : "아직 보유종목이 없습니다.";
   const day = data.day_change || {};
   const dayText = day.change_krw == null ? "전일 기준을 수집하는 중" : `${day.change_krw >= 0 ? "+" : ""}${money(day.change_krw)} (${day.change_rate >= 0 ? "+" : ""}${number(day.change_rate)}%)`;

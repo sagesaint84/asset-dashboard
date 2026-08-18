@@ -118,6 +118,30 @@ class TossOpenAPI:
                 })
         return [record for record in records if record["code"] and record["quantity"] > 0]
 
+    async def get_buying_power(self, account_seq: int) -> dict[str, float]:
+        result = await self._get("/api/v1/buying-power", account_seq=account_seq)
+        def flatten(value: Any, prefix: str = "") -> dict[str, Any]:
+            if isinstance(value, dict):
+                out = {}
+                for key, child in value.items(): out.update(flatten(child, f"{prefix}{key}"))
+                return out
+            if isinstance(value, list):
+                out = {}
+                for index, child in enumerate(value): out.update(flatten(child, f"{prefix}{index}"))
+                return out
+            return {prefix.lower(): value}
+        fields = flatten(result)
+        if isinstance(result, list):
+            for item in result:
+                if isinstance(item, dict):
+                    currency = str(item.get("currency") or item.get("currencyCode") or "").upper()
+                    amount = next((item.get(key) for key in ("amount", "availableAmount", "buyingPower", "value") if item.get(key) is not None), None)
+                    if currency and amount is not None: fields[f"{currency}amount"] = amount
+        def pick(currency: str) -> float:
+            candidates = [(key, value) for key, value in fields.items() if currency.lower() in key and any(word in key for word in ("buy", "available", "cash", "amount", "balance"))]
+            return as_float(candidates[0][1]) if candidates else 0.0
+        return {"KRW": pick("krw"), "USD": pick("usd")}
+
     async def get_exchange_rate(self, base_currency: str, quote_currency: str = "KRW") -> dict[str, Any]:
         """토스증권의 가장 최근 기준환율을 가져온다."""
         base_currency = base_currency.upper()

@@ -229,6 +229,19 @@ async def market_overview() -> dict:
         exchange_rate = await client.get_usd_krw_rate()
     except TossOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
+    data = read_portfolio()
+    history = data["settings"].setdefault("fx_history", [])
+    history.append({"at": datetime.now().astimezone().isoformat(timespec="seconds"), "rate": exchange_rate["rate"]})
+    data["settings"]["fx_history"] = history[-60:]
+    write_portfolio(data)
+    exchange_rate["series"] = [item["rate"] for item in data["settings"]["fx_history"]]
+    if len(history) >= 2 and history[-2].get("rate"):
+        previous = float(history[-2]["rate"])
+        exchange_rate["change"] = exchange_rate["rate"] - previous
+        exchange_rate["change_rate"] = exchange_rate["change"] / previous * 100
+    else:
+        exchange_rate["change"] = None
+        exchange_rate["change_rate"] = None
     return {"markets": markets, "exchange_rate": exchange_rate, "source": "토스증권 OpenAPI"}
 
 
@@ -404,6 +417,15 @@ async def sync_toss() -> dict:
     except TossOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
     data = read_portfolio()
+    cash = data["settings"].setdefault("toss_cash", {})
+    toss_accounts = await client._get("/api/v1/accounts")
+    if isinstance(toss_accounts, dict): toss_accounts = toss_accounts.get("items") or toss_accounts.get("accounts") or []
+    for account in toss_accounts:
+        seq = account.get("accountSeq")
+        if seq is not None:
+            try: cash[str(seq)] = await client.get_buying_power(int(seq))
+            except TossOpenAPIError: pass
+    data["settings"]["toss_cash"] = cash
     holdings = []
     for record in records:
         existing = next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api" and a.get("name") == record["account_name"]), None)

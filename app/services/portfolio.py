@@ -195,10 +195,19 @@ def get_dashboard() -> dict[str, Any]:
     for account in account_list:
         account["weight"] = account["market_value_krw"] / total_value * 100 if total_value else 0
     profit = total_value - total_cost
+    toss_cash = data["settings"].get("toss_cash", {})
+    cash_krw = sum(to_number(value.get("KRW")) for value in toss_cash.values() if isinstance(value, dict))
+    cash_usd = sum(to_number(value.get("USD")) for value in toss_cash.values() if isinstance(value, dict))
+    cash_usd_krw = cash_usd * fx_rates.get("USD", 1.0)
+    total_value += cash_krw + cash_usd_krw
     daily_snapshot = data["settings"].get("daily_snapshot", {})
     previous_value = to_number(daily_snapshot.get("value_krw"))
     day_change = total_value - previous_value if previous_value else None
     currency_summary: dict[str, dict[str, float]] = {}
+    if cash_krw:
+        currency_summary["KRW"] = {"market_value": cash_krw, "market_value_krw": cash_krw, "cost_value_krw": cash_krw, "cash": cash_krw}
+    if cash_usd:
+        currency_summary["USD"] = {"market_value": cash_usd, "market_value_krw": cash_usd_krw, "cost_value_krw": cash_usd_krw, "cash": cash_usd}
     classifications: dict[str, dict[str, Any]] = {}
     etf_prefixes = ("KODEX", "TIGER", "ACE", "SOL", "PLUS", "RISE", "HANARO", "KOSEF", "ARIRANG")
     for item in enriched:
