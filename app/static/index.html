@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="모든 증권사의 투자자산을 통합해 보는 개인 대시보드" />
     <title>Wealth · 투자 대시보드</title>
-    <link rel="stylesheet" href="/static/wealth.css?v=20260817-5" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260816-7" />
+    <link rel="stylesheet" href="/static/wealth.css?v=20260819-4" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260819-4" />
   </head>
   <body>
     <main class="shell">
@@ -23,13 +23,86 @@
         </div>
       </header>
 
-      <section class="section-head"><div><p class="eyebrow">PORTFOLIO OVERVIEW</p><h2>핵심 요약</h2></div><span id="accountCaption" class="muted"></span></section>
-      <section class="summary-grid">
-        <article class="summary-card featured"><span class="card-icon">◈</span><p>총 투자자산</p><strong id="totalValue">₩0</strong><small id="holdingCaption">보유 종목 0개</small></article>
-        <article class="summary-card"><span class="card-icon">↗</span><p>총 수익</p><strong id="totalProfit">₩0</strong><small id="profitCaption">수익률 0.00% · 원화 환산</small></article>
-        <article class="summary-card"><span class="card-icon">☀</span><p>일간 수익</p><strong id="dayProfit">₩0</strong><small id="dayCaption">전일 기준 데이터 수집 중</small></article>
-        <article class="summary-card"><span class="card-icon">₩</span><p>원화 자산</p><strong id="krwValue">₩0</strong><small id="krwCaption">국내·원화 보유</small></article>
-        <article class="summary-card"><span class="card-icon">$</span><p>달러 자산</p><strong id="usdValue">US$0</strong><small id="usdCaption">USD/KRW —</small></article>
+      <!-- 2열 레이아웃: 좌측 핵심 요약 (단일 카드) + 우측 투자자산 분류 -->
+      <section class="overview-layout">
+        <article class="panel summary-panel overview-left">
+          <div class="panel-head">
+            <div><p class="eyebrow">PORTFOLIO OVERVIEW</p><h2>핵심 요약</h2></div>
+            <span id="accountCaption" class="muted"></span>
+          </div>
+          <div class="summary-item-list">
+            <div class="summary-row featured">
+              <div class="summary-row-label">
+                <span class="card-icon mini">◈</span>
+                <strong>총 투자자산</strong>
+              </div>
+              <div class="summary-row-val">
+                <strong id="totalValue" class="value-highlight">₩0</strong>
+                <small id="holdingCaption">보유 종목 0개</small>
+              </div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-row-label">
+                <span class="card-icon mini">↗</span>
+                <strong>총 수익</strong>
+              </div>
+              <div class="summary-row-val">
+                <div class="val-line">
+                  <strong id="totalProfit">₩0</strong>
+                  <span id="profitRate" class="sub-rate">(+0.00%)</span>
+                </div>
+                <small id="profitCaption">총 매입 ₩0</small>
+              </div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-row-label">
+                <span class="card-icon mini">☀</span>
+                <strong>일간 수익</strong>
+              </div>
+              <div class="summary-row-val">
+                <div class="val-line">
+                  <strong id="dayProfit">₩0</strong>
+                  <span id="dayRate" class="sub-rate"></span>
+                </div>
+                <small id="dayCaption">전일 기준 데이터 수집 중</small>
+              </div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-row-label">
+                <span class="card-icon mini">₩</span>
+                <strong>원화 자산</strong>
+              </div>
+              <div class="summary-row-val">
+                <div class="val-line">
+                  <strong id="krwValue">₩0</strong>
+                  <span id="krwCashBadge" class="cash-badge-inline">(예수금 ₩0)</span>
+                </div>
+                <small id="krwCaption">주식 평가 ₩0</small>
+              </div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-row-label">
+                <span class="card-icon mini">$</span>
+                <strong>달러 자산</strong>
+              </div>
+              <div class="summary-row-val">
+                <div class="val-line">
+                  <strong id="usdValue">US$0</strong>
+                  <span id="usdCashBadge" class="cash-badge-inline">(예수금 US$0)</span>
+                </div>
+                <small id="usdCaption">주식 평가 US$0</small>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel classification-panel overview-right">
+          <div class="panel-head">
+            <div><p class="eyebrow">ALLOCATION</p><h2>투자자산 분류</h2></div>
+            <span class="muted">수익률 · 비중</span>
+          </div>
+          <div id="classificationList" class="classification-list"></div>
+        </article>
       </section>
 
       <section class="panel records-panel">
@@ -53,11 +126,7 @@
       <section class="intro"><div><p class="eyebrow">주요지수</p><h2>주요지수</h2><p id="updatedAt" class="muted">데이터를 불러오는 중입니다.</p></div><button id="refreshMarketButton" class="button text" type="button">↻ 시장 갱신</button></section>
       <section id="marketGrid" class="market-grid" aria-label="주요 시장 지수"></section>
 
-      <section class="dashboard-grid">
-        <article class="panel classification-panel">
-          <div class="panel-head"><div><p class="eyebrow">ALLOCATION</p><h2>투자자산 분류</h2></div><span class="muted">수익률 · 비중</span></div>
-          <div id="classificationList" class="classification-list"></div>
-        </article>
+      <section class="dashboard-grid single-panel">
         <article class="panel account-panel">
           <div class="panel-head"><div><p class="eyebrow">ACCOUNTS</p><h2>증권사 통합 현황</h2></div><span id="accountCount" class="muted"></span></div>
           <div id="accountList" class="account-list"></div>
@@ -76,6 +145,6 @@
     <dialog id="importDialog" class="dialog"><form id="importForm" method="dialog"><div class="dialog-head"><h2>증권사 잔고 파일 가져오기</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">CSV 또는 XLSX 파일의 첫 줄에 종목코드와 수량을 포함해 주세요.</p><label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label><label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">가져오기</button></div></form></dialog>
     <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/wealth.js?v=20260818-6"></script>
+    <script src="/static/wealth.js?v=20260819-4"></script>
   </body>
 </html>

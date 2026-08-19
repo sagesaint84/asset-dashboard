@@ -19,7 +19,7 @@ DATA_FILE = ROOT_DIR / "data" / "portfolio.json"
 _LOCK = threading.Lock()
 
 EMPTY_PORTFOLIO: dict[str, Any] = {
-    "settings": {"fx_rates": {"KRW": 1.0}, "fx_info": {}, "daily_snapshot": {}},
+    "settings": {"fx_rates": {"KRW": 1.0}, "fx_info": {}, "daily_snapshot": {}, "cash_balances": {}},
     "accounts": [],
     "holdings": [],
     "updated_at": None,
@@ -60,6 +60,7 @@ def read_portfolio() -> dict[str, Any]:
         data["settings"]["fx_rates"].setdefault("KRW", 1.0)
         data["settings"].setdefault("fx_info", {})
         data["settings"].setdefault("daily_snapshot", {})
+        data["settings"].setdefault("cash_balances", {})
         data.setdefault("accounts", [])
         data.setdefault("holdings", [])
         data.setdefault("updated_at", None)
@@ -171,9 +172,39 @@ def get_dashboard() -> dict[str, Any]:
     data = read_portfolio()
     fx_rates = {key.upper(): to_number(value, 1.0) for key, value in data["settings"]["fx_rates"].items()}
     fx_rates.setdefault("KRW", 1.0)
+    usd_rate = fx_rates.get("USD", 1.0)
+
+    cash_balances = data["settings"].get("cash_balances", {})
+    toss_cash = data["settings"].get("toss_cash", {})
+
+    accounts: dict[str, dict[str, Any]] = {}
+    for a in data["accounts"]:
+        acc_id = a["id"]
+        acc_cash = cash_balances.get(acc_id)
+        if not acc_cash and a.get("broker") == "토스증권" and toss_cash:
+            for seq_val in toss_cash.values():
+                if isinstance(seq_val, dict):
+                    acc_cash = seq_val
+                    break
+        acc_cash = acc_cash or {}
+        cash_krw = to_number(acc_cash.get("KRW"))
+        cash_usd = to_number(acc_cash.get("USD"))
+        cash_total_krw = cash_krw + (cash_usd * usd_rate)
+
+        accounts[acc_id] = {
+            **a,
+            "stock_value_krw": 0.0,
+            "cash_krw": cash_krw,
+            "cash_usd": cash_usd,
+            "cash_total_krw": cash_total_krw,
+            "market_value_krw": cash_total_krw,
+            "cost_value_krw": 0.0,
+            "profit_krw": 0.0,
+            "holding_count": 0,
+        }
+
     enriched: list[dict[str, Any]] = []
-    accounts: dict[str, dict[str, Any]] = {a["id"]: {**a, "market_value_krw": 0.0, "profit_krw": 0.0, "holding_count": 0} for a in data["accounts"]}
-    total_value = total_cost = 0.0
+    total_stock_value = total_stock_cost = 0.0
     for holding in data["holdings"]:
         item = deepcopy(holding)
         rate = fx_rates.get(item["currency"], 1.0 if item["currency"] == "KRW" else 0.0)
@@ -183,43 +214,69 @@ def get_dashboard() -> dict[str, Any]:
         item["profit_krw"] = item["market_value_krw"] - item["cost_value_krw"]
         item["return_rate"] = item["profit_krw"] / item["cost_value_krw"] * 100 if item["cost_value_krw"] else 0
         enriched.append(item)
-        total_value += item["market_value_krw"]
-        total_cost += item["cost_value_krw"]
+        total_stock_value += item["market_value_krw"]
+        total_stock_cost += item["cost_value_krw"]
         account = accounts.get(item["account_id"])
         if account:
+            account["stock_value_krw"] += item["market_value_krw"]
             account["market_value_krw"] += item["market_value_krw"]
+            account["cost_value_krw"] += item["cost_value_krw"]
             account["profit_krw"] += item["profit_krw"]
             account["holding_count"] += 1
+
     enriched.sort(key=lambda h: h["market_value_krw"], reverse=True)
+
+    total_cash_krw = sum(a["cash_krw"] for a in accounts.values())
+    total_cash_usd = sum(a["cash_usd"] for a in accounts.values())
+    total_cash_krw_combined = total_cash_krw + (total_cash_usd * usd_rate)
+
+    total_value = total_stock_value + total_cash_krw_combined
+    profit = total_stock_value - total_stock_cost
+
     account_list = sorted(accounts.values(), key=lambda a: a["market_value_krw"], reverse=True)
     for account in account_list:
         account["weight"] = account["market_value_krw"] / total_value * 100 if total_value else 0
-    profit = total_value - total_cost
-    toss_cash = data["settings"].get("toss_cash", {})
-    cash_krw = sum(to_number(value.get("KRW")) for value in toss_cash.values() if isinstance(value, dict))
-    cash_usd = sum(to_number(value.get("USD")) for value in toss_cash.values() if isinstance(value, dict))
-    cash_usd_krw = cash_usd * fx_rates.get("USD", 1.0)
-    total_value += cash_krw + cash_usd_krw
+
     daily_snapshot = data["settings"].get("daily_snapshot", {})
     previous_value = to_number(daily_snapshot.get("value_krw"))
     day_change = total_value - previous_value if previous_value else None
-    currency_summary: dict[str, dict[str, float]] = {}
-    if cash_krw:
-        currency_summary["KRW"] = {"market_value": cash_krw, "market_value_krw": cash_krw, "cost_value_krw": cash_krw, "cash": cash_krw}
-    if cash_usd:
-        currency_summary["USD"] = {"market_value": cash_usd, "market_value_krw": cash_usd_krw, "cost_value_krw": cash_usd_krw, "cash": cash_usd}
+
+    currency_summary: dict[str, dict[str, float]] = {
+        "KRW": {
+            "market_value": total_cash_krw,
+            "market_value_krw": total_cash_krw,
+            "stock_value_krw": 0.0,
+            "cost_value_krw": 0.0,
+            "cash": total_cash_krw,
+        },
+        "USD": {
+            "market_value": total_cash_usd,
+            "market_value_krw": total_cash_usd * usd_rate,
+            "stock_value": 0.0,
+            "stock_value_krw": 0.0,
+            "cost_value_krw": 0.0,
+            "cash": total_cash_usd,
+        },
+    }
+
     classifications: dict[str, dict[str, Any]] = {}
-    etf_prefixes = ("KODEX", "TIGER", "ACE", "SOL", "PLUS", "RISE", "HANARO", "KOSEF", "ARIRANG")
+    etf_prefixes = ("KODEX", "TIGER", "ACE", "SOL", "PLUS", "RISE", "HANARO", "KOSEF", "ARIRANG", "KOACT", "WON")
     for item in enriched:
         currency = item["currency"]
-        bucket = currency_summary.setdefault(currency, {"market_value": 0.0, "market_value_krw": 0.0, "cost_value_krw": 0.0})
+        bucket = currency_summary.setdefault(currency, {
+            "market_value": 0.0, "market_value_krw": 0.0, "cost_value_krw": 0.0, "stock_value_krw": 0.0, "stock_value": 0.0, "cash": 0.0,
+        })
         bucket["market_value"] += item["quantity"] * item["current_price"]
         bucket["market_value_krw"] += item["market_value_krw"]
+        bucket["stock_value_krw"] = bucket.get("stock_value_krw", 0.0) + item["market_value_krw"]
+        if currency == "USD":
+            bucket["stock_value"] = bucket.get("stock_value", 0.0) + (item["quantity"] * item["current_price"])
         bucket["cost_value_krw"] += item["cost_value_krw"]
 
-        name = item["name"].upper()
+        name = item["name"].strip()
+        name_upper = name.upper()
         market = str(item.get("market", ""))
-        if item["currency"] == "KRW" and name.startswith(etf_prefixes):
+        if item["currency"] == "KRW" and any(name_upper.startswith(p) for p in etf_prefixes):
             group = "국내 ETF"
         elif item["currency"] == "KRW":
             group = "국내 주식"
@@ -231,16 +288,45 @@ def get_dashboard() -> dict[str, Any]:
         classification["market_value_krw"] += item["market_value_krw"]
         classification["cost_value_krw"] += item["cost_value_krw"]
         classification["holding_count"] += 1
+
+    if total_cash_krw_combined > 0:
+        classifications["현금·예수금"] = {
+            "name": "현금·예수금",
+            "market_value_krw": total_cash_krw_combined,
+            "cost_value_krw": total_cash_krw_combined,
+            "profit_krw": 0.0,
+            "return_rate": 0.0,
+            "holding_count": 0,
+            "weight": total_cash_krw_combined / total_value * 100 if total_value else 0.0,
+        }
+
     classification_list = []
     for classification in classifications.values():
-        classification["profit_krw"] = classification["market_value_krw"] - classification["cost_value_krw"]
-        classification["return_rate"] = classification["profit_krw"] / classification["cost_value_krw"] * 100 if classification["cost_value_krw"] else 0.0
+        classification.setdefault("profit_krw", classification["market_value_krw"] - classification["cost_value_krw"])
+        classification.setdefault("return_rate", classification["profit_krw"] / classification["cost_value_krw"] * 100 if classification["cost_value_krw"] else 0.0)
         classification["weight"] = classification["market_value_krw"] / total_value * 100 if total_value else 0.0
         classification_list.append(classification)
     classification_list.sort(key=lambda item: item["market_value_krw"], reverse=True)
+
     return {
-        "summary": {"total_value_krw": total_value, "total_cost_krw": total_cost, "profit_krw": profit, "return_rate": profit / total_cost * 100 if total_cost else 0, "holding_count": len(enriched), "account_count": len(account_list)},
-        "day_change": {"date": daily_snapshot.get("date"), "value_krw": previous_value, "change_krw": day_change, "change_rate": day_change / previous_value * 100 if day_change is not None and previous_value else None},
+        "summary": {
+            "total_value_krw": total_value,
+            "total_stock_value_krw": total_stock_value,
+            "total_cash_krw": total_cash_krw_combined,
+            "cash_krw": total_cash_krw,
+            "cash_usd": total_cash_usd,
+            "total_cost_krw": total_stock_cost,
+            "profit_krw": profit,
+            "return_rate": profit / total_stock_cost * 100 if total_stock_cost else 0,
+            "holding_count": len(enriched),
+            "account_count": len(account_list),
+        },
+        "day_change": {
+            "date": daily_snapshot.get("date"),
+            "value_krw": previous_value,
+            "change_krw": day_change,
+            "change_rate": day_change / previous_value * 100 if day_change is not None and previous_value else None,
+        },
         "accounts": account_list,
         "holdings": enriched,
         "fx_rates": fx_rates,
@@ -308,6 +394,10 @@ def seed_demo() -> None:
     kb = get_or_add_account(data, "KB증권", "KB 국내 주식", "demo")
     toss = get_or_add_account(data, "토스증권", "토스 해외 주식", "demo")
     namoo = get_or_add_account(data, "NH투자증권(나무)", "나무 국내 주식", "demo")
+    data["settings"]["cash_balances"] = {
+        toss: {"KRW": 5000000.0, "USD": 2500.0},
+        namoo: {"KRW": 1200000.0, "USD": 0.0},
+    }
     examples = [
         {"code": "005930", "name": "삼성전자", "quantity": 12, "avg_price": 70200, "current_price": 72400, "currency": "KRW", "market": "KRX", "account_id": kb, "broker": "KB증권", "account_name": "KB 국내 주식"},
         {"code": "000660", "name": "SK하이닉스", "quantity": 4, "avg_price": 178000, "current_price": 198700, "currency": "KRW", "market": "KRX", "account_id": namoo, "broker": "NH투자증권(나무)", "account_name": "나무 국내 주식"},

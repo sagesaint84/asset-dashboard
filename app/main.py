@@ -16,7 +16,7 @@ from app.services.nhplug_openapi import NhPlugOpenAPI, NhPlugOpenAPIError
 from app.services.toss_openapi import TossOpenAPI, TossOpenAPIError
 from app.services.portfolio import (
     clear_portfolio, get_dashboard, get_or_add_account, import_rows, normalize_holding,
-    read_portfolio, seed_demo, upsert_holdings, write_portfolio,
+    read_portfolio, seed_demo, upsert_holdings, write_portfolio, to_number
 )
 from app.services.asset_records import delete_asset_record, list_asset_records, upsert_asset_record
 
@@ -49,7 +49,6 @@ AUTH_USERNAME = os.getenv("DASHBOARD_USERNAME", "")
 AUTH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 SECRET_KEY = os.getenv("DASHBOARD_SECRET_KEY", "")
 SESSION_MAX_AGE = 60 * 60 * 24 * 14  # 14일 동안 로그인 유지
-# 인증 동작을 다시 적용하기 위해 기존에 발급된 세션 쿠키와 분리합니다.
 COOKIE_NAME = "dashboard_session_v2"
 
 _serializer = URLSafeTimedSerializer(SECRET_KEY) if SECRET_KEY else None
@@ -186,6 +185,11 @@ async def dashboard_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> HTMLResponse:
+    return HTMLResponse(status_code=204)
+
+
 @app.get("/api/dashboard")
 async def dashboard() -> dict:
     data = get_dashboard()
@@ -193,7 +197,6 @@ async def dashboard() -> dict:
     today = datetime.now().astimezone().date().isoformat()
     if data["summary"]["holding_count"]:
         snapshot = {
-            # 시장 종가 날짜와 무관하게, 접속한 실제 날짜별로 한 번만 자동 기록합니다.
             "date": today,
             "total_value_krw": data["summary"]["total_value_krw"],
             "total_cost_krw": data["summary"]["total_cost_krw"],
@@ -275,6 +278,8 @@ async def delete_account(account_id: str) -> dict:
         raise HTTPException(404, "계좌를 찾지 못했습니다.")
     data["accounts"] = [account for account in data["accounts"] if account.get("id") != account_id]
     data["holdings"] = [holding for holding in data["holdings"] if holding.get("account_id") != account_id]
+    if "cash_balances" in data["settings"] and account_id in data["settings"]["cash_balances"]:
+        del data["settings"]["cash_balances"][account_id]
     write_portfolio(data)
     return {"message": "증권사 계좌와 연결된 보유종목을 삭제했습니다."}
 
@@ -294,6 +299,19 @@ async def rename_account(account_id: str, payload: dict) -> dict:
             holding["account_name"] = name
     write_portfolio(data)
     return {"message": "계좌 이름을 수정했습니다."}
+
+
+@app.put("/api/accounts/{account_id}/cash")
+async def update_account_cash(account_id: str, payload: dict) -> dict:
+    data = read_portfolio()
+    if not any(account.get("id") == account_id for account in data["accounts"]):
+        raise HTTPException(404, "계좌를 찾지 못했습니다.")
+    cash_krw = float(to_number(payload.get("cash_krw") or payload.get("KRW")))
+    cash_usd = float(to_number(payload.get("cash_usd") or payload.get("USD")))
+    cash_balances = data["settings"].setdefault("cash_balances", {})
+    cash_balances[account_id] = {"KRW": cash_krw, "USD": cash_usd}
+    write_portfolio(data)
+    return {"message": "계좌 예수금을 수정했습니다.", "dashboard": get_dashboard()}
 
 
 @app.put("/api/holdings/{holding_id}")
@@ -414,18 +432,28 @@ async def sync_toss() -> dict:
     client = TossOpenAPI()
     try:
         records = await client.sync_holdings()
+        toss_accounts = client.last_accounts
     except TossOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
     data = read_portfolio()
     cash = data["settings"].setdefault("toss_cash", {})
-    toss_accounts = await client._get("/api/v1/accounts")
-    if isinstance(toss_accounts, dict): toss_accounts = toss_accounts.get("items") or toss_accounts.get("accounts") or []
+    cash_balances = data["settings"].setdefault("cash_balances", {})
     for account in toss_accounts:
         seq = account.get("accountSeq")
+        account_no = str(account.get("accountNo", ""))
+        account_name = f"토스증권 계좌 {account_no[-4:]}" if account_no else f"토스증권 계좌 {seq}"
+        existing = next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api" and a.get("name") == account_name), None)
+        existing = existing or next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api"), None)
+        account_id = existing["id"] if existing else get_or_add_account(data, "토스증권", account_name, "toss_api")
         if seq is not None:
-            try: cash[str(seq)] = await client.get_buying_power(int(seq))
-            except TossOpenAPIError: pass
+            try:
+                bp = await client.get_buying_power(int(seq))
+                cash[str(seq)] = bp
+                cash_balances[account_id] = bp
+            except TossOpenAPIError:
+                pass
     data["settings"]["toss_cash"] = cash
+    data["settings"]["cash_balances"] = cash_balances
     holdings = []
     for record in records:
         existing = next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api" and a.get("name") == record["account_name"]), None)
@@ -434,7 +462,7 @@ async def sync_toss() -> dict:
         holdings.append(normalize_holding(record, account_id, "토스증권", record["account_name"], "toss_api"))
     upsert_holdings(data, holdings, replace_source="toss_api")
     write_portfolio(data)
-    return {"message": f"토스증권 보유종목 {len(holdings)}개를 동기화했습니다.", "count": len(holdings)}
+    return {"message": f"토스증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
 
 
 @app.post("/api/sync/namoo")
@@ -448,12 +476,16 @@ async def sync_namoo() -> dict:
             detail = "나무증권 API 호출 한도를 초과했습니다(IGW42903). 잠시 후 다시 시도하거나 나무 OpenAPI 포털에서 호출 한도·계정별 제한을 확인해 주세요. 인증키 오류가 아닙니다."
         raise HTTPException(429 if "IGW42903" in str(exc) else 400, detail) from exc
     data = read_portfolio()
-    # 잔고가 0원인 계좌도 계좌 목록에는 표시합니다.
+    cash_balances = data["settings"].setdefault("cash_balances", {})
     for account in client.last_accounts:
         account_no = str(account.get("acct_no", ""))
         account_name = client._account_name(account)
-        if account_no and not any(a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == account_name for a in data["accounts"]):
-            get_or_add_account(data, "NH투자증권(나무)", account_name, "nhplug_api")
+        if account_no:
+            existing = next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == account_name), None)
+            existing = existing or next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api"), None)
+            account_id = existing["id"] if existing else get_or_add_account(data, "NH투자증권(나무)", account_name, "nhplug_api")
+            if account_no in client.account_cash:
+                cash_balances[account_id] = client.account_cash[account_no]
     holdings = []
     for record in records:
         existing = next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == record["account_name"]), None)
@@ -461,8 +493,9 @@ async def sync_namoo() -> dict:
         account_id = existing["id"] if existing else get_or_add_account(data, "NH투자증권(나무)", record["account_name"], "nhplug_api")
         holdings.append(normalize_holding(record, account_id, "NH투자증권(나무)", record["account_name"], "nhplug_api"))
     upsert_holdings(data, holdings, replace_source="nhplug_api")
+    data["settings"]["cash_balances"] = cash_balances
     write_portfolio(data)
-    return {"message": f"나무증권 보유종목 {len(holdings)}개를 동기화했습니다.", "count": len(holdings)}
+    return {"message": f"나무증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
 
 
 @app.post("/api/fx/refresh")

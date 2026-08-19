@@ -20,7 +20,7 @@ function sparkline(points, change) {
   if (!points || points.length < 2) return "<span class=\"spark-empty\">—</span>";
   const min = Math.min(...points), max = Math.max(...points), span = max - min || 1;
   const coords = points.map((point, index) => `${(index / (points.length - 1)) * 100},${34 - ((point - min) / span) * 28}`).join(" ");
-  const color = Number(change) < 0 ? "#ff718c" : "#4f9dff";
+  const color = Number(change) < 0 ? "#4f9dff" : "#ff5c77";
   return `<svg class="sparkline" viewBox="0 0 100 38" preserveAspectRatio="none" aria-hidden="true"><polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><polyline points="0,37 ${coords} 100,37" fill="${color}18" stroke="none"/></svg>`;
 }
 
@@ -140,23 +140,55 @@ async function loadMarkets() {
 function renderSummary(data) {
   const s = data.summary, currencies = data.currency_summary || {};
   const krw = currencies.KRW || {}, usd = currencies.USD || {};
+
+  // 1. 총 투자자산
   $("#totalValue").textContent = money(s.total_value_krw);
+  const cashNote = s.total_cash_krw ? `주식 ${money(s.total_stock_value_krw || (s.total_value_krw - s.total_cash_krw))} · 예수금 ${money(s.total_cash_krw)}` : `보유 종목 ${number(s.holding_count, 0)}개 · ${number(s.account_count, 0)}개 계좌`;
+  $("#holdingCaption").textContent = cashNote;
+
+  // 2. 총 수익
   $("#totalProfit").textContent = money(s.profit_krw);
   $("#totalProfit").className = signClass(s.profit_krw);
-  $("#holdingCaption").textContent = `보유 종목 ${number(s.holding_count, 0)}개 · ${number(s.account_count, 0)}개 계좌`;
-  $("#profitCaption").innerHTML = `수익률 ${s.return_rate >= 0 ? "+" : ""}${number(s.return_rate)}%<br>총 매입 ${money(s.total_cost_krw)}`;
-  $("#krwValue").textContent = money(krw.market_value_krw);
-  $("#krwCaption").innerHTML = `원화 예수금 ${money(krw.cash || 0)}<br>${number(krw.market_value || 0, 0)}원 보유`;
-  $("#usdValue").textContent = money(usd.market_value, "USD");
-  const rate = data.fx_rates?.USD;
-  $("#usdCaption").innerHTML = `달러 예수금 ${money(usd.cash || 0, "USD")}<br>원화 환산 ${money(usd.market_value_krw)}`;
-  $("#updatedAt").textContent = data.updated_at ? `마지막 자산 반영 ${new Date(data.updated_at).toLocaleString("ko-KR")}` : "아직 보유종목이 없습니다.";
+  const profitRateEl = $("#profitRate");
+  if (profitRateEl) {
+    profitRateEl.textContent = `(${s.return_rate >= 0 ? "+" : ""}${number(s.return_rate)}%)`;
+    profitRateEl.className = `sub-rate ${signClass(s.profit_krw)}`;
+  }
+  $("#profitCaption").textContent = `총 매입 ${money(s.total_cost_krw)}`;
+
+  // 3. 일간 수익
   const day = data.day_change || {};
-  const dayText = day.change_krw == null ? "전일 기준을 수집하는 중" : `${day.change_krw >= 0 ? "+" : ""}${money(day.change_krw)} (${day.change_rate >= 0 ? "+" : ""}${number(day.change_rate)}%)`;
   $("#dayProfit").textContent = day.change_krw == null ? "—" : `${day.change_krw >= 0 ? "+" : ""}${money(day.change_krw)}`;
   $("#dayProfit").className = day.change_krw == null ? "" : signClass(day.change_krw);
-  $("#dayCaption").textContent = day.change_krw == null ? "전일 기준 데이터 수집 중" : `${day.date} 대비 ${day.change_rate >= 0 ? "+" : ""}${number(day.change_rate)}%`;
-  $("#accountCaption").textContent = `전체 ${number(s.account_count, 0)}개 계좌 통합`;
+  const dayRateEl = $("#dayRate");
+  if (dayRateEl) {
+    dayRateEl.textContent = day.change_rate == null ? "" : `(${day.change_rate >= 0 ? "+" : ""}${number(day.change_rate)}%)`;
+    dayRateEl.className = day.change_rate == null ? "sub-rate" : `sub-rate ${signClass(day.change_krw)}`;
+  }
+  $("#dayCaption").textContent = day.change_krw == null ? "전일 기준 데이터 수집 중" : `${day.date} 대비`;
+
+  // 4. 원화 자산
+  const krwStock = krw.stock_value_krw || (Number(krw.market_value_krw || 0) - Number(krw.cash || 0));
+  $("#krwValue").textContent = money(krw.market_value_krw || 0);
+  const krwCashBadgeEl = $("#krwCashBadge");
+  if (krwCashBadgeEl) {
+    krwCashBadgeEl.textContent = `(예수금 ${money(krw.cash || 0)})`;
+  }
+  $("#krwCaption").textContent = `주식 평가 ${money(krwStock)}`;
+
+  // 5. 달러 자산
+  const usdStock = usd.stock_value || (Number(usd.market_value || 0) - Number(usd.cash || 0));
+  $("#usdValue").textContent = money(usd.market_value || 0, "USD");
+  const usdCashBadgeEl = $("#usdCashBadge");
+  if (usdCashBadgeEl) {
+    usdCashBadgeEl.textContent = `(예수금 ${money(usd.cash || 0, "USD")})`;
+  }
+  $("#usdCaption").textContent = `주식 평가 ${money(usdStock, "USD")} (환산 ${money(usd.market_value_krw || 0)})`;
+
+  // 6. 메타 정보
+  $("#updatedAt").textContent = data.updated_at ? `마지막 자산 반영 ${new Date(data.updated_at).toLocaleString("ko-KR")}` : "아직 보유종목이 없습니다.";
+  const cashSuffix = s.total_cash_krw ? ` (예수금 ${money(s.total_cash_krw)} 포함)` : "";
+  $("#accountCaption").textContent = `전체 ${number(s.account_count, 0)}개 계좌 통합${cashSuffix}`;
   $("#accountCount").textContent = `${number(s.account_count, 0)}개 계좌`;
 }
 
@@ -164,12 +196,71 @@ function renderClassifications(items) {
   const list = $("#classificationList");
   list.innerHTML = items.length ? items.map((item) => `<div class="classification-row"><div class="classification-title"><strong>${html(item.name)}</strong><span>${number(item.holding_count, 0)}종목 · ${number(item.weight)}%</span></div><div class="classification-value"><span>${money(item.market_value_krw)}</span><b class="${signClass(item.profit_krw)}">${item.return_rate >= 0 ? "+" : ""}${number(item.return_rate)}%</b></div><div class="bar"><i style="width:${Math.min(item.weight, 100)}%"></i></div></div>`).join("") : '<div class="empty">자산을 불러오면 분류별 수익률을 표시합니다.</div>';
 }
+
 function renderAccounts(items) {
   if (!items.length) { $("#accountList").innerHTML = '<div class="empty">동기화된 계좌가 없습니다.</div>'; return; }
   const groups = new Map();
-  items.forEach((item) => { const group = groups.get(item.broker) || { broker: item.broker, accounts: [], market_value_krw: 0, profit_krw: 0, holding_count: 0 }; group.accounts.push(item); group.market_value_krw += Number(item.market_value_krw || 0); group.profit_krw += Number(item.profit_krw || 0); group.holding_count += Number(item.holding_count || 0); groups.set(item.broker, group); });
-  $("#accountList").innerHTML = [...groups.values()].map((group) => `<div class="account-group"><div class="account-group-title"><span>${html(group.broker)} <small>${number(group.holding_count, 0)}종목</small></span><span>${money(group.market_value_krw)}</span></div>${group.accounts.map((item) => `<div class="account-subrow"><span>${html(item.name)} · ${number(item.holding_count, 0)}종목</span><strong>${money(item.market_value_krw)}</strong><button class="icon-button account-edit-button" data-account-id="${item.id}" title="계좌 이름 수정" type="button">✎</button><button class="icon-button account-delete-button" data-account-id="${item.id}" title="계좌 삭제" type="button">×</button></div>`).join("")}</div>`).join("");
+  items.forEach((item) => {
+    const group = groups.get(item.broker) || {
+      broker: item.broker,
+      accounts: [],
+      market_value_krw: 0,
+      stock_value_krw: 0,
+      cash_krw: 0,
+      cash_usd: 0,
+      cash_total_krw: 0,
+      profit_krw: 0,
+      holding_count: 0,
+    };
+    group.accounts.push(item);
+    group.market_value_krw += Number(item.market_value_krw || 0);
+    group.stock_value_krw += Number(item.stock_value_krw || 0);
+    group.cash_krw += Number(item.cash_krw || 0);
+    group.cash_usd += Number(item.cash_usd || 0);
+    group.cash_total_krw += Number(item.cash_total_krw || 0);
+    group.profit_krw += Number(item.profit_krw || 0);
+    group.holding_count += Number(item.holding_count || 0);
+    groups.set(item.broker, group);
+  });
+
+  $("#accountList").innerHTML = [...groups.values()].map((group) => {
+    const cashBadges = [];
+    if (group.cash_krw) cashBadges.push(`원화 예수금 ${money(group.cash_krw)}`);
+    if (group.cash_usd) cashBadges.push(`달러 예수금 ${money(group.cash_usd, "USD")}`);
+    const groupCashTag = cashBadges.length ? `<small class="account-group-cash">${cashBadges.join(" · ")}</small>` : "";
+
+    return `<div class="account-group">
+      <div class="account-group-title">
+        <div>
+          <span>${html(group.broker)} <small>${number(group.holding_count, 0)}종목</small></span>
+          ${groupCashTag}
+        </div>
+        <span>${money(group.market_value_krw)}</span>
+      </div>
+      ${group.accounts.map((item) => {
+        const subNotes = [];
+        if (item.holding_count > 0) subNotes.push(`${number(item.holding_count, 0)}종목 (${money(item.stock_value_krw || 0)})`);
+        if (item.cash_krw) subNotes.push(`예수금 ${money(item.cash_krw)}`);
+        if (item.cash_usd) subNotes.push(`예수금 ${money(item.cash_usd, "USD")}`);
+        const subText = subNotes.join(" · ") || `${number(item.holding_count, 0)}종목`;
+
+        return `<div class="account-subrow">
+          <div class="account-subrow-info">
+            <span class="account-name">${html(item.name)}</span>
+            <small class="account-subrow-detail">${html(subText)}</small>
+          </div>
+          <strong>${money(item.market_value_krw)}</strong>
+          <div class="account-actions">
+            <button class="icon-button account-cash-button" data-account-id="${item.id}" title="예수금 직접 입력/수정" type="button">💵</button>
+            <button class="icon-button account-edit-button" data-account-id="${item.id}" title="계좌 이름 수정" type="button">✎</button>
+            <button class="icon-button account-delete-button" data-account-id="${item.id}" title="계좌 삭제" type="button">×</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("");
 }
+
 function renderHoldings(data) {
   const query = $("#searchInput").value.trim().toLowerCase();
   const rows = data.holdings.filter((item) => [item.name, item.code, item.broker, item.account_name].join(" ").toLowerCase().includes(query));
@@ -187,6 +278,7 @@ function renderHoldings(data) {
   }).join("");
   $("#emptyHoldings").hidden = data.holdings.length > 0; $(".table-wrap").hidden = data.holdings.length === 0;
 }
+
 function render(data) { dashboard = data; renderSummary(data); renderClassifications(data.classifications || []); renderAccounts(data.accounts); renderHoldings(data); }
 async function loadDashboard() { render(await api("/api/dashboard")); }
 async function loadAssetRecords() { renderAssetRecords((await api("/api/asset-records")).records || []); }
@@ -217,6 +309,7 @@ function openAssetRecordDialog(record = null) {
   form.memo.value = record?.memo ?? "";
   $("#assetRecordDialog").showModal();
 }
+
 $("#syncKbButton").addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/kb", { method: "POST" })));
 $("#syncTossButton").addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/toss", { method: "POST" })));
 $("#syncNamooButton").addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/namoo", { method: "POST" })));
@@ -227,12 +320,10 @@ $("#demoButton").addEventListener("click", (e) => action(e.currentTarget, () => 
 $("#addButton").addEventListener("click", () => openHoldingDialog()); $("#importButton").addEventListener("click", openImport);
 $("#addRecordButton").addEventListener("click", () => openAssetRecordDialog());
 $("#snapshotButton").addEventListener("click", (e) => action(e.currentTarget, async () => {
-  // 화면의 최신 보유자산을 먼저 반영한 뒤 스냅샷을 저장합니다.
   await loadDashboard();
   try {
     return await api("/api/asset-records/snapshot", { method: "POST" });
   } catch (error) {
-    // 이전 서버가 실행 중인 경우에도 기본 저장 API로 기록할 수 있게 합니다.
     if (!/Not Found|찾지 못|404/i.test(error.message || "")) throw error;
     const s = dashboard.summary || {};
     const day = dashboard.day_change || {};
@@ -248,8 +339,41 @@ $("#snapshotButton").addEventListener("click", (e) => action(e.currentTarget, as
 $("#searchInput").addEventListener("input", () => dashboard && renderHoldings(dashboard));
 $("#clearButton").addEventListener("click", () => { if (confirm("저장된 보유내역을 모두 지울까요?")) action($("#clearButton"), () => api("/api/clear", { method: "POST" })); });
 $("#holdingsBody").addEventListener("click", (e) => { const edit = e.target.closest(".edit-button"); const button = e.target.closest(".delete-button"); if (edit) { const item = dashboard?.holdings.find((row) => row.id === edit.dataset.id); if (item) openHoldingDialog(item); return; } if (button && confirm("이 보유종목을 삭제할까요?")) action(button, () => api(`/api/holdings/${button.dataset.id}`, { method: "DELETE" })); });
-$("#accountList").addEventListener("click", (e) => { const button = e.target.closest(".account-delete-button"); if (button && confirm("이 계좌와 연결된 보유종목을 모두 삭제할까요?")) action(button, () => api(`/api/accounts/${button.dataset.accountId}`, { method: "DELETE" })); });
-$("#accountList").addEventListener("click", async (e) => { const button = e.target.closest(".account-edit-button"); if (!button) return; const account = dashboard?.accounts.find((item) => item.id === button.dataset.accountId); if (!account) return; const name = prompt("계좌 이름을 입력하세요.", account.name); if (name && name.trim() && name.trim() !== account.name) await action(button, () => api(`/api/accounts/${account.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) })); });
+
+$("#accountList").addEventListener("click", async (e) => {
+  const cashBtn = e.target.closest(".account-cash-button");
+  if (cashBtn) {
+    const acc = dashboard?.accounts.find((a) => a.id === cashBtn.dataset.accountId);
+    if (!acc) return;
+    const krwPrompt = prompt(`[${acc.name}] 원화 예수금(KRW)을 입력하세요:`, String(acc.cash_krw || 0));
+    if (krwPrompt === null) return;
+    const usdPrompt = prompt(`[${acc.name}] 달러 예수금(USD)을 입력하세요:`, String(acc.cash_usd || 0));
+    if (usdPrompt === null) return;
+    await action(cashBtn, () => api(`/api/accounts/${acc.id}/cash`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cash_krw: Number(krwPrompt) || 0, cash_usd: Number(usdPrompt) || 0 })
+    }));
+    return;
+  }
+
+  const editBtn = e.target.closest(".account-edit-button");
+  if (editBtn) {
+    const account = dashboard?.accounts.find((item) => item.id === editBtn.dataset.accountId);
+    if (!account) return;
+    const name = prompt("계좌 이름을 입력하세요.", account.name);
+    if (name && name.trim() && name.trim() !== account.name) {
+      await action(editBtn, () => api(`/api/accounts/${account.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) }));
+    }
+    return;
+  }
+
+  const delBtn = e.target.closest(".account-delete-button");
+  if (delBtn && confirm("이 계좌와 연결된 보유종목을 모두 삭제할까요?")) {
+    await action(delBtn, () => api(`/api/accounts/${delBtn.dataset.accountId}`, { method: "DELETE" }));
+  }
+});
+
 $("#assetRecordList").addEventListener("click", async (e) => {
   const editButton = e.target.closest("[data-record-edit]");
   const deleteButton = e.target.closest("[data-record-delete]");
@@ -261,6 +385,7 @@ $("#assetRecordList").addEventListener("click", async (e) => {
     await action(deleteButton, () => api(`/api/asset-records/${deleteButton.dataset.recordDelete}`, { method: "DELETE" }), loadAssetRecords);
   }
 });
+
 $("#holdingForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget, payload = Object.fromEntries(new FormData(form)); ["quantity", "avg_price", "current_price"].forEach((key) => { payload[key] = Number(payload[key]); }); try { const id = form.dataset.recordId; const result = await api(id ? `/api/holdings/${id}` : "/api/holdings", { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); form.closest("dialog").close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
 $("#importForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget; const file = $("#importFile").files[0]; if (!file) return; const formData = new FormData(); formData.append("file", file); try { const result = await api(`/api/import?broker=${encodeURIComponent($("#importBroker").value || "기타 증권사")}`, { method: "POST", body: formData }); form.closest("dialog")?.close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
 $("#assetRecordForm").addEventListener("submit", async (e) => {

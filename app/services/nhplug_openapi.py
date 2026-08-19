@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -43,6 +43,7 @@ class NhPlugOpenAPI:
         self._validate_url(self.auth_url, "NHPLUG_AUTH_URL")
         self.token_cache_file = Path(__file__).resolve().parents[2] / "data" / "nhplug_token_cache.json"
         self.last_accounts: list[dict[str, Any]] = []
+        self.account_cash: dict[str, dict[str, float]] = {}
 
     @staticmethod
     def _validate_url(value: str, setting: str) -> None:
@@ -136,6 +137,7 @@ class NhPlugOpenAPI:
 
     async def sync_holdings(self) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
+        self.account_cash = {}
         self.last_accounts = await self._accounts()
         for account in self.last_accounts:
             account_no = str(account.get("acct_no", ""))
@@ -146,6 +148,9 @@ class NhPlugOpenAPI:
                 "/krstock/inquiry/v1/balance",
                 {"act_no": account_no, "bnc_bse_cd": "5", "ltg_aot_dit_cd": "9", "aet_bse": "2", "qut_dit_cd": "UNT"},
             )
+            out_0 = domestic.get("Output_0") or {}
+            krw_cash = as_float(out_0.get("orr_pbl_amt1") or out_0.get("dca") or out_0.get("drn_pbl_amt"))
+            self.account_cash[account_no] = {"KRW": krw_cash, "USD": 0.0}
             for item in domestic.get("Output_1", []) or []:
                 records.append({
                     "account_key": account_no,

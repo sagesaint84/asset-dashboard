@@ -1,1 +1,151 @@
 .market-card{display:flex;justify-content:space-between;gap:10px}.market-copy{position:relative;z-index:1;min-width:0}.spark-wrap{width:112px;align-self:flex-end;margin-bottom:2px}.sparkline{display:block;width:100%;height:48px;overflow:visible}.spark-empty{display:block;text-align:right;color:var(--muted);padding-top:24px}.market-card small{white-space:nowrap}.market-card strong{white-space:nowrap}
+
+/* 상단 2열 레이아웃: 좌측 핵심 요약 (단일 패널), 우측 투자자산 분류 */
+.overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+  margin-top: 14px;
+}
+
+.overview-left.summary-panel,
+.overview-right.classification-panel {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  height: 100%;
+}
+
+.summary-item-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  margin-top: 8px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #1e2b48;
+  gap: 12px;
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row.featured {
+  background: linear-gradient(90deg, rgba(124, 101, 220, 0.16), transparent);
+  padding: 10px 10px;
+  border-radius: 8px;
+  border-bottom: 1px solid #362973;
+}
+
+.summary-row-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.summary-row-label strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e4e9f7;
+}
+
+.card-icon.mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #a687ff22;
+  color: #bdaeff;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.summary-row-val {
+  text-align: right;
+  min-width: 0;
+}
+
+.summary-row-val .val-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.summary-row-val strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f3f5ff;
+}
+
+.summary-row.featured strong.value-highlight {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.summary-row-val .sub-rate {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summary-row-val .cash-badge-inline {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8ec5fc;
+}
+
+.summary-row-val small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.overview-right .classification-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.dashboard-grid.single-panel {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-grid.single-panel .account-panel {
+  grid-column: 1 / -1;
+}
+
+.account-subrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 12px 10px 20px; border-bottom: 1px solid #1c2742; }
+.account-subrow:last-child { border-bottom: none; }
+.account-subrow-info { min-width: 0; }
+.account-subrow-info .account-name { display: block; font-weight: 600; color: #e4e9f7; font-size: 13px; }
+.account-subrow-detail { display: block; color: #8fa0c5; font-size: 11px; margin-top: 3px; }
+.account-group-cash { display: block; font-size: 12px; font-weight: 600; color: #7cb8ff; margin-top: 4px; }
+.account-actions { display: flex; gap: 4px; align-items: center; }
+.account-actions .icon-button { font-size: 13px; padding: 2px 4px; border-radius: 4px; transition: background 0.15s; }
+.account-actions .icon-button:hover { background: #1f2c4d; }
+.account-cash-button { color: #8ec5fc; }
+
+/* 수치 증가: 붉은색(Red), 수치 감소: 파란색(Blue) */
+.up { color: #ff5c77 !important; }
+.down { color: #4f9dff !important; }
+
+@media (max-width: 900px) {
+  .overview-layout {
+    grid-template-columns: 1fr;
+  }
+}
