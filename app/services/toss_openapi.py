@@ -170,43 +170,53 @@ class TossOpenAPI:
     async def get_market_overview(self) -> list[dict[str, Any]]:
         """대시보드 상단에 표시할 주요 시장 지표를 토스증권에서 조회한다.
 
-        토스증권의 시장지표 API는 코스피·코스닥만 직접 지원한다. 미국 두 지수는
-        각각 이를 추종하는 대표 ETF(SPY·QQQ)의 가격으로 표시한다.
+        토스증권의 시장지표 API는 코스피·코스닥을 직접 지원하고,
+        미국 지수는 대표 ETF(QQQ·SPY)를 통해 제공한다.
         """
         indicator_prices = await self._get("/api/v1/market-indicators/prices", params={"symbols": "KOSPI"})
-        stock_prices = await self._get("/api/v1/prices", params={"symbols": "SPY,QQQ"})
+        stock_prices = await self._get("/api/v1/prices", params={"symbols": "QQQ,SPY"})
 
         async def candle_pair(path: str, params: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             daily = await self._get(path, params={**params, "interval": "1d", "count": 2})
             try:
-                intraday = await self._get(path, params={**params, "interval": "1m", "count": 120})
+                intraday = await self._get(path, params={**params, "interval": "1m", "count": 60})
             except TossOpenAPIError:
                 intraday = daily
             if len(intraday.get("candles", [])) < 3:
                 intraday = daily
             return daily, intraday
 
-        kospi_daily, kospi_intraday = await candle_pair("/api/v1/market-indicators/KOSPI/candles", {})
-        spy_daily, spy_intraday = await candle_pair("/api/v1/candles", {"symbol": "SPY"})
         qqq_daily, qqq_intraday = await candle_pair("/api/v1/candles", {"symbol": "QQQ"})
+        spy_daily, spy_intraday = await candle_pair("/api/v1/candles", {"symbol": "SPY"})
+        kospi_daily, kospi_intraday = await candle_pair("/api/v1/market-indicators/KOSPI/candles", {})
 
         indicator_by_symbol = {str(item.get("symbol", "")).upper(): item for item in indicator_prices}
         price_by_symbol = {str(item.get("symbol", "")).upper(): item for item in stock_prices}
         market_rows = [
-            ("KOSPI", "코스피", "국내 대표 지수", indicator_by_symbol.get("KOSPI", {}), kospi_daily, kospi_intraday),
-            ("SPY", "S&P 500", "SPY 추종 ETF", price_by_symbol.get("SPY", {}), spy_daily, spy_intraday),
-            ("QQQ", "나스닥100", "QQQ 추종 ETF", price_by_symbol.get("QQQ", {}), qqq_daily, qqq_intraday),
+            ("QQQ", "나스닥 100", "나스닥 100 (QQQ)", price_by_symbol.get("QQQ", {}), qqq_daily, qqq_intraday),
+            ("SPY", "S&P 500", "S&P 500 (SPY)", price_by_symbol.get("SPY", {}), spy_daily, spy_intraday),
+            ("KOSPI", "코스피", "코스피 지수", indicator_by_symbol.get("KOSPI", {}), kospi_daily, kospi_intraday),
         ]
         overview: list[dict[str, Any]] = []
         for symbol, label, note, quote, daily_page, intraday_page in market_rows:
+            candles_d = daily_page.get("candles", [])
+            latest_c = as_float(candles_d[0].get("closePrice")) if len(candles_d) >= 1 else as_float(quote.get("lastPrice"))
+            prev_c = as_float(candles_d[1].get("closePrice")) if len(candles_d) >= 2 else 0.0
+            change = (latest_c - prev_c) if prev_c > 0 else None
+            change_rate = (change / prev_c * 100) if (change is not None and prev_c > 0) else None
+
+            intra_c = intraday_page.get("candles", [])
+            series = self._sparkline(intra_c) if len(intra_c) >= 3 else self._sparkline(candles_d)
+
             overview.append({
                 "symbol": symbol,
                 "label": label,
                 "note": note,
-                "price": as_float(quote.get("lastPrice")),
+                "price": as_float(quote.get("lastPrice")) or latest_c,
                 "currency": quote.get("currency", "KRW" if symbol == "KOSPI" else "USD"),
-                "change_rate": self._daily_change(daily_page.get("candles", [])),
-                "series": self._sparkline(intraday_page.get("candles", [])),
+                "change": change,
+                "change_rate": change_rate,
+                "series": series,
                 "updated_at": quote.get("timestamp"),
             })
         return overview
@@ -244,9 +254,9 @@ class TossOpenAPI:
         if not symbols or not self.configured:
             return {}
         res: dict[str, float] = {}
-        sem = asyncio.Semaphore(10)
+        sem = asyncio.Semaphore(4)
 
-        async with httpx.AsyncClient(timeout=12.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             token = await self._access_token(client)
             headers = {"Authorization": f"Bearer {token}"}
 
@@ -254,31 +264,36 @@ class TossOpenAPI:
                 sym_clean = sym.strip().upper()
                 if not sym_clean:
                     return
-                async with sem:
-                    try:
-                        r = await client.get(
-                            f"{self.base_url}/api/v1/candles",
-                            params={"symbol": sym_clean, "interval": "1d", "count": 2},
-                            headers=headers,
-                        )
-                        if r.status_code == 200:
-                            payload = r.json().get("result", {})
-                            candles = payload.get("candles", [])
-                            if len(candles) >= 2:
-                                c0 = as_float(candles[0].get("closePrice"))
-                                c1 = as_float(candles[1].get("closePrice"))
-                                if c1 > 0:
-                                    res[sym_clean] = (c0 - c1) / c1 * 100
-                                    return
-                            elif len(candles) == 1:
-                                c0 = as_float(candles[0].get("closePrice"))
-                                o0 = as_float(candles[0].get("openPrice"))
-                                if o0 > 0:
-                                    res[sym_clean] = (c0 - o0) / o0 * 100
-                                    return
-                    except Exception:
-                        pass
-                    res[sym_clean] = 0.0
+                for attempt in range(4):
+                    async with sem:
+                        try:
+                            r = await client.get(
+                                f"{self.base_url}/api/v1/candles",
+                                params={"symbol": sym_clean, "interval": "1d", "count": 2},
+                                headers=headers,
+                            )
+                            if r.status_code == 200:
+                                payload = r.json().get("result", {})
+                                candles = payload.get("candles", [])
+                                if len(candles) >= 2:
+                                    c0 = as_float(candles[0].get("closePrice"))
+                                    c1 = as_float(candles[1].get("closePrice"))
+                                    if c1 > 0:
+                                        res[sym_clean] = round((c0 - c1) / c1 * 100, 2)
+                                        return
+                                elif len(candles) == 1:
+                                    c0 = as_float(candles[0].get("closePrice"))
+                                    o0 = as_float(candles[0].get("openPrice"))
+                                    if o0 > 0:
+                                        res[sym_clean] = round((c0 - o0) / o0 * 100, 2)
+                                        return
+                            elif r.status_code == 429:
+                                await asyncio.sleep(0.3 * (attempt + 1))
+                                continue
+                        except Exception:
+                            await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.04)
 
-            await asyncio.gather(*(fetch_one(s) for s in symbols))
+            tasks = [fetch_one(s) for s in set(symbols) if s]
+            await asyncio.gather(*tasks, return_exceptions=True)
         return res

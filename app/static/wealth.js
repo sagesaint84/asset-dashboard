@@ -17,11 +17,46 @@ const money = (value, currency = "KRW") => {
 const html = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
 const signClass = (value) => Number(value) < 0 ? "down" : "up";
 function sparkline(points, change) {
-  if (!points || points.length < 2) return "<span class=\"spark-empty\">—</span>";
-  const min = Math.min(...points), max = Math.max(...points), span = max - min || 1;
-  const coords = points.map((point, index) => `${(index / (points.length - 1)) * 100},${34 - ((point - min) / span) * 28}`).join(" ");
-  const color = Number(change) < 0 ? "#4f9dff" : "#ff5c77";
-  return `<svg class="sparkline" viewBox="0 0 100 38" preserveAspectRatio="none" aria-hidden="true"><polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><polyline points="0,37 ${coords} 100,37" fill="${color}18" stroke="none"/></svg>`;
+  if (!points || points.length < 2) {
+    if (points && points.length === 1) points = [points[0], points[0]];
+    else return "<span class=\"spark-empty\">—</span>";
+  }
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = max - min || (min * 0.01) || 1;
+  const h = 42;
+  const w = 110;
+  const pad = 4;
+
+  const coords = points.map((point, index) => {
+    const x = (index / (points.length - 1)) * (w - pad * 2) + pad;
+    const y = (h - pad) - ((point - min) / span) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  const polylineStr = coords.join(" ");
+  const lastCoord = coords[coords.length - 1].split(",");
+  const lastX = lastCoord[0];
+  const lastY = lastCoord[1];
+
+  const isUp = Number(change) > 0;
+  const isDown = Number(change) < 0;
+  const color = isUp ? "#ff5c77" : (isDown ? "#4f9dff" : "#98a6c8");
+  const gradId = `spark-grad-${Math.random().toString(36).slice(2, 8)}`;
+
+  return `
+    <svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.32" />
+          <stop offset="100%" stop-color="${color}" stop-opacity="0.0" />
+        </linearGradient>
+      </defs>
+      <polyline points="${polylineStr} ${w - pad},${h} ${pad},${h}" fill="url(#${gradId})" stroke="none" />
+      <polyline points="${polylineStr}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="${lastX}" cy="${lastY}" r="2.8" fill="${color}" stroke="#0b1120" stroke-width="1.2" />
+    </svg>
+  `;
 }
 
 async function api(url, options = {}) {
@@ -120,16 +155,58 @@ function renderAssetRecords(records) {
 }
 
 function renderMarkets(result) {
-  const rows = [...result.markets, {
-    symbol: "USD/KRW", label: "달러/원", note: "토스 실시간 환율", price: result.exchange_rate.rate,
-    currency: "KRW", change: result.exchange_rate.change, change_rate: result.exchange_rate.change_rate, note: "토스 1일 변동", updated_at: result.exchange_rate.valid_until, series: result.exchange_rate.series || [result.exchange_rate.rate],
-  }];
+  const rows = [
+    ...result.markets,
+    {
+      symbol: "USD/KRW",
+      label: "달러 환율",
+      note: "달러/원 환율",
+      price: result.exchange_rate.rate,
+      currency: "KRW",
+      change: result.exchange_rate.change,
+      change_rate: result.exchange_rate.change_rate,
+      updated_at: result.exchange_rate.valid_until,
+      series: result.exchange_rate.series || [result.exchange_rate.rate],
+    },
+  ];
+
   $("#marketGrid").innerHTML = rows.map((item) => {
-    const currency = item.symbol === "KOSPI" || item.symbol === "USD/KRW" ? null : item.currency;
-    const price = currency ? money(item.price, currency) : number(item.price);
-    const change = item.change_rate == null ? "실시간 기준가" : item.change != null ? `${item.change >= 0 ? "+" : ""}${number(item.change, 1)} (${item.change_rate >= 0 ? "+" : ""}${number(item.change_rate)}%)` : `${item.change_rate >= 0 ? "+" : ""}${number(item.change_rate)}%`;
-    const chart = item.symbol === "USD/KRW" ? "" : `<div class="spark-wrap">${sparkline(item.series, item.change_rate)}</div>`;
-    return `<article class="market-card"><div class="market-copy"><span class="symbol">${html(item.symbol)}</span><p>${html(item.label)}</p><strong>${price}</strong><small class="${item.change_rate == null ? "" : signClass(item.change_rate)}">${change} · ${html(item.note)}</small></div>${chart}</article>`;
+    const isFx = item.symbol === "USD/KRW";
+    const priceText = (item.currency === "USD") ? `US$${number(item.price, 2)}` : (isFx ? `${number(item.price, 1)}원` : number(item.price, 2));
+
+    const isUp = Number(item.change_rate) > 0;
+    const isDown = Number(item.change_rate) < 0;
+    const sign = isUp ? "+" : "";
+    const colorClass = isUp ? "up" : (isDown ? "down" : "");
+
+    let changeText = "";
+    if (item.change_rate != null) {
+      const changeNum = item.change != null ? `${sign}${number(item.change, item.currency === "USD" ? 2 : 1)}` : "";
+      const rateNum = `(${sign}${number(item.change_rate, 2)}%)`;
+      changeText = changeNum ? `${changeNum} ${rateNum}` : rateNum;
+    } else {
+      changeText = "—";
+    }
+
+    const chartHtml = sparkline(item.series, item.change_rate);
+
+    return `
+      <article class="market-card toss-market-card">
+        <div class="market-chart-col">
+          ${chartHtml}
+        </div>
+        <div class="market-info-col">
+          <div class="market-title-row">
+            <strong class="market-title">${html(item.label)}</strong>
+            <span class="market-symbol-tag">${html(item.symbol)}</span>
+          </div>
+          <div class="market-value-row">
+            <strong class="market-price ${colorClass}">${priceText}</strong>
+            <span class="market-change ${colorClass}">${changeText}</span>
+          </div>
+        </div>
+      </article>
+    `;
   }).join("");
 }
 async function loadMarkets() {
@@ -450,12 +527,17 @@ function renderHeatmaps(data) {
       market_value_krw: 0,
       cost_value_krw: 0,
       profit_krw: 0,
-      day_change_rate: Number(item.day_change_rate || 0),
+      day_change_rate: 0,
     };
     group.quantity += Number(item.quantity || 0);
     group.market_value_krw += Number(item.market_value_krw || 0);
     group.cost_value_krw += Number(item.cost_value_krw || 0);
     group.profit_krw += Number(item.profit_krw || 0);
+    if (item.day_change_rate != null && Number(item.day_change_rate) !== 0) {
+      group.day_change_rate = Number(item.day_change_rate);
+    } else if (group.day_change_rate === 0 && item.day_change_rate != null) {
+      group.day_change_rate = Number(item.day_change_rate);
+    }
     groups.set(key, group);
   });
 
@@ -483,16 +565,45 @@ function renderHoldings(data) {
   const groups = new Map();
   rows.forEach((item) => {
     const key = `${item.code}|${item.currency}|${item.name}`;
-    const group = groups.get(key) || { ...item, quantity: 0, market_value_krw: 0, cost_value_krw: 0, profit_krw: 0, items: [] };
-    group.quantity += Number(item.quantity || 0); group.market_value_krw += Number(item.market_value_krw || 0);
-    group.cost_value_krw += Number(item.cost_value_krw || 0); group.profit_krw += Number(item.profit_krw || 0); group.items.push(item); groups.set(key, group);
+    const group = groups.get(key) || {
+      ...item,
+      quantity: 0,
+      market_value_krw: 0,
+      cost_value_krw: 0,
+      profit_krw: 0,
+      day_change_rate: 0,
+      items: [],
+    };
+    group.quantity += Number(item.quantity || 0);
+    group.market_value_krw += Number(item.market_value_krw || 0);
+    group.cost_value_krw += Number(item.cost_value_krw || 0);
+    group.profit_krw += Number(item.profit_krw || 0);
+    if (item.day_change_rate != null && Number(item.day_change_rate) !== 0) {
+      group.day_change_rate = Number(item.day_change_rate);
+    } else if (group.day_change_rate === 0 && item.day_change_rate != null) {
+      group.day_change_rate = Number(item.day_change_rate);
+    }
+    group.items.push(item);
+    groups.set(key, group);
   });
   $("#holdingsBody").innerHTML = [...groups.values()].map((item) => {
-    const rate = item.cost_value_krw ? item.profit_krw / item.cost_value_krw * 100 : 0;
+    const rate = item.cost_value_krw ? (item.profit_krw / item.cost_value_krw) * 100 : 0;
+    const dayRate = Number(item.day_change_rate || 0);
     const accounts = item.items.map((detail) => `<span class="holding-account-detail">${html(detail.broker)} ${html(detail.account_name)} ${number(detail.quantity, 4)}주 <button class="mini-edit-button edit-button" data-id="${detail.id}" title="수정" type="button">✎</button><button class="mini-edit-button delete-button" data-id="${detail.id}" title="삭제" type="button">×</button></span>`).join("");
-    return `<tr><td><strong>${html(item.name)}</strong><small>${html(item.code)} · ${html(item.market || item.currency)}</small></td><td>${html(item.currency === "KRW" ? "국내 자산" : "해외 자산")}</td><td class="holding-accounts">${accounts}</td><td>${number(item.quantity, 4)}</td><td>${money(item.market_value_krw)}</td><td class="${signClass(item.profit_krw)}">${item.profit_krw >= 0 ? "+" : ""}${money(item.profit_krw)}</td><td class="${signClass(rate)}">${rate >= 0 ? "+" : ""}${number(rate)}%</td><td></td></tr>`;
+    return `<tr>
+      <td><strong>${html(item.name)}</strong><small>${html(item.code)} · ${html(item.market || item.currency)}</small></td>
+      <td>${html(item.currency === "KRW" ? "국내 자산" : "해외 자산")}</td>
+      <td class="holding-accounts">${accounts}</td>
+      <td>${number(item.quantity, 4)}</td>
+      <td>${money(item.market_value_krw)}</td>
+      <td class="${signClass(item.profit_krw)}">${item.profit_krw >= 0 ? "+" : ""}${money(item.profit_krw)}</td>
+      <td class="${signClass(rate)}">${rate >= 0 ? "+" : ""}${number(rate)}%</td>
+      <td class="${signClass(dayRate)}">${dayRate >= 0 ? "+" : ""}${number(dayRate)}%</td>
+      <td></td>
+    </tr>`;
   }).join("");
-  $("#emptyHoldings").hidden = data.holdings.length > 0; $(".table-wrap").hidden = data.holdings.length === 0;
+  $("#emptyHoldings").hidden = data.holdings.length > 0;
+  $(".table-wrap").hidden = data.holdings.length === 0;
 }
 
 function render(data) {

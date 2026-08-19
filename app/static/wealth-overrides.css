@@ -353,3 +353,113 @@
     min-height: 360px;
   }
 }
+
+/* =========================================================================
+   주요 지수 (Toss App 스타일: 좌측 차트 + 우측 수치/변동률)
+   ========================================================================= */
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .market-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .market-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.toss-market-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #111a33;
+  border: 1px solid #1f2b48;
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+}
+
+.toss-market-card:hover {
+  transform: translateY(-2px);
+  border-color: #354770;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.market-chart-col {
+  width: 96px;
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.market-chart-col .sparkline {
+  display: block;
+  width: 100%;
+  height: 44px;
+  overflow: visible;
+}
+
+.market-info-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.market-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.market-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f0f3fc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market-symbol-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7d90b8;
+  background: rgba(125, 144, 184, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.market-value-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.market-price {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: #ffffff;
+}
+
+.market-change {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}

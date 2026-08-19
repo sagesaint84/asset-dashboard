@@ -12,7 +12,7 @@ COPY . .
 # 데이터 저장 폴더 (볼륨으로 마운트할 예정)
 RUN mkdir -p /app/data
 
-EXPOSE 8000
+EXPOSE 4829
 
 # 컨테이너 밖에서 접속 가능하도록 0.0.0.0 바인딩
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4829"]

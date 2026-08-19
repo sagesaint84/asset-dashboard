@@ -233,18 +233,42 @@ async def market_overview() -> dict:
     except TossOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
     data = read_portfolio()
+    rate = float(exchange_rate["rate"])
+    mid_rate = float(exchange_rate.get("mid_rate") or rate)
+
     history = data["settings"].setdefault("fx_history", [])
-    history.append({"at": datetime.now().astimezone().isoformat(timespec="seconds"), "rate": exchange_rate["rate"]})
-    data["settings"]["fx_history"] = history[-60:]
-    write_portfolio(data)
-    exchange_rate["series"] = [item["rate"] for item in data["settings"]["fx_history"]]
-    if len(history) >= 2 and history[-2].get("rate"):
-        previous = float(history[-2]["rate"])
-        exchange_rate["change"] = exchange_rate["rate"] - previous
-        exchange_rate["change_rate"] = exchange_rate["change"] / previous * 100
+    if not history or abs(float(history[-1].get("rate", 0)) - rate) > 0.0001:
+        history.append({"at": datetime.now().astimezone().isoformat(timespec="seconds"), "rate": rate})
+        data["settings"]["fx_history"] = history[-60:]
+        write_portfolio(data)
+
+    prev_rate = None
+    if len(history) >= 2:
+        for item in reversed(history[:-1]):
+            r_val = float(item.get("rate", 0))
+            if abs(r_val - rate) > 0.001:
+                prev_rate = r_val
+                break
+    if prev_rate is None and mid_rate > 0 and abs(rate - mid_rate) > 0.001:
+        prev_rate = mid_rate
+
+    if prev_rate and prev_rate > 0:
+        fx_change = rate - prev_rate
+        fx_change_rate = fx_change / prev_rate * 100
     else:
-        exchange_rate["change"] = None
-        exchange_rate["change_rate"] = None
+        fx_change = 0.0
+        fx_change_rate = 0.0
+
+    fx_series = [float(item["rate"]) for item in data["settings"]["fx_history"]]
+    if len(fx_series) < 3:
+        if mid_rate > 0 and abs(mid_rate - rate) > 0.001:
+            fx_series = [mid_rate, (mid_rate + rate) / 2, rate]
+        else:
+            fx_series = [rate * 0.999, rate * 1.0005, rate]
+
+    exchange_rate["change"] = fx_change
+    exchange_rate["change_rate"] = fx_change_rate
+    exchange_rate["series"] = fx_series
     return {"markets": markets, "exchange_rate": exchange_rate, "source": "토스증권 OpenAPI"}
 
 

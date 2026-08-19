@@ -3,7 +3,7 @@ services:
     build: .
     container_name: my-asset-dashboard
     ports:
-      - "8000:8000"
+      - "4829:4829"
     volumes:
       # 실제 보유종목 데이터는 컨테이너 밖에 영구 보관
       - ./data:/app/data
