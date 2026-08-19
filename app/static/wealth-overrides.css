@@ -21,17 +21,21 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  gap: 6px;
   flex: 1;
   margin-top: 8px;
 }
 
+/* 핵심 요약 행 줄 맞춤 (5개 행 완벽한 수직 수평 정렬) */
 .summary-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #1e2b48;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1c2742;
+  border-radius: 6px;
   gap: 12px;
+  box-sizing: border-box;
 }
 
 .summary-row:last-child {
@@ -39,40 +43,45 @@
 }
 
 .summary-row.featured {
-  background: linear-gradient(90deg, rgba(124, 101, 220, 0.16), transparent);
-  padding: 10px 10px;
-  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(124, 101, 220, 0.18), transparent);
   border-bottom: 1px solid #362973;
+  padding: 10px 12px;
 }
 
 .summary-row-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: 140px;
   flex-shrink: 0;
 }
 
 .summary-row-label strong {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #e4e9f7;
+  white-space: nowrap;
 }
 
 .card-icon.mini {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   border-radius: 6px;
   background: #a687ff22;
   color: #bdaeff;
   font-weight: 800;
-  font-size: 12px;
+  font-size: 13px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .summary-row-val {
   text-align: right;
+  flex: 1;
   min-width: 0;
 }
 

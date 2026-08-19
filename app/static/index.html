@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="모든 증권사의 투자자산을 통합해 보는 개인 대시보드" />
     <title>Wealth · 투자 대시보드</title>
-    <link rel="stylesheet" href="/static/wealth.css?v=20260819-6" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260819-6" />
+    <link rel="stylesheet" href="/static/wealth.css?v=20260819-7" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260819-7" />
   </head>
   <body>
     <main class="shell">
@@ -194,8 +194,55 @@
     <dialog id="holdingDialog" class="dialog"><form id="holdingForm" method="dialog"><div class="dialog-head"><h2>보유종목 직접 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><div class="form-grid"><label>증권사<input name="broker" value="기타 증권사" required /></label><label>계좌 이름<input name="account_name" value="내 주식 계좌" required /></label><label>종목 코드<input name="code" placeholder="005930 또는 AAPL" required /></label><label>종목명<input name="name" required /></label><label>보유 수량<input name="quantity" type="number" min="0.000001" step="any" required /></label><label>평균매입가<input name="avg_price" type="number" min="0" step="any" required /></label><label>현재가<input name="current_price" type="number" min="0" step="any" required /></label><label>통화<select name="currency"><option>KRW</option><option>USD</option><option>JPY</option><option>HKD</option><option>CNY</option></select></label><label>거래소<input name="market" placeholder="KRX, NAS, NYS 등" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
     <dialog id="importDialog" class="dialog"><form id="importForm" method="dialog"><div class="dialog-head"><h2>증권사 잔고 파일 가져오기</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">CSV 또는 XLSX 파일의 첫 줄에 종목코드와 수량을 포함해 주세요.</p><label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label><label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">가져오기</button></div></form></dialog>
     <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
+
+    <!-- 계좌 예수금 직접 입력/수정 다이얼로그 (원화 & 달러 통합) -->
+    <dialog id="accountCashDialog" class="dialog">
+      <form id="accountCashForm" method="dialog">
+        <div class="dialog-head">
+          <h2 id="accountCashDialogTitle">계좌 예수금 입력 / 수정</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-description">해당 계좌의 원화(KRW) 및 달러(USD) 예수금을 직접 입력합니다.</p>
+        <div class="form-grid">
+          <label>원화 예수금 (KRW)
+            <input name="cash_krw" type="number" step="any" placeholder="0" />
+          </label>
+          <label>달러 예수금 (USD)
+            <input name="cash_usd" type="number" step="any" placeholder="0" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button">취소</button>
+          <button class="button primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 증권사 및 계좌 이름 수정 다이얼로그 -->
+    <dialog id="accountEditDialog" class="dialog">
+      <form id="accountEditForm" method="dialog">
+        <div class="dialog-head">
+          <h2>증권사 및 계좌 정보 수정</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-description">증권사 이름과 계좌 이름을 수정합니다.</p>
+        <div class="form-grid">
+          <label>증권사 이름
+            <input name="broker" placeholder="KB증권, 토스증권, 나무증권 등" required />
+          </label>
+          <label>계좌 이름
+            <input name="name" placeholder="종합계좌, ISA, IRP 등" required />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button">취소</button>
+          <button class="button primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/wealth.js?v=20260819-6"></script>
+    <script src="/static/wealth.js?v=20260819-7"></script>
   </body>
 </html>

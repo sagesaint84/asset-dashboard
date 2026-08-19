@@ -251,8 +251,8 @@ function renderAccounts(items) {
           </div>
           <strong>${money(item.market_value_krw)}</strong>
           <div class="account-actions">
-            <button class="icon-button account-cash-button" data-account-id="${item.id}" title="예수금 직접 입력/수정" type="button">💵</button>
-            <button class="icon-button account-edit-button" data-account-id="${item.id}" title="계좌 이름 수정" type="button">✎</button>
+            <button class="icon-button account-cash-button" data-account-id="${item.id}" title="예수금 직접 입력/수정 (원화·달러)" type="button">💵</button>
+            <button class="icon-button account-edit-button" data-account-id="${item.id}" title="증권사 및 계좌 이름 수정" type="button">✎</button>
             <button class="icon-button account-delete-button" data-account-id="${item.id}" title="계좌 삭제" type="button">×</button>
           </div>
         </div>`;
@@ -534,6 +534,27 @@ function openAssetRecordDialog(record = null) {
   $("#assetRecordDialog").showModal();
 }
 
+function openAccountCashDialog(account) {
+  const form = $("#accountCashForm");
+  if (!form || !account) return;
+  form.reset();
+  form.dataset.accountId = account.id;
+  $("#accountCashDialogTitle").textContent = `[${account.broker} · ${account.name}] 예수금 입력 / 수정`;
+  form.cash_krw.value = account.cash_krw || "";
+  form.cash_usd.value = account.cash_usd || "";
+  $("#accountCashDialog").showModal();
+}
+
+function openAccountEditDialog(account) {
+  const form = $("#accountEditForm");
+  if (!form || !account) return;
+  form.reset();
+  form.dataset.accountId = account.id;
+  form.broker.value = account.broker || "";
+  form.name.value = account.name || "";
+  $("#accountEditDialog").showModal();
+}
+
 $("#syncKbButton").addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/kb", { method: "POST" })));
 $("#syncTossButton").addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/toss", { method: "POST" })));
 $("#syncNamooButton").addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/namoo", { method: "POST" })));
@@ -657,33 +678,66 @@ $("#accountList").addEventListener("click", async (e) => {
   const cashBtn = e.target.closest(".account-cash-button");
   if (cashBtn) {
     const acc = dashboard?.accounts.find((a) => a.id === cashBtn.dataset.accountId);
-    if (!acc) return;
-    const krwPrompt = prompt(`[${acc.name}] 원화 예수금(KRW)을 입력하세요:`, String(acc.cash_krw || 0));
-    if (krwPrompt === null) return;
-    const usdPrompt = prompt(`[${acc.name}] 달러 예수금(USD)을 입력하세요:`, String(acc.cash_usd || 0));
-    if (usdPrompt === null) return;
-    await action(cashBtn, () => api(`/api/accounts/${acc.id}/cash`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cash_krw: Number(krwPrompt) || 0, cash_usd: Number(usdPrompt) || 0 })
-    }));
+    if (acc) openAccountCashDialog(acc);
     return;
   }
 
   const editBtn = e.target.closest(".account-edit-button");
   if (editBtn) {
-    const account = dashboard?.accounts.find((item) => item.id === editBtn.dataset.accountId);
-    if (!account) return;
-    const name = prompt("계좌 이름을 입력하세요.", account.name);
-    if (name && name.trim() && name.trim() !== account.name) {
-      await action(editBtn, () => api(`/api/accounts/${account.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) }));
-    }
+    const acc = dashboard?.accounts.find((item) => item.id === editBtn.dataset.accountId);
+    if (acc) openAccountEditDialog(acc);
     return;
   }
 
   const delBtn = e.target.closest(".account-delete-button");
   if (delBtn && confirm("이 계좌와 연결된 보유종목을 모두 삭제할까요?")) {
     await action(delBtn, () => api(`/api/accounts/${delBtn.dataset.accountId}`, { method: "DELETE" }));
+  }
+});
+
+$("#accountCashForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const id = form.dataset.accountId;
+  if (!id) return;
+  const payload = {
+    cash_krw: Number(form.cash_krw.value) || 0,
+    cash_usd: Number(form.cash_usd.value) || 0,
+  };
+  try {
+    const result = await api(`/api/accounts/${id}/cash`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    form.closest("dialog")?.close();
+    toast(result.message);
+    await loadDashboard();
+  } catch (error) {
+    toast(error.message, true);
+  }
+});
+
+$("#accountEditForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const id = form.dataset.accountId;
+  if (!id) return;
+  const payload = {
+    broker: form.broker.value.trim(),
+    name: form.name.value.trim(),
+  };
+  try {
+    const result = await api(`/api/accounts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    form.closest("dialog")?.close();
+    toast(result.message);
+    await loadDashboard();
+  } catch (error) {
+    toast(error.message, true);
   }
 });
 

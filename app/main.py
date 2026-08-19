@@ -287,6 +287,7 @@ async def delete_account(account_id: str) -> dict:
 @app.put("/api/accounts/{account_id}")
 async def rename_account(account_id: str, payload: dict) -> dict:
     name = str(payload.get("name") or "").strip()
+    broker = str(payload.get("broker") or "").strip()
     if not name:
         raise HTTPException(400, "계좌 이름을 입력해 주세요.")
     data = read_portfolio()
@@ -294,11 +295,15 @@ async def rename_account(account_id: str, payload: dict) -> dict:
     if account is None:
         raise HTTPException(404, "계좌를 찾지 못했습니다.")
     account["name"] = name
+    if broker:
+        account["broker"] = broker
     for holding in data["holdings"]:
         if holding.get("account_id") == account_id:
             holding["account_name"] = name
+            if broker:
+                holding["broker"] = broker
     write_portfolio(data)
-    return {"message": "계좌 이름을 수정했습니다."}
+    return {"message": "증권사 및 계좌 정보를 수정했습니다."}
 
 
 @app.put("/api/accounts/{account_id}/cash")
