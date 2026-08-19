@@ -549,6 +549,9 @@ async def refresh_prices() -> dict:
             toss_prices, toss_warnings = await toss_client.refresh_prices(toss_holdings)
             prices.update(toss_prices)
             warnings.extend(toss_warnings)
+            unique_symbols = list({str(h.get("code", "")).upper() for h in toss_holdings if h.get("code")})
+            daily_changes = await toss_client.get_daily_changes(unique_symbols)
+            data["settings"].setdefault("daily_price_changes", {}).update(daily_changes)
         except TossOpenAPIError as exc:
             warnings.append(str(exc))
     if namoo_client.configured:

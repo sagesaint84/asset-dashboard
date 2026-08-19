@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from dataclasses import dataclass
@@ -237,3 +238,47 @@ class TossOpenAPI:
             for symbol in set(batch) - found:
                 warnings.append(f"{symbol}: 토스증권 시세 응답이 없습니다.")
         return prices, warnings
+
+    async def get_daily_changes(self, symbols: list[str]) -> dict[str, float]:
+        """종목별 일간 캔들을 바탕으로 전일 대비 등락률(%)을 조회한다."""
+        if not symbols or not self.configured:
+            return {}
+        res: dict[str, float] = {}
+        sem = asyncio.Semaphore(10)
+
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            token = await self._access_token(client)
+            headers = {"Authorization": f"Bearer {token}"}
+
+            async def fetch_one(sym: str):
+                sym_clean = sym.strip().upper()
+                if not sym_clean:
+                    return
+                async with sem:
+                    try:
+                        r = await client.get(
+                            f"{self.base_url}/api/v1/candles",
+                            params={"symbol": sym_clean, "interval": "1d", "count": 2},
+                            headers=headers,
+                        )
+                        if r.status_code == 200:
+                            payload = r.json().get("result", {})
+                            candles = payload.get("candles", [])
+                            if len(candles) >= 2:
+                                c0 = as_float(candles[0].get("closePrice"))
+                                c1 = as_float(candles[1].get("closePrice"))
+                                if c1 > 0:
+                                    res[sym_clean] = (c0 - c1) / c1 * 100
+                                    return
+                            elif len(candles) == 1:
+                                c0 = as_float(candles[0].get("closePrice"))
+                                o0 = as_float(candles[0].get("openPrice"))
+                                if o0 > 0:
+                                    res[sym_clean] = (c0 - o0) / o0 * 100
+                                    return
+                    except Exception:
+                        pass
+                    res[sym_clean] = 0.0
+
+            await asyncio.gather(*(fetch_one(s) for s in symbols))
+        return res

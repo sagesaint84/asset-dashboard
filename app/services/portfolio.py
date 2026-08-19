@@ -213,6 +213,8 @@ def get_dashboard() -> dict[str, Any]:
         item["cost_value_krw"] = item["quantity"] * item["avg_price"] * rate
         item["profit_krw"] = item["market_value_krw"] - item["cost_value_krw"]
         item["return_rate"] = item["profit_krw"] / item["cost_value_krw"] * 100 if item["cost_value_krw"] else 0
+        code_sym = str(item.get("code", "")).strip().upper()
+        item["day_change_rate"] = to_number(data.get("settings", {}).get("daily_price_changes", {}).get(code_sym), 0.0)
         enriched.append(item)
         total_stock_value += item["market_value_krw"]
         total_stock_cost += item["cost_value_krw"]
