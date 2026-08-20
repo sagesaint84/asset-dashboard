@@ -265,12 +265,26 @@ def get_dashboard() -> dict[str, Any]:
     except Exception:
         pass
 
-    # 2. asset_records가 없는 경우 settings.daily_snapshot 폴백
-    if not previous_value:
-        daily_snapshot = data.get("settings", {}).get("daily_snapshot", {})
-        if daily_snapshot.get("date") and daily_snapshot.get("date") < today_str:
-            previous_value = to_number(daily_snapshot.get("value_krw"))
-            previous_date = daily_snapshot.get("date")
+    # 2. 보유종목의 실제 당일 등락 금액 합산 계산
+    holding_day_gain = 0.0
+    has_day_rates = False
+    for h in enriched:
+        val = h["market_value_krw"]
+        r = h.get("day_change_rate") or 0.0
+        if r != 0 and (100 + r) > 0:
+            has_day_rates = True
+            holding_day_gain += val * (r / (100 + r))
+
+    # 3. 만약 이전 자산기록이 없거나 daily_snapshot이 오래되어 오차가 큰 경우 보유종목 등락 합산으로 자동 보정
+    if previous_value <= 0:
+        if has_day_rates and total_value > holding_day_gain:
+            previous_value = total_value - holding_day_gain
+            previous_date = "전일"
+        else:
+            daily_snapshot = data.get("settings", {}).get("daily_snapshot", {})
+            if daily_snapshot.get("date") and daily_snapshot.get("date") < today_str:
+                previous_value = to_number(daily_snapshot.get("value_krw"))
+                previous_date = daily_snapshot.get("date")
 
     day_change = (total_value - previous_value) if previous_value > 0 else None
 

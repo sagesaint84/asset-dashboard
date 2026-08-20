@@ -59,17 +59,19 @@ class NhPlugOpenAPI:
     def is_mock(self) -> bool:
         return urlparse(self.base_url).hostname == "moapi.nhplug.com"
 
-    async def _access_token(self, client: httpx.AsyncClient) -> str:
+    async def _access_token(self, client: httpx.AsyncClient, force_refresh: bool = False) -> str:
         if not self.configured:
             raise NhPlugOpenAPIError("나무증권 NHPLUG 앱 키가 설정되지 않았습니다. .env에 app key와 secret을 입력하세요.")
-        try:
-            cached = json.loads(self.token_cache_file.read_text(encoding="utf-8"))
-            if (cached.get("app_key_prefix") == self.app_key[:8]
-                    and float(cached.get("expires_at", 0)) > time.time() + 60
-                    and cached.get("access_token")):
-                return str(cached["access_token"])
-        except (OSError, ValueError, TypeError):
-            pass
+        if not force_refresh:
+            try:
+                cached = json.loads(self.token_cache_file.read_text(encoding="utf-8"))
+                if (cached.get("app_key_prefix") == self.app_key[:8]
+                        and float(cached.get("expires_at", 0)) > time.time() + 60
+                        and cached.get("access_token")):
+                    return str(cached["access_token"])
+            except (OSError, ValueError, TypeError):
+                pass
+        self.token_cache_file.unlink(missing_ok=True)
         response = await client.post(
             f"{self.auth_url}/oauth2/token",
             params={
@@ -114,6 +116,26 @@ class NhPlugOpenAPI:
                 },
                 json={"Input_0": input_0},
             )
+            # 만약 캐시된 토큰이 무효화되었거나 401/IGW40043 오류인 경우, 토큰을 즉시 재발급받아 1회 재시도
+            if response.status_code in (400, 401):
+                try:
+                    err_payload = response.json()
+                    rsp_cd = str(err_payload.get("rsp_cd", ""))
+                    rsp_msg = str(err_payload.get("rsp_msg", ""))
+                except Exception:
+                    rsp_cd, rsp_msg = "", ""
+                if rsp_cd == "IGW40043" or "token" in rsp_msg.lower() or "토큰" in rsp_msg or response.status_code == 401:
+                    token = await self._access_token(client, force_refresh=True)
+                    response = await client.post(
+                        f"{self.base_url}{path}",
+                        headers={
+                            "x-client-id": self.app_key,
+                            "x-client-secret": self.app_secret,
+                            "authorization": f"Bearer {token}",
+                            "content-type": "application/json;charset=utf-8",
+                        },
+                        json={"Input_0": input_0},
+                    )
             self._raise_for_response(response)
             payload = response.json()
         code = str(payload.get("rsp_cd", ""))
