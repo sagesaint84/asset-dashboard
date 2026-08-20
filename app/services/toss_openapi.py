@@ -167,12 +167,52 @@ class TossOpenAPI:
     def _sparkline(candles: list[dict[str, Any]]) -> list[float]:
         return [as_float(item.get("closePrice")) for item in reversed(candles) if as_float(item.get("closePrice")) > 0]
 
-    async def get_market_overview(self) -> list[dict[str, Any]]:
-        """대시보드 상단에 표시할 주요 시장 지표를 토스증권에서 조회한다.
+    @staticmethod
+    async def _fetch_us_index(ticker: str, label: str, note: str) -> dict[str, Any] | None:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=2m&range=1d"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get(url, headers=headers)
+                if r.status_code == 200:
+                    res = r.json().get("chart", {}).get("result", [])[0]
+                    meta = res.get("meta", {})
+                    price = as_float(meta.get("regularMarketPrice"))
+                    prev = as_float(meta.get("previousClose") or meta.get("chartPreviousClose"))
+                    change = (price - prev) if prev > 0 else 0.0
+                    change_rate = (change / prev * 100) if prev > 0 else 0.0
+                    raw_quotes = res.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+                    series = [round(as_float(q), 2) for q in raw_quotes if q is not None and as_float(q) > 0]
+                    if len(series) > 60:
+                        step = max(1, len(series) // 60)
+                        series = series[::step]
+                    if price > 0:
+                        return {
+                            "symbol": "NASDAQ" if "IXIC" in ticker else "S&P 500",
+                            "label": label,
+                            "note": note,
+                            "price": round(price, 2),
+                            "currency": "USD",
+                            "change": round(change, 2),
+                            "change_rate": round(change_rate, 2),
+                            "series": series,
+                            "updated_at": meta.get("regularMarketTime"),
+                        }
+        except Exception:
+            pass
+        return None
 
-        토스증권의 시장지표 API는 코스피·코스닥을 직접 지원하고,
-        미국 지수는 대표 ETF(QQQ·SPY)를 통해 제공한다.
-        """
+    async def get_market_overview(self) -> list[dict[str, Any]]:
+        """대시보드 상단에 표시할 주요 시장 지표(나스닥, S&P 500, 코스피)를 조회한다."""
+        # 1. 미국 나스닥 및 S&P 500 공식 지수 비동기 조회
+        us_tasks = [
+            self._fetch_us_index("%5EIXIC", "나스닥", "나스닥 종합 지수"),
+            self._fetch_us_index("%5EGSPC", "S&P 500", "S&P 500 지수"),
+        ]
+        us_results = await asyncio.gather(*us_tasks)
+        nasdaq_idx, sp500_idx = us_results[0], us_results[1]
+
+        # 2. 토스 증권 시장지표(코스피) 및 ETF 폴백 조회
         indicator_prices = await self._get("/api/v1/market-indicators/prices", params={"symbols": "KOSPI"})
         stock_prices = await self._get("/api/v1/prices", params={"symbols": "QQQ,SPY"})
 
@@ -192,34 +232,51 @@ class TossOpenAPI:
 
         indicator_by_symbol = {str(item.get("symbol", "")).upper(): item for item in indicator_prices}
         price_by_symbol = {str(item.get("symbol", "")).upper(): item for item in stock_prices}
-        market_rows = [
-            ("QQQ", "나스닥 100", "나스닥 100 (QQQ)", price_by_symbol.get("QQQ", {}), qqq_daily, qqq_intraday),
-            ("SPY", "S&P 500", "S&P 500 (SPY)", price_by_symbol.get("SPY", {}), spy_daily, spy_intraday),
-            ("KOSPI", "코스피", "코스피 지수", indicator_by_symbol.get("KOSPI", {}), kospi_daily, kospi_intraday),
-        ]
-        overview: list[dict[str, Any]] = []
-        for symbol, label, note, quote, daily_page, intraday_page in market_rows:
-            candles_d = daily_page.get("candles", [])
-            latest_c = as_float(candles_d[0].get("closePrice")) if len(candles_d) >= 1 else as_float(quote.get("lastPrice"))
-            prev_c = as_float(candles_d[1].get("closePrice")) if len(candles_d) >= 2 else 0.0
-            change = (latest_c - prev_c) if prev_c > 0 else None
-            change_rate = (change / prev_c * 100) if (change is not None and prev_c > 0) else None
 
-            intra_c = intraday_page.get("candles", [])
-            series = self._sparkline(intra_c) if len(intra_c) >= 3 else self._sparkline(candles_d)
+        # 코스피 지표 계산
+        k_candles_d = kospi_daily.get("candles", [])
+        k_latest = as_float(k_candles_d[0].get("closePrice")) if k_candles_d else as_float(indicator_by_symbol.get("KOSPI", {}).get("lastPrice"))
+        k_prev = as_float(k_candles_d[1].get("closePrice")) if len(k_candles_d) >= 2 else 0.0
+        k_chg = (k_latest - k_prev) if k_prev > 0 else 0.0
+        k_rate = (k_chg / k_prev * 100) if k_prev > 0 else 0.0
+        k_series = self._sparkline(kospi_intraday.get("candles", [])) or self._sparkline(k_candles_d)
 
-            overview.append({
-                "symbol": symbol,
+        kospi_row = {
+            "symbol": "KOSPI",
+            "label": "코스피",
+            "note": "국내 대표 지수",
+            "price": k_latest,
+            "currency": "KRW",
+            "change": round(k_chg, 2),
+            "change_rate": round(k_rate, 2),
+            "series": k_series,
+            "updated_at": indicator_by_symbol.get("KOSPI", {}).get("timestamp"),
+        }
+
+        # QQQ / SPY 폴백 구성
+        def fallback_item(sym, label, note, quote, d_page, i_page):
+            c_d = d_page.get("candles", [])
+            latest = as_float(c_d[0].get("closePrice")) if c_d else as_float(quote.get("lastPrice"))
+            prev = as_float(c_d[1].get("closePrice")) if len(c_d) >= 2 else 0.0
+            chg = (latest - prev) if prev > 0 else 0.0
+            rate = (chg / prev * 100) if prev > 0 else 0.0
+            ser = self._sparkline(i_page.get("candles", [])) or self._sparkline(c_d)
+            return {
+                "symbol": sym,
                 "label": label,
                 "note": note,
-                "price": as_float(quote.get("lastPrice")) or latest_c,
-                "currency": quote.get("currency", "KRW" if symbol == "KOSPI" else "USD"),
-                "change": change,
-                "change_rate": change_rate,
-                "series": series,
+                "price": latest,
+                "currency": "USD",
+                "change": round(chg, 2),
+                "change_rate": round(rate, 2),
+                "series": ser,
                 "updated_at": quote.get("timestamp"),
-            })
-        return overview
+            }
+
+        final_nasdaq = nasdaq_idx or fallback_item("QQQ", "나스닥", "나스닥 100 (QQQ)", price_by_symbol.get("QQQ", {}), qqq_daily, qqq_intraday)
+        final_sp500 = sp500_idx or fallback_item("SPY", "S&P 500", "S&P 500 (SPY)", price_by_symbol.get("SPY", {}), spy_daily, spy_intraday)
+
+        return [final_nasdaq, final_sp500, kospi_row]
 
     async def refresh_prices(self, holdings: list[dict[str, Any]]) -> tuple[dict[str, float], list[str]]:
         symbol_to_ids: dict[str, list[str]] = {}
@@ -250,26 +307,76 @@ class TossOpenAPI:
         return prices, warnings
 
     async def get_daily_changes(self, symbols: list[str]) -> dict[str, float]:
-        """종목별 일간 캔들을 바탕으로 전일 대비 등락률(%)을 조회한다."""
+        """종목별 공식 기준가(basePrice) 및 캔들을 바탕으로 전일 대비 등락률(%)을 조회한다."""
         if not symbols or not self.configured:
             return {}
+        clean_symbols = list({s.strip().upper() for s in symbols if s.strip()})
         res: dict[str, float] = {}
-        sem = asyncio.Semaphore(4)
 
+        # 1. 시세 조회에서 현재가 맵 확보
+        try:
+            stock_prices_items = await self._get("/api/v1/prices", params={"symbols": ",".join(clean_symbols)})
+            last_prices = {item["symbol"].upper(): as_float(item.get("lastPrice")) for item in stock_prices_items if item.get("symbol")}
+        except Exception:
+            last_prices = {}
+
+        # 2. 토스 공식 랭킹 API에서 changeRate 우선 수집
+        try:
+            kr_ranks = await self._get("/api/v1/rankings", params={"type": "MARKET_TRADING_VOLUME", "marketCountry": "KR", "duration": "1d", "count": 100})
+            for r in kr_ranks.get("rankings", []):
+                sym = str(r.get("symbol", "")).upper()
+                if sym in clean_symbols and r.get("price", {}).get("changeRate") is not None:
+                    res[sym] = round(as_float(r["price"]["changeRate"]) * 100, 2)
+        except Exception:
+            pass
+
+        try:
+            us_ranks = await self._get("/api/v1/rankings", params={"type": "MARKET_TRADING_VOLUME", "marketCountry": "US", "duration": "1d", "count": 100})
+            for r in us_ranks.get("rankings", []):
+                sym = str(r.get("symbol", "")).upper()
+                if sym in clean_symbols and r.get("price", {}).get("changeRate") is not None:
+                    res[sym] = round(as_float(r["price"]["changeRate"]) * 100, 2)
+        except Exception:
+            pass
+
+        # 3. 랭킹에 없는 종목은 국내 상한/하한가(price-limits)로 공식 기준가 도출, 또는 캔들(candles)로 계산
+        remaining = [s for s in clean_symbols if s not in res]
+        if not remaining:
+            return res
+
+        sem = asyncio.Semaphore(4)
         async with httpx.AsyncClient(timeout=15.0) as client:
             token = await self._access_token(client)
             headers = {"Authorization": f"Bearer {token}"}
 
             async def fetch_one(sym: str):
-                sym_clean = sym.strip().upper()
-                if not sym_clean:
-                    return
+                is_kr = sym.isalnum() and (len(sym) == 6 or sym[:5].isdigit())
                 for attempt in range(4):
                     async with sem:
+                        if is_kr:
+                            try:
+                                r = await client.get(
+                                    f"{self.base_url}/api/v1/price-limits",
+                                    params={"symbol": sym},
+                                    headers=headers,
+                                )
+                                if r.status_code == 200:
+                                    lim = r.json().get("result", {})
+                                    u = as_float(lim.get("upperLimitPrice"))
+                                    l = as_float(lim.get("lowerLimitPrice"))
+                                    if u > 0 and l > 0:
+                                        base = (u + l) / 2
+                                        last = last_prices.get(sym, 0)
+                                        if base > 0 and last > 0:
+                                            res[sym] = round((last - base) / base * 100, 2)
+                                            return
+                            except Exception:
+                                pass
+
                         try:
                             r = await client.get(
                                 f"{self.base_url}/api/v1/candles",
-                                params={"symbol": sym_clean, "interval": "1d", "count": 2},
+                                params={"symbol": sym, "interval": "1d", "count": 2},
                                 headers=headers,
                             )
                             if r.status_code == 200:
@@ -278,14 +385,15 @@ class TossOpenAPI:
                                 if len(candles) >= 2:
                                     c0 = as_float(candles[0].get("closePrice"))
                                     c1 = as_float(candles[1].get("closePrice"))
+                                    last = last_prices.get(sym, c0)
                                     if c1 > 0:
-                                        res[sym_clean] = round((c0 - c1) / c1 * 100, 2)
+                                        res[sym] = round((last - c1) / c1 * 100, 2)
                                         return
                                 elif len(candles) == 1:
                                     c0 = as_float(candles[0].get("closePrice"))
                                     o0 = as_float(candles[0].get("openPrice"))
                                     if o0 > 0:
-                                        res[sym_clean] = round((c0 - o0) / o0 * 100, 2)
+                                        res[sym] = round((c0 - o0) / o0 * 100, 2)
                                         return
                             elif r.status_code == 429:
                                 await asyncio.sleep(0.3 * (attempt + 1))
@@ -294,6 +402,6 @@ class TossOpenAPI:
                             await asyncio.sleep(0.2)
                     await asyncio.sleep(0.04)
 
-            tasks = [fetch_one(s) for s in set(symbols) if s]
+            tasks = [fetch_one(s) for s in remaining]
             await asyncio.gather(*tasks, return_exceptions=True)
         return res

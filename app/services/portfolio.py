@@ -244,9 +244,35 @@ def get_dashboard() -> dict[str, Any]:
     for account in account_list:
         account["weight"] = account["market_value_krw"] / total_value * 100 if total_value else 0
 
-    daily_snapshot = data["settings"].get("daily_snapshot", {})
-    previous_value = to_number(daily_snapshot.get("value_krw"))
-    day_change = total_value - previous_value if previous_value else None
+    today_str = datetime.now(timezone.utc).astimezone().date().isoformat()
+    previous_value = 0.0
+    previous_date = None
+
+    # 1. asset_records.json에서 오늘 이전의 가장 최근 기록 조회
+    try:
+        rec_file = ROOT_DIR / "data" / "asset_records.json"
+        if rec_file.exists():
+            rec_data = json.loads(rec_file.read_text(encoding="utf-8"))
+            past_records = [
+                r for r in rec_data.get("records", [])
+                if isinstance(r, dict) and r.get("date") and r.get("date") < today_str and to_number(r.get("total_value_krw")) > 0
+            ]
+            if past_records:
+                past_records.sort(key=lambda x: x["date"])
+                last_rec = past_records[-1]
+                previous_value = to_number(last_rec["total_value_krw"])
+                previous_date = last_rec["date"]
+    except Exception:
+        pass
+
+    # 2. asset_records가 없는 경우 settings.daily_snapshot 폴백
+    if not previous_value:
+        daily_snapshot = data.get("settings", {}).get("daily_snapshot", {})
+        if daily_snapshot.get("date") and daily_snapshot.get("date") < today_str:
+            previous_value = to_number(daily_snapshot.get("value_krw"))
+            previous_date = daily_snapshot.get("date")
+
+    day_change = (total_value - previous_value) if previous_value > 0 else None
 
     currency_summary: dict[str, dict[str, float]] = {
         "KRW": {
@@ -329,7 +355,7 @@ def get_dashboard() -> dict[str, Any]:
             "account_count": len(account_list),
         },
         "day_change": {
-            "date": daily_snapshot.get("date"),
+            "date": previous_date,
             "value_krw": previous_value,
             "change_krw": day_change,
             "change_rate": day_change / previous_value * 100 if day_change is not None and previous_value else None,

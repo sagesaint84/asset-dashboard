@@ -143,7 +143,7 @@ function renderAssetRecords(records) {
         <span>${money(item.total_value_krw)} · ${number(item.holding_count, 0)}종목</span>
       </div>
       <div class="record-row-values">
-        <b>${money(item.day_profit_krw || 0)}</b>
+        <b class="${signClass(item.day_profit_krw || 0)}">${Number(item.day_profit_krw || 0) >= 0 ? "+" : ""}${money(item.day_profit_krw || 0)}</b>
         <small>${html(item.memo || item.source || "")}</small>
       </div>
       <div class="record-row-actions">
@@ -172,7 +172,7 @@ function renderMarkets(result) {
 
   $("#marketGrid").innerHTML = rows.map((item) => {
     const isFx = item.symbol === "USD/KRW";
-    const priceText = (item.currency === "USD") ? `US$${number(item.price, 2)}` : (isFx ? `${number(item.price, 1)}원` : number(item.price, 2));
+    const priceText = isFx ? `${number(item.price, 1)}원` : number(item.price, 2);
 
     const isUp = Number(item.change_rate) > 0;
     const isDown = Number(item.change_rate) < 0;
@@ -181,7 +181,7 @@ function renderMarkets(result) {
 
     let changeText = "";
     if (item.change_rate != null) {
-      const changeNum = item.change != null ? `${sign}${number(item.change, item.currency === "USD" ? 2 : 1)}` : "";
+      const changeNum = item.change != null ? `${sign}${number(item.change, 2)}` : "";
       const rateNum = `(${sign}${number(item.change_rate, 2)}%)`;
       changeText = changeNum ? `${changeNum} ${rateNum}` : rateNum;
     } else {
