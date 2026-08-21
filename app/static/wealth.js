@@ -1024,3 +1024,10 @@ if (capSelectElem) {
     if (dashboard) renderHeatmaps(dashboard);
   });
 }
+
+// PWA 서비스 워커 등록 (주소창 없는 독립형 앱 실행 지원)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {});
+  });
+}
