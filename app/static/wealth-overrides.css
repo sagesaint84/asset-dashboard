@@ -463,3 +463,111 @@
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* =========================================================================
+   상단바 (Topbar) 반응형 및 모바일/태블릿 최적화 (글자 끊김/어색한 줄바꿈 방지)
+   ========================================================================= */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid #1c2848;
+  padding-bottom: 18px;
+}
+
+.topbar-brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.title {
+  min-width: 0;
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.title p {
+  white-space: nowrap;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.top-actions .button,
+.button {
+  white-space: nowrap;
+  word-break: keep-all;
+  flex-shrink: 0;
+}
+
+/* 태블릿 / 가로형 폰 / 폴더블폰 중간 가로폭 (1080px 이하) 대응 */
+@media (max-width: 1080px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .topbar-brand-wrap {
+    justify-content: flex-start;
+  }
+  .top-actions {
+    margin-left: 0;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .top-actions .button {
+    flex: 1 1 auto;
+    min-width: 68px;
+    text-align: center;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+}
+
+/* 소형 모바일 (540px 이하) 대응 */
+@media (max-width: 540px) {
+  .topbar-brand-wrap {
+    gap: 10px;
+  }
+  .brand {
+    width: 38px;
+    height: 38px;
+    font-size: 19px;
+  }
+  .title h1 {
+    font-size: 17px;
+  }
+  .top-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .top-actions .button {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 4px;
+    font-size: 11.5px;
+  }
+  .top-actions #clearButton {
+    grid-column: 1 / -1;
+  }
+}
