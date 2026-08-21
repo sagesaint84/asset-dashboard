@@ -6,7 +6,7 @@
     <meta name="description" content="모든 증권사의 투자자산을 통합해 보는 개인 대시보드" />
     <title>Wealth · 투자 대시보드</title>
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260820-2" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260821-4" />
   </head>
   <body>
     <main class="shell">
@@ -126,25 +126,51 @@
         </div>
       </section>
 
-      <!-- 3. 자산 히트맵 (진입가 대비 누적 손익률) -->
+      <!-- 3. 포트폴리오 히트맵 (기간별: 일간/주간/월간/연초부터/연간/진입가 + 색상 테마 선택) -->
       <section id="assetHeatmapPanel" class="panel heatmap-panel">
         <div class="panel-head heatmap-head">
-          <div>
-            <p class="eyebrow">ASSET HEATMAP</p>
+          <div class="heatmap-title-wrap">
+            <p class="eyebrow">PORTFOLIO HEATMAP</p>
             <h2>자산 히트맵</h2>
           </div>
-          <span class="muted">면적 = 포지션 규모 · 색 = 진입가 대비 손익률 · 클릭하면 종목 검색</span>
+          <div class="heatmap-controls-row">
+            <div class="heatmap-period-tabs" id="heatmapPeriodTabs" role="tablist">
+              <button type="button" class="heatmap-tab active" data-period="1D">일간</button>
+              <button type="button" class="heatmap-tab" data-period="1W">주간</button>
+              <button type="button" class="heatmap-tab" data-period="1M">월간</button>
+              <button type="button" class="heatmap-tab" data-period="YTD">연초부터</button>
+              <button type="button" class="heatmap-tab" data-period="1Y">연간</button>
+              <button type="button" class="heatmap-tab" data-period="TOTAL">진입가</button>
+            </div>
+            <div class="heatmap-selects-wrap">
+              <select id="heatmapCapSelect" class="heatmap-select" aria-label="히트맵 최대 등락률 범위 선택">
+                <option value="auto">범위: 자동 (Auto)</option>
+                <option value="5">범위: ±5%</option>
+                <option value="10">범위: ±10%</option>
+                <option value="15">범위: ±15%</option>
+                <option value="20">범위: ±20%</option>
+                <option value="30">범위: ±30%</option>
+                <option value="50">범위: ±50%</option>
+                <option value="100">범위: ±100%</option>
+              </select>
+              <select id="heatmapThemeSelect" class="heatmap-select" aria-label="히트맵 색상 테마 선택">
+                <option value="kr">🔴 한국형 (적/청)</option>
+                <option value="us">🟢 글로벌 (녹/적)</option>
+                <option value="neon">🟣 네온 (보라/청록)</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div class="heatmap-body">
           <div id="assetHeatmapContainer" class="heatmap-container"></div>
           <div class="heatmap-footer">
-            <div class="heatmap-legend">
-              <span class="legend-cap">-20%</span>
-              <div class="legend-bar"></div>
-              <span class="legend-cap">+20%</span>
-              <span class="legend-text">손실 ← 0 → 이익</span>
+            <div class="heatmap-legend" id="heatmapLegend">
+              <span class="legend-cap" id="legendCapLeft">-15%</span>
+              <div class="legend-bar" id="legendBar"></div>
+              <span class="legend-cap" id="legendCapRight">+15%</span>
+              <span class="legend-text" id="legendText">하락 ← 0 → 상승</span>
             </div>
-            <span class="heatmap-tip-note">종목을 클릭하면 아래 전체 목록에서 해당 종목이 바로 검색됩니다.</span>
+            <span class="heatmap-tip-note" id="heatmapTipNote">면적 = 포지션 규모 · 색 = 일간 등락률 · 클릭하면 종목 검색</span>
           </div>
         </div>
       </section>
@@ -161,28 +187,7 @@
         </article>
       </section>
 
-      <!-- 6. 히트맵 (전날 대비 일간 등락) -->
-      <section id="dailyHeatmapPanel" class="panel heatmap-panel">
-        <div class="panel-head heatmap-head">
-          <div>
-            <p class="eyebrow">HEATMAP</p>
-            <h2>히트맵</h2>
-          </div>
-          <span class="muted">면적 = 포지션 규모 · 색 = 전날 대비 손익률 · 클릭하면 종목 검색</span>
-        </div>
-        <div class="heatmap-body">
-          <div id="dailyHeatmapContainer" class="heatmap-container"></div>
-          <div class="heatmap-footer">
-            <div class="heatmap-legend">
-              <span class="legend-cap">-10%</span>
-              <div class="legend-bar"></div>
-              <span class="legend-cap">+10%</span>
-              <span class="legend-text">하락 ← 0 → 상승</span>
-            </div>
-            <span class="heatmap-tip-note">종목을 클릭하면 아래 전체 목록에서 해당 종목이 바로 검색됩니다.</span>
-          </div>
-        </div>
-      </section>
+
 
       <!-- 7. 전체 보유 종목 -->
       <section id="holdingsPanel" class="panel holdings-panel">
@@ -245,6 +250,6 @@
 
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/wealth.js?v=20260820-2"></script>
+    <script src="/static/wealth.js?v=20260821-4"></script>
   </body>
 </html>

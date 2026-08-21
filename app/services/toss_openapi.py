@@ -4,9 +4,13 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class TossOpenAPIError(RuntimeError):
@@ -306,43 +310,128 @@ class TossOpenAPI:
                 warnings.append(f"{symbol}: 토스증권 시세 응답이 없습니다.")
         return prices, warnings
 
-    async def get_daily_changes(self, symbols: list[str]) -> dict[str, float]:
-        """종목별 공식 기준가(basePrice) 및 캔들을 바탕으로 전일 대비 등락률(%)을 조회한다."""
+    async def get_multi_period_changes(self, symbols: list[str]) -> dict[str, dict[str, float]]:
+        """종목별 다중 기간(1D, 1W, 1M, YTD, 1Y) 등락률(%)을 조회하고 캐싱한다."""
         if not symbols or not self.configured:
             return {}
         clean_symbols = list({s.strip().upper() for s in symbols if s.strip()})
-        res: dict[str, float] = {}
+        results: dict[str, dict[str, float]] = {}
+        sem = asyncio.Semaphore(4)
+        current_year = datetime.now().year
+        cache_file = ROOT_DIR / "data" / "period_rates.json"
 
-        # 1. 시세 조회에서 현재가 맵 확보
+        # 1. 실시간 현재가 수집
         try:
             stock_prices_items = await self._get("/api/v1/prices", params={"symbols": ",".join(clean_symbols)})
             last_prices = {item["symbol"].upper(): as_float(item.get("lastPrice")) for item in stock_prices_items if item.get("symbol")}
         except Exception:
             last_prices = {}
 
-        # 2. 토스 공식 랭킹 API에서 changeRate 우선 수집
+        # 2. 토스 공식 랭킹 API에서 1D changeRate 수집
+        kr_rank_rates: dict[str, float] = {}
         try:
             kr_ranks = await self._get("/api/v1/rankings", params={"type": "MARKET_TRADING_VOLUME", "marketCountry": "KR", "duration": "1d", "count": 100})
             for r in kr_ranks.get("rankings", []):
                 sym = str(r.get("symbol", "")).upper()
                 if sym in clean_symbols and r.get("price", {}).get("changeRate") is not None:
-                    res[sym] = round(as_float(r["price"]["changeRate"]) * 100, 2)
+                    kr_rank_rates[sym] = round(as_float(r["price"]["changeRate"]) * 100, 2)
         except Exception:
             pass
 
-        try:
-            us_ranks = await self._get("/api/v1/rankings", params={"type": "MARKET_TRADING_VOLUME", "marketCountry": "US", "duration": "1d", "count": 100})
-            for r in us_ranks.get("rankings", []):
-                sym = str(r.get("symbol", "")).upper()
-                if sym in clean_symbols and r.get("price", {}).get("changeRate") is not None:
-                    res[sym] = round(as_float(r["price"]["changeRate"]) * 100, 2)
-        except Exception:
-            pass
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            token = await self._access_token(client)
+            headers = {"Authorization": f"Bearer {token}"}
 
-        # 3. 랭킹에 없는 종목은 국내 상한/하한가(price-limits)로 공식 기준가 도출, 또는 캔들(candles)로 계산
-        remaining = [s for s in clean_symbols if s not in res]
-        if not remaining:
-            return res
+            async def process_symbol(sym: str):
+                is_kr = sym.isalnum() and (len(sym) == 6 or sym[:5].isdigit())
+                r_1d = kr_rank_rates.get(sym)
+
+                # 국내 종목 공식 기준가(상·하한가 중간값) 도출
+                if is_kr and r_1d is None:
+                    for attempt in range(3):
+                        try:
+                            async with sem:
+                                r = await client.get(f"{self.base_url}/api/v1/price-limits", params={"symbol": sym}, headers=headers)
+                                if r.status_code == 200:
+                                    lim = r.json().get("result", {})
+                                    u = as_float(lim.get("upperLimitPrice"))
+                                    l = as_float(lim.get("lowerLimitPrice"))
+                                    if u > 0 and l > 0:
+                                        base = (u + l) / 2
+                                        last = last_prices.get(sym, 0)
+                                        if base > 0 and last > 0:
+                                            r_1d = round((last - base) / base * 100, 2)
+                                    break
+                                elif r.status_code == 429:
+                                    await asyncio.sleep(0.3 * (attempt + 1))
+                        except Exception:
+                            await asyncio.sleep(0.2)
+
+                # 일봉 캔들 조회 (최대 200봉)
+                for attempt in range(4):
+                    try:
+                        async with sem:
+                            r = await client.get(f"{self.base_url}/api/v1/candles", params={"symbol": sym, "interval": "1d", "count": 200}, headers=headers)
+                            if r.status_code == 200:
+                                candles = r.json().get("result", {}).get("candles", [])
+                                if candles:
+                                    last = last_prices.get(sym, as_float(candles[0].get("closePrice")))
+                                    if r_1d is None:
+                                        p_1d = as_float(candles[1].get("closePrice")) if len(candles) >= 2 else last
+                                        r_1d = round((last - p_1d) / p_1d * 100, 2) if p_1d > 0 else 0.0
+
+                                    idx_1w = min(5, len(candles) - 1)
+                                    p_1w = as_float(candles[idx_1w].get("closePrice"))
+                                    r_1w = round((last - p_1w) / p_1w * 100, 2) if p_1w > 0 else 0.0
+
+                                    idx_1m = min(20, len(candles) - 1)
+                                    p_1m = as_float(candles[idx_1m].get("closePrice"))
+                                    r_1m = round((last - p_1m) / p_1m * 100, 2) if p_1m > 0 else 0.0
+
+                                    ytd_c = None
+                                    for c in candles:
+                                        ts = c.get("timestamp", "")
+                                        if ts.startswith(str(current_year)):
+                                            ytd_c = c
+                                        else:
+                                            ytd_c = c
+                                            break
+                                    p_ytd = as_float(ytd_c.get("closePrice")) if ytd_c else p_1m
+                                    r_ytd = round((last - p_ytd) / p_ytd * 100, 2) if p_ytd > 0 else 0.0
+
+                                    p_1y = as_float(candles[-1].get("closePrice"))
+                                    r_1y = round((last - p_1y) / p_1y * 100, 2) if p_1y > 0 else 0.0
+
+                                    results[sym] = {
+                                        "1D": r_1d,
+                                        "1W": r_1w,
+                                        "1M": r_1m,
+                                        "YTD": r_ytd,
+                                        "1Y": r_1y,
+                                    }
+                                    return
+                            elif r.status_code == 429:
+                                await asyncio.sleep(0.3 * (attempt + 1))
+                                continue
+                    except Exception:
+                        await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.04)
+
+            tasks = [process_symbol(s) for s in clean_symbols]
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        if results:
+            try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                cache_file.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+        return results
+
+    async def get_daily_changes(self, symbols: list[str]) -> dict[str, float]:
+        """종목별 전일 대비 등락률(%)을 조회한다."""
+        multi = await self.get_multi_period_changes(symbols)
+        return {s: data["1D"] for s, data in multi.items() if "1D" in data}
 
         sem = asyncio.Semaphore(4)
         async with httpx.AsyncClient(timeout=15.0) as client:

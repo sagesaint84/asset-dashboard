@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -224,6 +226,16 @@ async def status() -> dict:
     }
 
 
+@app.on_event("startup")
+async def startup_event() -> None:
+    toss = TossOpenAPI()
+    if toss.configured:
+        data = read_portfolio()
+        syms = list({str(h.get("code", "")).upper() for h in data.get("holdings", []) if h.get("code")})
+        if syms:
+            asyncio.create_task(toss.get_multi_period_changes(syms))
+
+
 @app.get("/api/market-overview")
 async def market_overview() -> dict:
     client = TossOpenAPI()
@@ -233,6 +245,14 @@ async def market_overview() -> dict:
     except TossOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
     data = read_portfolio()
+
+    # 백그라운드에서 다중 기간(1W/1M/YTD/1Y) 수익률 캐시 갱신 (15분 이상 지났거나 파일 없을 때)
+    cache_file = ROOT_DIR / "data" / "period_rates.json"
+    cache_age = (time.time() - cache_file.stat().st_mtime) if cache_file.exists() else 999999
+    if cache_age > 900 and client.configured:
+        unique_symbols = list({str(h.get("code", "")).upper() for h in data.get("holdings", []) if h.get("code")})
+        if unique_symbols:
+            asyncio.create_task(client.get_multi_period_changes(unique_symbols))
     rate = float(exchange_rate["rate"])
     mid_rate = float(exchange_rate.get("mid_rate") or rate)
 
@@ -579,7 +599,8 @@ async def refresh_prices() -> dict:
             prices.update(toss_prices)
             warnings.extend(toss_warnings)
             unique_symbols = list({str(h.get("code", "")).upper() for h in toss_holdings if h.get("code")})
-            daily_changes = await toss_client.get_daily_changes(unique_symbols)
+            multi_changes = await toss_client.get_multi_period_changes(unique_symbols)
+            daily_changes = {s: data["1D"] for s, data in multi_changes.items() if "1D" in data}
             data["settings"].setdefault("daily_price_changes", {}).update(daily_changes)
         except TossOpenAPIError as exc:
             warnings.append(str(exc))

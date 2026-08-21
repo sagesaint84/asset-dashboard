@@ -203,6 +203,14 @@ def get_dashboard() -> dict[str, Any]:
             "holding_count": 0,
         }
 
+    period_cache_file = ROOT_DIR / "data" / "period_rates.json"
+    period_rates_data: dict[str, dict[str, float]] = {}
+    if period_cache_file.exists():
+        try:
+            period_rates_data = json.loads(period_cache_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
     enriched: list[dict[str, Any]] = []
     total_stock_value = total_stock_cost = 0.0
     for holding in data["holdings"]:
@@ -216,10 +224,19 @@ def get_dashboard() -> dict[str, Any]:
         code_sym = str(item.get("code", "")).strip().upper()
         name_sym = str(item.get("name", "")).strip().upper()
         daily_map = data.get("settings", {}).get("daily_price_changes", {})
+        p_info = period_rates_data.get(code_sym) or period_rates_data.get(name_sym) or {}
         day_rate = daily_map.get(code_sym)
         if day_rate is None:
-            day_rate = daily_map.get(name_sym)
+            day_rate = daily_map.get(name_sym, p_info.get("1D"))
         item["day_change_rate"] = to_number(day_rate, 0.0)
+        item["period_changes"] = {
+            "1D": to_number(day_rate, 0.0),
+            "1W": to_number(p_info.get("1W"), item["day_change_rate"]),
+            "1M": to_number(p_info.get("1M"), item["day_change_rate"]),
+            "YTD": to_number(p_info.get("YTD"), item["day_change_rate"]),
+            "1Y": to_number(p_info.get("1Y"), item["day_change_rate"]),
+            "TOTAL": item["return_rate"],
+        }
         enriched.append(item)
         total_stock_value += item["market_value_krw"]
         total_stock_cost += item["cost_value_krw"]

@@ -571,3 +571,135 @@
     grid-column: 1 / -1;
   }
 }
+
+/* =========================================================================
+   히트맵 기간 선택 (1D, 1W, 1M, YTD, 1Y, TOTAL) & % 색상 테마 스타일
+   ========================================================================= */
+.heatmap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.heatmap-controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.heatmap-period-tabs {
+  display: inline-flex;
+  background: #111a33;
+  border: 1px solid #27365c;
+  border-radius: 9px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.heatmap-tab {
+  background: transparent;
+  border: 0;
+  color: #92a2c9;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.heatmap-tab:hover {
+  color: #ffffff;
+  background: #1c294d;
+}
+
+.heatmap-tab.active {
+  background: linear-gradient(135deg, #7c58f0, #5431d1);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(118, 83, 235, 0.4);
+}
+
+.heatmap-theme-picker select {
+  background: #111a33;
+  color: #d8e2ff;
+  border: 1px solid #27365c;
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.16s ease;
+}
+
+.heatmap-theme-picker select:hover,
+.heatmap-theme-picker select:focus {
+  border-color: #7957e8;
+}
+
+/* 동적 범례 바 스타일 */
+.legend-bar.theme-kr {
+  background: linear-gradient(90deg, #2563eb, #1e2638 50%, #ff3355);
+}
+
+.legend-bar.theme-us {
+  background: linear-gradient(90deg, #ef4444, #1e2638 50%, #10b981);
+}
+
+.legend-bar.theme-neon {
+  background: linear-gradient(90deg, #06b6d4, #1e2638 50%, #a855f7);
+}
+
+/* 모바일 화면 대응 */
+@media (max-width: 768px) {
+  .heatmap-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .heatmap-controls-row {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .heatmap-period-tabs {
+    flex: 1 1 auto;
+    overflow-x: auto;
+  }
+  .heatmap-tab {
+    flex: 1 1 auto;
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+  .heatmap-theme-picker select {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
+
+.heatmap-selects-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.heatmap-select {
+  background: #111a33;
+  color: #d8e2ff;
+  border: 1px solid #27365c;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.16s ease;
+}
+
+.heatmap-select:hover,
+.heatmap-select:focus {
+  border-color: #7957e8;
+}

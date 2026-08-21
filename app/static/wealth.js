@@ -425,49 +425,141 @@ function squarify(items, x, y, width, height) {
   return rects;
 }
 
-function getHeatmapColor(rate, maxRate = 20) {
-  const clamped = Math.max(-maxRate, Math.min(maxRate, rate));
-  const t = Math.abs(clamped) / maxRate;
+let heatmapPeriod = localStorage.getItem("heatmap_period") || "1D";
+let heatmapTheme = localStorage.getItem("heatmap_theme") || "kr";
+let heatmapMaxCap = localStorage.getItem("heatmap_max_cap") || "auto";
 
-  if (clamped >= 0) {
-    // 상승/이익: 붉은색 그라데이션
-    const r = Math.round(52 + (225 - 52) * Math.pow(t, 0.75));
-    const g = Math.round(65 + (48 - 65) * t);
-    const b = Math.round(92 + (68 - 92) * t);
-    return `rgb(${r}, ${g}, ${b})`;
+const PERIOD_LABELS = {
+  "1D": "일간 (전일 대비)",
+  "1W": "주간 (1주 전 대비)",
+  "1M": "월간 (1개월 전 대비)",
+  "YTD": "연초부터 (올해 초 대비)",
+  "1Y": "연간 (1년 전 대비)",
+  "TOTAL": "진입가 (매입단가 대비)",
+};
+
+const PERIOD_CAPS = {
+  "1D": 10,
+  "1W": 15,
+  "1M": 20,
+  "YTD": 50,
+  "1Y": 50,
+  "TOTAL": 30,
+};
+
+function getEffectiveCap(period, capSetting) {
+  if (capSetting && capSetting !== "auto" && !isNaN(Number(capSetting)) && Number(capSetting) > 0) {
+    return Number(capSetting);
+  }
+  return PERIOD_CAPS[period] || 15;
+}
+
+function getHeatmapColor(rate, maxRate = 15, theme = "kr") {
+  const clamped = Math.max(-maxRate, Math.min(maxRate, rate));
+  const t = Math.pow(Math.abs(clamped) / maxRate, 0.72);
+
+  if (theme === "us") {
+    // 글로벌/미국형: 상승=초록, 하락=빨강
+    if (clamped >= 0) {
+      const r = Math.round(25 + (16 - 25) * t);
+      const g = Math.round(45 + (190 - 45) * t);
+      const b = Math.round(38 + (120 - 38) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      const r = Math.round(48 + (235 - 48) * t);
+      const g = Math.round(30 + (55 - 30) * t);
+      const b = Math.round(38 + (55 - 38) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  } else if (theme === "neon") {
+    // 네온/모던형: 상승=바이올렛, 하락=사이언
+    if (clamped >= 0) {
+      const r = Math.round(40 + (170 - 40) * t);
+      const g = Math.round(28 + (80 - 28) * t);
+      const b = Math.round(62 + (250 - 62) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      const r = Math.round(20 + (8 - 20) * t);
+      const g = Math.round(42 + (190 - 42) * t);
+      const b = Math.round(60 + (220 - 60) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
   } else {
-    // 하락/손실: 푸른색 그라데이션
-    const r = Math.round(52 + (32 - 52) * t);
-    const g = Math.round(65 + (118 - 65) * t);
-    const b = Math.round(92 + (245 - 92) * Math.pow(t, 0.75));
-    return `rgb(${r}, ${g}, ${b})`;
+    // 한국형 (기본): 상승=빨강, 하락=파랑
+    if (clamped >= 0) {
+      const r = Math.round(48 + (238 - 48) * t);
+      const g = Math.round(40 + (42 - 40) * t);
+      const b = Math.round(52 + (68 - 52) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      const r = Math.round(35 + (35 - 35) * t);
+      const g = Math.round(45 + (95 - 45) * t);
+      const b = Math.round(58 + (238 - 58) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
   }
 }
 
-function renderTreemapContainer(container, items, mode = "cumulative") {
+function updateHeatmapLegendUI(period, theme, maxCap) {
+  const cap = getEffectiveCap(period, maxCap);
+  const legLeft = $("#legendCapLeft");
+  const legRight = $("#legendCapRight");
+  const legBar = $("#legendBar");
+  const legText = $("#legendText");
+  const tipNote = $("#heatmapTipNote");
+
+  if (legLeft) legLeft.textContent = `-${cap}%`;
+  if (legRight) legRight.textContent = `+${cap}%`;
+  if (legBar) {
+    legBar.className = `legend-bar theme-${theme}`;
+  }
+  if (legText) {
+    if (theme === "us") {
+      legText.textContent = "하락(Red) ← 0 → 상승(Green)";
+    } else if (theme === "neon") {
+      legText.textContent = "하락(Cyan) ← 0 → 상승(Violet)";
+    } else {
+      legText.textContent = "하락(Blue) ← 0 → 상승(Red)";
+    }
+  }
+  if (tipNote) {
+    tipNote.textContent = `면적 = 포지션 규모 · 색 = ${PERIOD_LABELS[period] || period} 손익률 (범위 ±${cap}%) · 클릭하면 종목 검색`;
+  }
+}
+
+function renderTreemapContainer(container, items, period = "1D", theme = "kr", capSetting = "auto") {
   if (!container) return;
   if (!items.length) {
     container.innerHTML = '<div class="empty">평가금액이 있는 보유종목이 없습니다.</div>';
     return;
   }
 
-  const isDaily = mode === "daily";
-  const maxCap = isDaily ? 10 : 20;
-
+  const maxCap = getEffectiveCap(period, capSetting);
   const totalVal = items.reduce((s, it) => s + it.value, 0);
   items.forEach((it) => {
     it.weight = totalVal > 0 ? (it.value / totalVal) * 100 : 0;
   });
 
   const width = container.clientWidth || 920;
-  const height = Math.max(360, Math.min(500, Math.round(width * 0.44)));
+  const height = Math.max(360, Math.min(520, Math.round(width * 0.44)));
   container.style.height = `${height}px`;
 
   const tiles = squarify(items, 0, 0, width, height);
 
   container.innerHTML = tiles.map((tile) => {
-    const rateVal = isDaily ? Number(tile.day_change_rate || 0) : Number(tile.rate || 0);
-    const color = getHeatmapColor(rateVal, maxCap);
+    const periodRates = tile.period_changes || {};
+    let rateVal = 0;
+    if (period === "TOTAL") {
+      rateVal = Number(tile.rate || 0);
+    } else if (periodRates[period] != null) {
+      rateVal = Number(periodRates[period]);
+    } else if (period === "1D") {
+      rateVal = Number(tile.day_change_rate || 0);
+    } else {
+      rateVal = Number(tile.rate || 0);
+    }
+
+    const color = getHeatmapColor(rateVal, maxCap, theme);
     const sign = rateVal >= 0 ? "+" : "";
     const rateText = `${sign}${number(rateVal, 1)}%`;
 
@@ -487,7 +579,7 @@ function renderTreemapContainer(container, items, mode = "cumulative") {
     }
 
     const infoStr = JSON.stringify({
-      mode,
+      period,
       name: tile.name,
       code: tile.code,
       market: tile.market || tile.currency,
@@ -495,22 +587,24 @@ function renderTreemapContainer(container, items, mode = "cumulative") {
       cost: tile.cost_value_krw,
       profit: tile.profit_krw,
       rate: tile.rate,
+      selected_rate: rateVal,
       day_change_rate: tile.day_change_rate || 0,
+      period_changes: tile.period_changes,
       weight: tile.weight,
     }).replace(/"/g, "&quot;");
 
     return `<div class="heatmap-tile" data-symbol="${html(tile.name)}" data-info="${infoStr}" style="left:${tile.x}px;top:${tile.y}px;width:${tile.w}px;height:${tile.h}px;background-color:${color};"><div class="heatmap-tile-inner">${inner}</div></div>`;
   }).join("");
+
+  updateHeatmapLegendUI(period, theme, capSetting);
 }
 
 function renderHeatmaps(data) {
   const holdings = data.holdings || [];
   const assetContainer = $("#assetHeatmapContainer");
-  const dailyContainer = $("#dailyHeatmapContainer");
 
   if (!holdings.length) {
     if (assetContainer) assetContainer.innerHTML = '<div class="empty">보유종목이 없습니다. 증권사 동기화 후 히트맵이 표시됩니다.</div>';
-    if (dailyContainer) dailyContainer.innerHTML = '<div class="empty">보유종목이 없습니다. 증권사 동기화 후 히트맵이 표시됩니다.</div>';
     return;
   }
 
@@ -528,6 +622,14 @@ function renderHeatmaps(data) {
       cost_value_krw: 0,
       profit_krw: 0,
       day_change_rate: 0,
+      period_changes: item.period_changes || {
+        "1D": Number(item.day_change_rate || 0),
+        "1W": Number(item.day_change_rate || 0),
+        "1M": Number(item.day_change_rate || 0),
+        "YTD": Number(item.day_change_rate || 0),
+        "1Y": Number(item.day_change_rate || 0),
+        "TOTAL": Number(item.return_rate || 0),
+      },
     };
     group.quantity += Number(item.quantity || 0);
     group.market_value_krw += Number(item.market_value_krw || 0);
@@ -537,6 +639,9 @@ function renderHeatmaps(data) {
       group.day_change_rate = Number(item.day_change_rate);
     } else if (group.day_change_rate === 0 && item.day_change_rate != null) {
       group.day_change_rate = Number(item.day_change_rate);
+    }
+    if (item.period_changes) {
+      group.period_changes = item.period_changes;
     }
     groups.set(key, group);
   });
@@ -552,11 +657,10 @@ function renderHeatmaps(data) {
       };
     });
 
-  // 1. 자산 히트맵 (진입가 대비 누적 손익률)
-  renderTreemapContainer(assetContainer, items, "cumulative");
-
-  // 2. 히트맵 (전날 대비 일간 등락)
-  renderTreemapContainer(dailyContainer, items, "daily");
+  // 활성 히트맵 렌더링
+  if (assetContainer) {
+    renderTreemapContainer(assetContainer, items, heatmapPeriod, heatmapTheme, heatmapMaxCap);
+  }
 }
 
 function renderHoldings(data) {
@@ -708,32 +812,13 @@ function bindHeatmapInteractions(container) {
       tooltip.style.display = "none";
       return;
     }
-    try {
+        try {
       const info = JSON.parse(tile.dataset.info);
-      const isDaily = info.mode === "daily";
-      const rateVal = isDaily ? Number(info.day_change_rate || 0) : Number(info.rate || 0);
-      const sign = rateVal >= 0 ? "+" : "";
-      const rateClass = rateVal >= 0 ? "up" : "down";
-
-      const subRow = isDaily ? `
-        <div class="heatmap-tooltip-row">
-          <span class="label">전날 대비 등락:</span>
-          <span class="val ${rateClass}">${sign}${number(rateVal, 2)}%</span>
-        </div>
-        <div class="heatmap-tooltip-row">
-          <span class="label">누적 수익률:</span>
-          <span class="val ${info.rate >= 0 ? "up" : "down"}">${info.rate >= 0 ? "+" : ""}${number(info.rate, 2)}%</span>
-        </div>
-      ` : `
-        <div class="heatmap-tooltip-row">
-          <span class="label">손익금액:</span>
-          <span class="val ${rateClass}">${sign}${money(info.profit)}</span>
-        </div>
-        <div class="heatmap-tooltip-row">
-          <span class="label">진입가 대비 손익률:</span>
-          <span class="val ${rateClass}">${sign}${number(info.rate, 2)}%</span>
-        </div>
-      `;
+      const period = info.period || heatmapPeriod || "1D";
+      const selRate = Number(info.selected_rate != null ? info.selected_rate : (period === "TOTAL" ? info.rate : (info.period_changes?.[period] || info.day_change_rate || 0)));
+      const sign = selRate >= 0 ? "+" : "";
+      const rateClass = selRate >= 0 ? "up" : "down";
+      const periodLabel = PERIOD_LABELS[period] || period;
 
       tooltip.innerHTML = `
         <div class="heatmap-tooltip-title">
@@ -744,10 +829,17 @@ function bindHeatmapInteractions(container) {
           <span class="label">포지션 규모:</span>
           <span class="val">${money(info.value)} (${number(info.weight, 1)}%)</span>
         </div>
-        ${subRow}
+        <div class="heatmap-tooltip-row">
+          <span class="label">${periodLabel}:</span>
+          <span class="val ${rateClass}">${sign}${number(selRate, 2)}%</span>
+        </div>
+        <div class="heatmap-tooltip-row">
+          <span class="label">누적 수익률:</span>
+          <span class="val ${info.rate >= 0 ? "up" : "down"}">${info.rate >= 0 ? "+" : ""}${number(info.rate, 2)}% (${money(info.profit)})</span>
+        </div>
       `;
       tooltip.style.display = "block";
-      const tx = Math.min(window.innerWidth - 110, Math.max(110, e.clientX));
+      const tx = Math.min(window.innerWidth - 140, Math.max(120, e.clientX));
       const ty = Math.max(40, e.clientY);
       tooltip.style.left = `${tx}px`;
       tooltip.style.top = `${ty}px`;
@@ -774,7 +866,6 @@ function bindHeatmapInteractions(container) {
 }
 
 bindHeatmapInteractions($("#assetHeatmapContainer"));
-bindHeatmapInteractions($("#dailyHeatmapContainer"));
 
 // 윈도우 리사이즈 시 히트맵 반응형 재계산
 let resizeTimer;
@@ -887,3 +978,49 @@ $("#assetRecordForm").addEventListener("submit", async (e) => {
 });
 async function bootstrap() { await loadDashboard().catch((error) => toast(error.message, true)); await loadMarkets(); await loadAssetRecords(); }
 bootstrap();
+
+
+// 히트맵 기간 탭 클릭 이벤트 바인딩
+const periodTabsWrap = document.getElementById("heatmapPeriodTabs");
+if (periodTabsWrap) {
+  // 초기 활성 탭 표시
+  periodTabsWrap.querySelectorAll(".heatmap-tab").forEach((tab) => {
+    if (tab.dataset.period === heatmapPeriod) {
+      tab.classList.add("active");
+    } else {
+      tab.classList.remove("active");
+    }
+  });
+
+  periodTabsWrap.addEventListener("click", (e) => {
+    const btn = e.target.closest(".heatmap-tab");
+    if (!btn || !btn.dataset.period) return;
+    periodTabsWrap.querySelectorAll(".heatmap-tab").forEach((t) => t.classList.remove("active"));
+    btn.classList.add("active");
+    heatmapPeriod = btn.dataset.period;
+    localStorage.setItem("heatmap_period", heatmapPeriod);
+    if (dashboard) renderHeatmaps(dashboard);
+  });
+}
+
+// 히트맵 색상 테마 선택 이벤트 바인딩
+const themeSelectElem = document.getElementById("heatmapThemeSelect");
+if (themeSelectElem) {
+  themeSelectElem.value = heatmapTheme;
+  themeSelectElem.addEventListener("change", (e) => {
+    heatmapTheme = e.target.value || "kr";
+    localStorage.setItem("heatmap_theme", heatmapTheme);
+    if (dashboard) renderHeatmaps(dashboard);
+  });
+}
+
+// 히트맵 최대 등락률 범위(Max Cap) 선택 이벤트 바인딩
+const capSelectElem = document.getElementById("heatmapCapSelect");
+if (capSelectElem) {
+  capSelectElem.value = heatmapMaxCap;
+  capSelectElem.addEventListener("change", (e) => {
+    heatmapMaxCap = e.target.value || "auto";
+    localStorage.setItem("heatmap_max_cap", heatmapMaxCap);
+    if (dashboard) renderHeatmaps(dashboard);
+  });
+}
