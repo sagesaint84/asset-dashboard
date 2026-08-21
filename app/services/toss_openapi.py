@@ -346,27 +346,6 @@ class TossOpenAPI:
                 is_kr = sym.isalnum() and (len(sym) == 6 or sym[:5].isdigit())
                 r_1d = kr_rank_rates.get(sym)
 
-                # 국내 종목 공식 기준가(상·하한가 중간값) 도출
-                if is_kr and r_1d is None:
-                    for attempt in range(3):
-                        try:
-                            async with sem:
-                                r = await client.get(f"{self.base_url}/api/v1/price-limits", params={"symbol": sym}, headers=headers)
-                                if r.status_code == 200:
-                                    lim = r.json().get("result", {})
-                                    u = as_float(lim.get("upperLimitPrice"))
-                                    l = as_float(lim.get("lowerLimitPrice"))
-                                    if u > 0 and l > 0:
-                                        base = (u + l) / 2
-                                        last = last_prices.get(sym, 0)
-                                        if base > 0 and last > 0:
-                                            r_1d = round((last - base) / base * 100, 2)
-                                    break
-                                elif r.status_code == 429:
-                                    await asyncio.sleep(0.3 * (attempt + 1))
-                        except Exception:
-                            await asyncio.sleep(0.2)
-
                 # 일봉 캔들 조회 (최대 200봉)
                 for attempt in range(4):
                     try:
