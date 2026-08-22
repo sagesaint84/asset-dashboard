@@ -204,10 +204,17 @@ def get_dashboard() -> dict[str, Any]:
         }
 
     period_cache_file = ROOT_DIR / "data" / "period_rates.json"
-    period_rates_data: dict[str, dict[str, float]] = {}
-    if period_cache_file.exists():
+    period_rates_data: dict[str, dict[str, float]] = data.get("settings", {}).get("period_rates", {})
+    if not period_rates_data and period_cache_file.exists():
         try:
             period_rates_data = json.loads(period_cache_file.read_text(encoding="utf-8"))
+            data.setdefault("settings", {})["period_rates"] = period_rates_data
+        except Exception:
+            pass
+    elif period_rates_data and not period_cache_file.exists():
+        try:
+            period_cache_file.parent.mkdir(parents=True, exist_ok=True)
+            period_cache_file.write_text(json.dumps(period_rates_data, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
             pass
 

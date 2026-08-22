@@ -21,7 +21,10 @@ from app.services.portfolio import (
     read_portfolio, seed_demo, upsert_holdings, write_portfolio, to_number
 )
 from app.services.asset_records import delete_asset_record, list_asset_records, upsert_asset_record
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT_DIR / "app" / "static"
@@ -41,6 +44,14 @@ def load_env_file() -> None:
 load_env_file()
 app = FastAPI(title="내 자산 대시보드", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+@app.on_event("startup")
+async def ensure_data_dir():
+    data_dir = ROOT_DIR / "data"
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Created data directory at %s", data_dir)
+    else:
+        logger.info("Data directory exists at %s", data_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -600,8 +611,9 @@ async def refresh_prices() -> dict:
             warnings.extend(toss_warnings)
             unique_symbols = list({str(h.get("code", "")).upper() for h in toss_holdings if h.get("code")})
             multi_changes = await toss_client.get_multi_period_changes(unique_symbols)
-            daily_changes = {s: data["1D"] for s, data in multi_changes.items() if "1D" in data}
+            daily_changes = {s: d["1D"] for s, d in multi_changes.items() if "1D" in d}
             data["settings"].setdefault("daily_price_changes", {}).update(daily_changes)
+            data["settings"].setdefault("period_rates", {}).update(multi_changes)
         except TossOpenAPIError as exc:
             warnings.append(str(exc))
     if namoo_client.configured:
