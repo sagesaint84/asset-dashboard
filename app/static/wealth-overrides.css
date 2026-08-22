@@ -703,3 +703,64 @@
 .heatmap-select:focus {
   border-color: #7957e8;
 }
+
+/* ── 가족 탭 (모두 / 아빠 / 엄마 / 자녀) ──────────────────────────────── */
+.family-tabs {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.family-tab {
+  background: #111a33;
+  color: #98a6c8;
+  border: 1px solid #27365c;
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.family-tab:hover {
+  background: #1c2d55;
+  color: #d8e2ff;
+  border-color: #4f6dab;
+}
+
+.family-tab.active {
+  background: #7957e8;
+  color: #fff;
+  border-color: #7957e8;
+}
+
+/* ── 가족 구성원 관리 행 ──────────────────────────────────────────────────── */
+.family-member-row input {
+  background: #111a33;
+  color: #d8e2ff;
+  border: 1px solid #27365c;
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+.family-member-row input:focus {
+  border-color: #7957e8;
+  outline: none;
+}
+
+/* ── 탑바 가족 탭 (더 컴팩트하게) ─────────────────────────────────────────── */
+.topbar-family-tabs {
+  margin-left: 12px;
+}
+.topbar-family-tabs .family-tab {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.topbar-brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+}

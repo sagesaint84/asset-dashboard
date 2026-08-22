@@ -68,6 +68,7 @@ def normalize_record(raw: dict[str, Any], preserve_id: bool = False) -> dict[str
     return {
         "id": record_id,
         "date": date,
+        "owner": str(raw.get("owner") or "모두").strip(),  # 가족 구성원
         "total_value_krw": _coerce_float(raw.get("total_value_krw")),
         "total_cost_krw": _coerce_float(raw.get("total_cost_krw")),
         "profit_krw": _coerce_float(raw.get("profit_krw")),
@@ -93,8 +94,10 @@ def upsert_asset_record(raw: dict[str, Any], by_date: bool = False) -> dict[str,
     record = normalize_record(raw)
     existing_index = None
     if by_date and record["date"]:
+        # 날짜 + owner 복합 키로 매칭 (구성원별 독립 기록)
+        owner = record.get("owner") or "모두"
         for index, item in enumerate(data["records"]):
-            if item.get("date") == record["date"]:
+            if item.get("date") == record["date"] and (item.get("owner") or "모두") == owner:
                 existing_index = index
                 record["id"] = item["id"]
                 record["created_at"] = item.get("created_at") or record["created_at"]
@@ -111,6 +114,7 @@ def upsert_asset_record(raw: dict[str, Any], by_date: bool = False) -> dict[str,
         data["records"][existing_index] = record
     write_asset_records(data)
     return record
+
 
 
 def delete_asset_record(record_id: str) -> bool:

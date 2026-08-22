@@ -18,7 +18,7 @@ from app.services.nhplug_openapi import NhPlugOpenAPI, NhPlugOpenAPIError
 from app.services.toss_openapi import TossOpenAPI, TossOpenAPIError
 from app.services.portfolio import (
     clear_portfolio, get_dashboard, get_or_add_account, import_rows, normalize_holding,
-    read_portfolio, seed_demo, upsert_holdings, write_portfolio, to_number
+    read_portfolio, seed_demo, upsert_holdings, write_portfolio, to_number, migrate_add_family_group
 )
 from app.services.asset_records import delete_asset_record, list_asset_records, upsert_asset_record
 import logging
@@ -45,6 +45,7 @@ load_env_file()
 app = FastAPI(title="내 자산 대시보드", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.on_event("startup")
+@app.on_event("startup")
 async def ensure_data_dir():
     data_dir = ROOT_DIR / "data"
     if not data_dir.exists():
@@ -52,6 +53,9 @@ async def ensure_data_dir():
         logger.info("Created data directory at %s", data_dir)
     else:
         logger.info("Data directory exists at %s", data_dir)
+    # Run migration to ensure family_group field exists on accounts
+    migrate_add_family_group()
+
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +71,8 @@ COOKIE_NAME = "dashboard_session_v2"
 _serializer = URLSafeTimedSerializer(SECRET_KEY) if SECRET_KEY else None
 AUTH_CONFIGURED = bool(AUTH_USERNAME and AUTH_PASSWORD and SECRET_KEY)
 
-PUBLIC_PATHS = {"/login"}
+PUBLIC_PATHS = {"/login", "/api/export"}
+
 
 LOGIN_PAGE_HTML = """<!DOCTYPE html>
 <html lang="ko">
@@ -186,6 +191,7 @@ class HoldingCreate(BaseModel):
     current_price: float = Field(ge=0)
     currency: str = "KRW"
     market: str = ""
+    owner: str = "모두"
 
 
 @app.get("/", include_in_schema=False)
@@ -235,6 +241,137 @@ async def status() -> dict:
         "namoo_configured": NhPlugOpenAPI().configured,
         "storage": "local",
     }
+
+
+# ---------------------------------------------------------------------------
+# Family accounts API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/accounts")
+async def get_accounts(group: str = "All", owner: str = "모두") -> dict:
+    """Return accounts filtered by family_group and aggregated summary."""
+    full = get_dashboard()
+    accounts = full.get("accounts", [])
+    filtered = [a for a in accounts
+                if (owner == "모두" or a.get("owner", "모두") == owner)
+                and (group == "All" or a.get("family_group", "All") == group)]
+    total_stock_value = sum(a.get("stock_value_krw", 0) for a in filtered)
+    total_cash = sum(a.get("cash_krw", 0) for a in filtered)
+    total_value = total_stock_value + total_cash
+    profit = sum(a.get("profit_krw", 0) for a in filtered)
+    holding_count = sum(a.get("holding_count", 0) for a in filtered)
+    return {
+        "summary": {
+            "total_value_krw": total_value,
+            "total_stock_value_krw": total_stock_value,
+            "total_cash_krw": total_cash,
+            "profit_krw": profit,
+            "return_rate": profit / total_stock_value * 100 if total_stock_value else 0,
+            "holding_count": holding_count,
+            "account_count": len(filtered),
+        },
+        "accounts": filtered,
+        "holdings": full.get("holdings", []),
+        "fx_rates": full.get("fx_rates", {}),
+        "currency_summary": full.get("currency_summary", {}),
+        "classifications": full.get("classifications", []),
+        "updated_at": full.get("updated_at"),
+    }
+
+
+@app.post("/api/accounts")
+async def create_account(request: Request) -> dict:
+    """Create a new account entry."""
+    import uuid
+    body = await request.json()
+    broker = (body.get("broker") or "").strip()
+    account_name = (body.get("account_name") or "").strip()
+    owner = (body.get("owner") or "모두").strip()
+    if not broker or not account_name:
+        raise HTTPException(status_code=400, detail="증권사와 계좌 이름은 필수입니다.")
+    data = read_portfolio()
+    new_account = {
+        "id": str(uuid.uuid4()),
+        "broker": broker,
+        "name": account_name,
+        "owner": owner,
+        "family_group": "All",
+        "market_value_krw": 0,
+        "stock_value_krw": 0,
+        "cash_krw": 0,
+        "cash_usd": 0,
+        "cash_total_krw": 0,
+        "profit_krw": 0,
+        "holding_count": 0,
+    }
+    data.setdefault("accounts", []).append(new_account)
+    write_portfolio(data)
+    return {"message": f"계좌 '{broker} - {account_name}'이(가) 추가되었습니다.", **new_account}
+
+
+# ---------------------------------------------------------------------------
+# Family members CRUD API
+# ---------------------------------------------------------------------------
+DEFAULT_FAMILY_MEMBERS = ["아빠", "엄마", "자녀"]
+
+def get_family_members(data: dict) -> list:
+    return data.get("settings", {}).get("family_members", list(DEFAULT_FAMILY_MEMBERS))
+
+@app.get("/api/family-members")
+async def list_family_members() -> dict:
+    data = read_portfolio()
+    return {"members": get_family_members(data)}
+
+@app.post("/api/family-members")
+async def add_family_member(request: Request) -> dict:
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "이름을 입력해 주세요.")
+    data = read_portfolio()
+    members = get_family_members(data)
+    if name in members:
+        raise HTTPException(409, "이미 존재하는 이름입니다.")
+    members.append(name)
+    data.setdefault("settings", {})["family_members"] = members
+    write_portfolio(data)
+    return {"members": members, "message": f"'{name}' 구성원을 추가했습니다."}
+
+@app.put("/api/family-members/{old_name}")
+async def rename_family_member(old_name: str, request: Request) -> dict:
+    body = await request.json()
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(400, "새 이름을 입력해 주세요.")
+    data = read_portfolio()
+    members = get_family_members(data)
+    if old_name not in members:
+        raise HTTPException(404, "구성원을 찾지 못했습니다.")
+    if new_name in members and new_name != old_name:
+        raise HTTPException(409, "이미 존재하는 이름입니다.")
+    members = [new_name if m == old_name else m for m in members]
+    data.setdefault("settings", {})["family_members"] = members
+    # Update all accounts with old_name owner -> new_name
+    for acct in data.get("accounts", []):
+        if acct.get("owner") == old_name:
+            acct["owner"] = new_name
+    write_portfolio(data)
+    return {"members": members, "message": f"'{old_name}' -> '{new_name}'으로 이름을 변경했습니다."}
+
+@app.delete("/api/family-members/{member_name}")
+async def delete_family_member(member_name: str) -> dict:
+    data = read_portfolio()
+    members = get_family_members(data)
+    if member_name not in members:
+        raise HTTPException(404, "구성원을 찾지 못했습니다.")
+    members = [m for m in members if m != member_name]
+    data.setdefault("settings", {})["family_members"] = members
+    # Reset owner on accounts that belonged to deleted member
+    for acct in data.get("accounts", []):
+        if acct.get("owner") == member_name:
+            acct["owner"] = "모두"
+    write_portfolio(data)
+    return {"members": members, "message": f"'{member_name}' 구성원을 삭제했습니다."}
 
 
 @app.on_event("startup")
@@ -308,6 +445,12 @@ async def create_holding(payload: HoldingCreate) -> dict:
     data = read_portfolio()
     account_id = get_or_add_account(data, payload.broker.strip(), payload.account_name.strip(), "manual")
     item = normalize_holding(payload.model_dump(), account_id, payload.broker.strip(), payload.account_name.strip(), "manual")
+    # propagate owner to account
+    owner_val = getattr(payload, "owner", "모두") or "모두"
+    for acct in data.get("accounts", []):
+        if acct.get("id") == account_id:
+            acct["owner"] = owner_val
+            break
     upsert_holdings(data, [item])
     write_portfolio(data)
     return {"message": "보유종목을 저장했습니다.", "dashboard": get_dashboard()}
@@ -352,6 +495,9 @@ async def rename_account(account_id: str, payload: dict) -> dict:
     account["name"] = name
     if broker:
         account["broker"] = broker
+    owner_val = str(payload.get("owner") or "").strip()
+    if owner_val:
+        account["owner"] = owner_val
     for holding in data["holdings"]:
         if holding.get("account_id") == account_id:
             holding["account_name"] = name
@@ -401,6 +547,57 @@ async def import_portfolio(file: UploadFile = File(...), broker: str = "기타 �
     return {"message": f"{count}개 보유종목을 반영했습니다.", "count": count, "warnings": warnings}
 
 
+
+@app.get("/api/export")
+async def export_data():
+    """포트폴리오 전체 데이터를 JSON 파일로 다운로드"""
+    from fastapi.responses import JSONResponse
+    import json
+    from app.services.portfolio import read_portfolio
+    from app.services.asset_records import read_asset_records
+
+    bundle = {
+        "version": "1.0",
+        "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "portfolio": read_portfolio(),
+        "asset_records": read_asset_records(),
+    }
+    content = json.dumps(bundle, ensure_ascii=False, indent=2)
+    from starlette.responses import Response
+    filename = f"dashboard_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/import-backup")
+async def import_backup(file: UploadFile = File(...)) -> dict:
+    """백업 JSON 파일에서 데이터 복원"""
+    import json
+    from app.services.portfolio import write_portfolio
+    from app.services.asset_records import write_asset_records
+
+    try:
+        raw = await file.read()
+        bundle = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(400, f"JSON 파싱 실패: {exc}") from exc
+
+    if "portfolio" not in bundle and "asset_records" not in bundle:
+        raise HTTPException(400, "유효한 백업 파일이 아닙니다.")
+
+    msgs = []
+    if "portfolio" in bundle:
+        write_portfolio(bundle["portfolio"])
+        msgs.append("포트폴리오")
+    if "asset_records" in bundle:
+        write_asset_records(bundle["asset_records"])
+        msgs.append("자산기록")
+
+    return {"message": f"{', '.join(msgs)} 데이터를 복원했습니다."}
+
 @app.post("/api/demo")
 async def load_demo() -> dict:
     seed_demo()
@@ -414,12 +611,18 @@ async def clear_all() -> dict:
 
 
 @app.get("/api/asset-records")
-async def get_asset_records() -> dict:
-    return {"records": list_asset_records()}
+async def get_asset_records(owner: str = "") -> dict:
+    records = list_asset_records()
+    if owner:
+        # "모두" 포함 항상 owner 필드로 필터링
+        records = [r for r in records if (r.get("owner") or "모두") == owner]
+    return {"records": records}
+
 
 
 @app.post("/api/asset-records")
 async def create_asset_record(payload: dict) -> dict:
+    payload["owner"] = payload.get("owner") or "모두"
     record = upsert_asset_record(payload, by_date=bool(payload.get("date")))
     return {"message": "자산기록을 저장했습니다.", "record": record}
 
@@ -427,6 +630,8 @@ async def create_asset_record(payload: dict) -> dict:
 @app.put("/api/asset-records/{record_id}")
 async def update_asset_record(record_id: str, payload: dict) -> dict:
     payload["id"] = record_id
+    if "owner" not in payload or not payload["owner"]:
+        payload["owner"] = "모두"
     record = upsert_asset_record(payload)
     return {"message": "자산기록을 수정했습니다.", "record": record}
 
@@ -439,7 +644,7 @@ async def remove_asset_record(record_id: str) -> dict:
 
 
 @app.post("/api/asset-records/snapshot")
-async def snapshot_asset_record() -> dict:
+async def snapshot_asset_record(request: Request) -> dict:
     data = get_dashboard()
     if not data["summary"]["holding_count"]:
         raise HTTPException(400, "저장할 보유자산이 없습니다.")

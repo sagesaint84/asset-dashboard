@@ -1,5 +1,181 @@
 const $ = (selector) => document.querySelector(selector);
 let dashboard = null;
+let rawDashboard = null; // 필터링 전 원본 서버 데이터
+let currentOwner = '모두'; // 선택된 가족 구성원
+
+// ── 가족 구성원 선택 – 탑바 + ACCOUNTS 탭 동기화 ─────────────────────────────
+function selectOwner(owner) {
+  currentOwner = owner || '모두';
+  // ACCOUNTS 탭 업데이트
+  document.querySelectorAll('#familyTabs .family-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.owner === currentOwner);
+  });
+  // 탑바 탭 업데이트
+  document.querySelectorAll('#topbarFamilyTabs .family-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.owner === currentOwner);
+  });
+  if (rawDashboard) renderWithOwner(rawDashboard, currentOwner);
+}
+
+document.addEventListener('click', (e) => {
+  // ACCOUNTS 탭
+  const accountsTab = e.target.closest('#familyTabs .family-tab');
+  if (accountsTab) { selectOwner(accountsTab.dataset.owner); return; }
+  // 탑바 탭
+  const topbarTab = e.target.closest('#topbarFamilyTabs .family-tab');
+  if (topbarTab) { selectOwner(topbarTab.dataset.owner); return; }
+});
+
+// ── 필터링된 데이터로 핵심 요약 재계산 ──────────────────────────────────────
+function computeFilteredSummary(accounts, holdings, fxRates) {
+  const usdKrw = (fxRates || {})['USD'] || 1300;
+  let total_stock_value_krw = 0, total_cash_krw = 0, total_cost_krw = 0, profit_krw = 0;
+  let cash_krw = 0, cash_usd = 0;
+
+  holdings.forEach(h => {
+    total_stock_value_krw += Number(h.market_value_krw || 0);
+    total_cost_krw        += Number(h.cost_value_krw  || 0);
+    profit_krw            += Number(h.profit_krw      || 0);
+  });
+  accounts.forEach(a => {
+    cash_krw += Number(a.cash_krw || 0);
+    cash_usd += Number(a.cash_usd || 0);
+  });
+  total_cash_krw = cash_krw + cash_usd * usdKrw;
+  const total_value_krw = total_stock_value_krw + total_cash_krw;
+  const return_rate = total_cost_krw > 0 ? (profit_krw / total_cost_krw) * 100 : 0;
+  return {
+    total_value_krw, total_stock_value_krw, total_cash_krw,
+    total_cost_krw, profit_krw, return_rate, cash_krw, cash_usd,
+    holding_count: holdings.length,
+    account_count: accounts.length,
+  };
+}
+
+// 서버 분류 로직과 동일하게 ETF/주식/해외 구분
+const ETF_PREFIXES = ['KODEX','TIGER','ACE','SOL','PLUS','RISE','HANARO','KOSEF','ARIRANG','KOACT','WON'];
+function classifyHolding(h) {
+  const nameUpper = (h.name || '').toUpperCase();
+  const market = (h.market || '').toUpperCase();
+  if (h.currency === 'KRW' && ETF_PREFIXES.some(p => nameUpper.startsWith(p))) return '국내 ETF';
+  if (h.currency === 'KRW') return '국내 주식';
+  if (market.startsWith('NH_') && market !== 'NH_US') return '기타 해외자산';
+  return '미국 주식·ETF';
+}
+
+function computeFilteredClassifications(holdings, accounts, fxRates) {
+  const usdKrw = (fxRates || {})['USD'] || 1300;
+  const groups = {};
+  let totalValue = 0;
+  holdings.forEach(h => {
+    const name = classifyHolding(h);
+    if (!groups[name]) groups[name] = { name, market_value_krw: 0, cost_value_krw: 0, profit_krw: 0, holding_count: 0 };
+    const g = groups[name];
+    g.market_value_krw += Number(h.market_value_krw || 0);
+    g.cost_value_krw   += Number(h.cost_value_krw   || 0);
+    g.profit_krw       += Number(h.profit_krw        || 0);
+    g.holding_count    += 1;
+    totalValue         += Number(h.market_value_krw || 0);
+  });
+  // 현금·예수금 추가
+  let cashKrw = 0, cashUsd = 0;
+  (accounts || []).forEach(a => {
+    cashKrw += Number(a.cash_krw || 0);
+    cashUsd += Number(a.cash_usd || 0);
+  });
+  const totalCash = cashKrw + cashUsd * usdKrw;
+  if (totalCash > 0) {
+    groups['현금·예수금'] = {
+      name: '현금·예수금', market_value_krw: totalCash,
+      cost_value_krw: totalCash, profit_krw: 0, holding_count: 0,
+    };
+    totalValue += totalCash;
+  }
+  return Object.values(groups).map(g => ({
+    ...g,
+    return_rate: g.cost_value_krw > 0 ? (g.profit_krw / g.cost_value_krw) * 100 : 0,
+    weight: totalValue > 0 ? (g.market_value_krw / totalValue) * 100 : 0,
+  }));
+}
+
+function computeFilteredCurrencySummary(holdings, accounts, fxRates) {
+  const usdKrw = (fxRates || {})['USD'] || 1300;
+  const krw = { market_value_krw: 0, stock_value_krw: 0, cash: 0 };
+  const usd = { market_value: 0, stock_value: 0, cash: 0, market_value_krw: 0 };
+
+  holdings.forEach(h => {
+    if (h.currency === 'KRW') {
+      krw.market_value_krw += Number(h.market_value_krw || 0);
+      krw.stock_value_krw  += Number(h.market_value_krw || 0);
+    } else {
+      const fx = Number(h.fx_rate || usdKrw);
+      const val = Number(h.market_value_krw || 0);
+      usd.market_value     += val / fx;
+      usd.stock_value      += val / fx;
+      usd.market_value_krw += val;
+    }
+  });
+  accounts.forEach(a => {
+    krw.cash += Number(a.cash_krw || 0);
+    usd.cash += Number(a.cash_usd || 0);
+  });
+  krw.market_value_krw += krw.cash;
+  usd.market_value     += usd.cash;
+  usd.market_value_krw += usd.cash * usdKrw;
+  return { KRW: krw, USD: usd };
+}
+
+function computeFilteredDayChange(holdings, rawDayChange) {
+  if (!holdings.length) return {};
+  // Approximate day change from filtered holdings
+  let totalValue = 0, weightedChange = 0;
+  holdings.forEach(h => {
+    const val  = Number(h.market_value_krw || 0);
+    const rate = Number(h.day_change_rate  || 0);
+    totalValue      += val;
+    weightedChange  += val * rate;
+  });
+  if (totalValue === 0) return {};
+  const change_rate = weightedChange / totalValue;
+  const change_krw  = totalValue * change_rate / (100 + change_rate) || 0;
+  return {
+    change_rate,
+    change_krw,
+    date: (rawDayChange || {}).date,
+  };
+}
+
+function renderWithOwner(data, owner) {
+  // Always filter from rawDashboard to prevent data loss on re-render
+  const src = rawDashboard || data;
+  const filteredData = Object.assign({}, src);
+
+  if (owner !== '모두') {
+    // 1. Filter accounts and holdings
+    filteredData.accounts = (src.accounts || []).filter(a => (a.owner || '모두') === owner);
+    const ownedIds = new Set(filteredData.accounts.map(a => a.id));
+    filteredData.holdings = (src.holdings || []).filter(h => ownedIds.has(h.account_id));
+
+    // 2. Recalculate derived data from filtered set
+    filteredData.summary          = computeFilteredSummary(filteredData.accounts, filteredData.holdings, src.fx_rates);
+    filteredData.classifications  = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates);
+    filteredData.currency_summary = computeFilteredCurrencySummary(filteredData.holdings, filteredData.accounts, src.fx_rates);
+    filteredData.day_change       = computeFilteredDayChange(filteredData.holdings, src.day_change);
+  } else {
+    // 모두: show everything, use server-calculated values
+    filteredData.accounts         = src.accounts      || [];
+    filteredData.holdings         = src.holdings      || [];
+    filteredData.summary          = src.summary       || {};
+    filteredData.classifications  = src.classifications || [];
+    filteredData.currency_summary = src.currency_summary || {};
+    filteredData.day_change       = src.day_change    || {};
+  }
+
+  render(filteredData);
+
+  // Also reload asset records filtered by owner
+  loadAssetRecords(owner);
+}
 
 // 다이얼로그의 X/취소 버튼은 항상 명시적으로 창을 닫습니다.
 document.addEventListener("click", (event) => {
@@ -712,6 +888,7 @@ function renderHoldings(data) {
 
 function render(data) {
   dashboard = data;
+  // rawDashboard is set only by loadDashboard (not by filtered renders)
   renderSummary(data);
   renderClassifications(data.classifications || []);
   renderAccounts(data.accounts);
@@ -719,8 +896,12 @@ function render(data) {
   renderHoldings(data);
 }
 
-async function loadDashboard() { render(await api("/api/dashboard")); }
-async function loadAssetRecords() { renderAssetRecords((await api("/api/asset-records")).records || []); }
+async function loadDashboard() { const data = await api("/api/dashboard"); rawDashboard = data; dashboard = data; renderWithOwner(data, currentOwner); }
+async function loadAssetRecords(owner) {
+  // 항상 owner로 필터링 ("모두"도 owner=모두 레코드만 표시)
+  const o = owner || currentOwner || '모두';
+  renderAssetRecords((await api(`/api/asset-records?owner=${encodeURIComponent(o)}`)).records || []);
+}
 
 function openImport() { $("#importDialog").showModal(); }
 function openHoldingDialog(record = null) {
@@ -729,6 +910,11 @@ function openHoldingDialog(record = null) {
   form.code.value = record?.code || ""; form.name.value = record?.name || ""; form.quantity.value = record?.quantity ?? "";
   form.avg_price.value = record?.avg_price ?? ""; form.current_price.value = record?.current_price ?? "";
   form.currency.value = record?.currency || "KRW"; form.market.value = record?.market || "";
+  if (form.owner) {
+    // Try to find owner from linked account
+    const linkedAcct = dashboard?.accounts?.find(a => a.id === record?.account_id);
+    form.owner.value = linkedAcct?.owner || record?.owner || "모두";
+  }
   $("#holdingDialog").showModal();
 }
 function openAssetRecordDialog(record = null) {
@@ -746,6 +932,8 @@ function openAssetRecordDialog(record = null) {
   form.usd_value_krw.value = record?.usd_value_krw ?? "";
   form.holding_count.value = record?.holding_count ?? "";
   form.memo.value = record?.memo ?? "";
+  // owner: 기존 레코드의 owner 또는 현재 선택된 구성원
+  if (form.owner) form.owner.value = record?.owner || currentOwner || "모두";
   $("#assetRecordDialog").showModal();
 }
 
@@ -767,6 +955,7 @@ function openAccountEditDialog(account) {
   form.dataset.accountId = account.id;
   form.broker.value = account.broker || "";
   form.name.value = account.name || "";
+  if (form.owner) form.owner.value = account.owner || "모두";
   $("#accountEditDialog").showModal();
 }
 
@@ -780,6 +969,31 @@ $("#demoButton").addEventListener("click", (e) => action(e.currentTarget, () => 
 $("#addButton").addEventListener("click", () => openHoldingDialog()); $("#importButton").addEventListener("click", openImport);
 $("#addRecordButton").addEventListener("click", () => openAssetRecordDialog());
 $("#snapshotButton").addEventListener("click", (e) => action(e.currentTarget, async () => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (currentOwner !== '모두') {
+    // 특정 구성원 선택 시: loadDashboard 없이 현재 필터된 데이터를 그대로 저장
+    const s = dashboard?.summary || {};
+    const day = dashboard?.day_change || {};
+    const currency = dashboard?.currency_summary || {};
+    if (!s.holding_count && !s.total_value_krw) throw new Error('저장할 자산 데이터가 없습니다.');
+    return api("/api/asset-records", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      date: today,
+      total_value_krw: s.total_value_krw || 0,
+      total_cost_krw: s.total_cost_krw || 0,
+      profit_krw: s.profit_krw || 0,
+      return_rate: s.return_rate || 0,
+      day_profit_krw: day.change_krw || 0,
+      krw_value_krw: currency.KRW?.market_value_krw || 0,
+      usd_value_krw: currency.USD?.market_value_krw || 0,
+      holding_count: s.holding_count || 0,
+      source: "snapshot",
+      memo: `${currentOwner} 스냅샷`,
+      owner: currentOwner,
+    }) });
+  }
+
+  // 모두 선택 시: 서버 snapshot API 시도 → 실패 시 전체 데이터로 직접 저장
   await loadDashboard();
   try {
     return await api("/api/asset-records/snapshot", { method: "POST" });
@@ -792,14 +1006,49 @@ $("#snapshotButton").addEventListener("click", (e) => action(e.currentTarget, as
       date: new Date().toISOString().slice(0, 10), total_value_krw: s.total_value_krw, total_cost_krw: s.total_cost_krw,
       profit_krw: s.profit_krw, return_rate: s.return_rate, day_profit_krw: day.change_krw || 0,
       krw_value_krw: currency.KRW?.market_value_krw || 0, usd_value_krw: currency.USD?.market_value_krw || 0,
-      holding_count: s.holding_count, source: "snapshot", memo: "수동 스냅샷"
+      holding_count: s.holding_count, source: "snapshot", memo: "수동 스냅샷", owner: currentOwner || "모두"
     }) });
   }
-}, async () => { await loadDashboard(); await loadAssetRecords(); }));
+}, async () => { await loadDashboard(); await loadAssetRecords(currentOwner); }));
 
 $("#searchInput").addEventListener("input", () => dashboard && renderHoldings(dashboard));
 $("#clearButton").addEventListener("click", () => { if (confirm("저장된 보유내역을 모두 지울까요?")) action($("#clearButton"), () => api("/api/clear", { method: "POST" })); });
 $("#holdingsBody").addEventListener("click", (e) => { const edit = e.target.closest(".edit-button"); const button = e.target.closest(".delete-button"); if (edit) { const item = dashboard?.holdings.find((row) => row.id === edit.dataset.id); if (item) openHoldingDialog(item); return; } if (button && confirm("이 보유종목을 삭제할까요?")) action(button, () => api(`/api/holdings/${button.dataset.id}`, { method: "DELETE" })); });
+
+
+// ── 계좌 추가 버튼 ───────────────────────────────────────────────────────────
+const _addAccountBtn = document.getElementById('addAccountBtn');
+if (_addAccountBtn) {
+  _addAccountBtn.addEventListener('click', () => {
+    const dlg = document.getElementById('accountAddDialog');
+    if (dlg) {
+      document.getElementById('accountAddForm')?.reset();
+      dlg.showModal();
+    }
+  });
+}
+
+document.getElementById('accountAddForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const payload = {
+    broker: form.broker.value.trim(),
+    account_name: form.account_name.value.trim(),
+    owner: form.owner.value,
+  };
+  try {
+    const result = await api('/api/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    form.closest('dialog')?.close();
+    toast(result.message || '계좌가 추가되었습니다.');
+    await loadDashboard();
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
 
 // 히트맵 툴팁 및 클릭 필터 상호작용
 const tooltip = $("#heatmapTooltip");
@@ -928,6 +1177,7 @@ $("#accountEditForm")?.addEventListener("submit", async (e) => {
   const payload = {
     broker: form.broker.value.trim(),
     name: form.name.value.trim(),
+    owner: form.owner ? form.owner.value : "모두",
   };
   try {
     const result = await api(`/api/accounts/${id}`, {
@@ -955,7 +1205,7 @@ $("#assetRecordList").addEventListener("click", async (e) => {
   }
 });
 
-$("#holdingForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget, payload = Object.fromEntries(new FormData(form)); ["quantity", "avg_price", "current_price"].forEach((key) => { payload[key] = Number(payload[key]); }); try { const id = form.dataset.recordId; const result = await api(id ? `/api/holdings/${id}` : "/api/holdings", { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); form.closest("dialog").close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
+$("#holdingForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget, payload = Object.fromEntries(new FormData(form)); if (!payload.owner) payload.owner = "모두"; ["quantity", "avg_price", "current_price"].forEach((key) => { payload[key] = Number(payload[key]); }); try { const id = form.dataset.recordId; const result = await api(id ? `/api/holdings/${id}` : "/api/holdings", { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); form.closest("dialog").close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
 $("#importForm").addEventListener("submit", async (e) => { e.preventDefault(); const form = e.currentTarget; const file = $("#importFile").files[0]; if (!file) return; const formData = new FormData(); formData.append("file", file); try { const result = await api(`/api/import?broker=${encodeURIComponent($("#importBroker").value || "기타 증권사")}`, { method: "POST", body: formData }); form.closest("dialog")?.close(); toast(result.message); await loadDashboard(); } catch (error) { toast(error.message, true); } });
 $("#assetRecordForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -965,18 +1215,19 @@ $("#assetRecordForm").addEventListener("submit", async (e) => {
     payload[key] = Number(payload[key] || 0);
   });
   payload.memo = payload.memo || "";
+  payload.owner = payload.owner || currentOwner || "모두";
   try {
     const method = form.dataset.recordId ? "PUT" : "POST";
     const url = form.dataset.recordId ? `/api/asset-records/${form.dataset.recordId}` : "/api/asset-records";
     const result = await api(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     form.closest("dialog").close();
     toast(result.message);
-    await loadAssetRecords();
+    await loadAssetRecords(currentOwner);
   } catch (error) {
     toast(error.message, true);
   }
 });
-async function bootstrap() { await loadDashboard().catch((error) => toast(error.message, true)); await loadMarkets(); await loadAssetRecords(); }
+async function bootstrap() { await loadFamilyMembers(); await loadDashboard().catch((error) => toast(error.message, true)); await loadMarkets(); await loadAssetRecords('모두'); }
 bootstrap();
 
 
@@ -1024,6 +1275,205 @@ if (capSelectElem) {
     if (dashboard) renderHeatmaps(dashboard);
   });
 }
+
+
+
+// ── 가족 구성원 탭 동적 렌더링 ────────────────────────────────────────────────
+async function loadFamilyMembers() {
+  try {
+    const res = await api('/api/family-members');
+    renderFamilyTabs(res.members || []);
+    updateOwnerSelects(res.members || []);
+  } catch (e) {
+    renderFamilyTabs(['아빠', '엄마', '자녀']);
+    updateOwnerSelects(['아빠', '엄마', '자녀']);
+  }
+}
+
+// 다이얼로그 내 owner <select>들을 현재 구성원 목록으로 동기화
+function updateOwnerSelects(members) {
+  const opts = ['<option value="모두">모두</option>']
+    .concat(members.map(m => `<option value="${m}">${m}</option>`))
+    .join('');
+  document.querySelectorAll('select[name="owner"]').forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML = opts;
+    if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  });
+}
+
+function renderFamilyTabs(members) {
+  const allBtn = (containerId) => '<button type="button" class="family-tab' + (currentOwner === '모두' ? ' active' : '') + '" data-owner="모두">모두</button>';
+  const memberBtns = members.map(m =>
+    '<button type="button" class="family-tab' + (currentOwner === m ? ' active' : '') + '" data-owner="' + m + '">' + m + '</button>'
+  ).join('');
+  const inner = allBtn() + memberBtns;
+  // ACCOUNTS 탭
+  const container = document.getElementById('familyTabs');
+  if (container) container.innerHTML = inner;
+  // 탑바 탭
+  const topbar = document.getElementById('topbarFamilyTabs');
+  if (topbar) topbar.innerHTML = inner;
+}
+
+function renderFamilyMemberList(members) {
+  const list = document.getElementById('familyMemberList');
+  if (!list) return;
+  if (!members.length) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:13px;">구성원이 없습니다.</p>';
+    return;
+  }
+  list.innerHTML = members.map(m => `
+    <div class="family-member-row" style="display:flex;align-items:center;gap:8px;">
+      <input class="family-member-name-input" type="text" value="${m}" data-original="${m}"
+        style="flex:1;font-size:13px;" maxlength="20" />
+      <button class="button secondary compact family-rename-btn" data-name="${m}" type="button">수정</button>
+      <button class="button text danger compact family-delete-btn" data-name="${m}" type="button">삭제</button>
+    </div>
+  `).join('');
+}
+
+// ── 가족 구성원 관리 – 이벤트 위임으로 구현 (dialog 내부 버튼 안전하게 처리) ──
+async function openFamilyManager() {
+  const dlg = document.getElementById('familyManagerDialog');
+  if (!dlg) return;
+  try {
+    const res = await api('/api/family-members');
+    renderFamilyMemberList(res.members || []);
+  } catch(e) {
+    renderFamilyMemberList([]);
+  }
+  dlg.showModal();
+}
+
+document.addEventListener('click', async (e) => {
+  // 관리 버튼 열기
+  if (e.target.closest('#manageFamilyBtn')) {
+    await openFamilyManager();
+    return;
+  }
+
+  // 추가 버튼
+  if (e.target.closest('#addMemberBtn')) {
+    const input = document.getElementById('newMemberName');
+    const name = (input?.value || '').trim();
+    if (!name) { toast('이름을 입력해 주세요.', true); return; }
+    try {
+      const res = await api('/api/family-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      toast(res.message || '추가했습니다.');
+      if (input) input.value = '';
+      renderFamilyTabs(res.members || []);
+      updateOwnerSelects(res.members || []);
+      renderFamilyMemberList(res.members || []);
+    } catch(err) { toast(err.message, true); }
+    return;
+  }
+
+  // 이름 변경 버튼
+  const renameBtn = e.target.closest('.family-rename-btn');
+  if (renameBtn) {
+    const row = renameBtn.closest('.family-member-row');
+    const input = row?.querySelector('.family-member-name-input');
+    const oldName = renameBtn.dataset.name;
+    const newName = (input?.value || '').trim();
+    if (!newName || newName === oldName) return;
+    try {
+      const res = await api(`/api/family-members/${encodeURIComponent(oldName)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      toast(res.message || '이름을 변경했습니다.');
+      if (currentOwner === oldName) currentOwner = newName;
+      renderFamilyTabs(res.members || []);
+      renderFamilyMemberList(res.members || []);
+      await loadDashboard();
+    } catch(err) { toast(err.message, true); }
+    return;
+  }
+
+  // 삭제 버튼
+  const deleteBtn = e.target.closest('.family-delete-btn');
+  if (deleteBtn) {
+    const name = deleteBtn.dataset.name;
+    if (!confirm(`'${name}' 구성원을 삭제할까요?`)) return;
+    try {
+      const res = await api(`/api/family-members/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      toast(res.message || '삭제했습니다.');
+      if (currentOwner === name) currentOwner = '모두';
+      renderFamilyTabs(res.members || []);
+      renderFamilyMemberList(res.members || []);
+      await loadDashboard();
+    } catch(err) { toast(err.message, true); }
+    return;
+  }
+});
+
+// Enter 키로 구성원 추가
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && document.activeElement?.id === 'newMemberName') {
+    document.getElementById('addMemberBtn')?.click();
+  }
+});
+
+
+// ── 데이터 저장 / 불러오기 ───────────────────────────────────────────────────
+document.getElementById('exportButton')?.addEventListener('click', async () => {
+  try {
+    const response = await fetch('/api/export', { credentials: 'include' });
+    if (response.status === 401) {
+      toast('로그인 세션이 만료됐습니다. 페이지를 새로고침 후 다시 시도해주세요.', true);
+      return;
+    }
+    if (!response.ok) throw new Error(`서버 오류: ${response.status}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ts = new Date().toISOString().slice(0,19).replace(/[-:T]/g,'').slice(0,14);
+    a.download = `dashboard_backup_${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('데이터를 저장했습니다.');
+  } catch (err) {
+    toast(err.message || '저장 실패', true);
+  }
+});
+
+
+document.getElementById('importBackupBtn')?.addEventListener('click', () => {
+  document.getElementById('importBackupFile')?.click();
+});
+
+document.getElementById('importBackupFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!confirm(`'${file.name}' 파일로 데이터를 복원할까요?\n현재 데이터는 덮어쓰입니다.`)) {
+    e.target.value = '';
+    return;
+  }
+  const btn = document.getElementById('importBackupBtn');
+  btn && (btn.disabled = true);
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const result = await api('/api/import-backup', { method: 'POST', body: formData });
+    toast(result.message || '데이터를 복원했습니다.');
+    await loadDashboard();
+    await loadAssetRecords(currentOwner);
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    e.target.value = '';
+    btn && (btn.disabled = false);
+  }
+});
 
 // PWA 서비스 워커 등록 (주소창 없는 독립형 앱 실행 지원)
 if ("serviceWorker" in navigator) {

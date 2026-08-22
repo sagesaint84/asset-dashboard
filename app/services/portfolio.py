@@ -86,6 +86,20 @@ def write_portfolio(data: dict[str, Any]) -> dict[str, Any]:
         return data
 
 
+def migrate_add_family_group() -> None:
+    """Ensure all account entries have a 'family_group' key.
+    Existing accounts without the key will get the default value 'All'."""
+    data = read_portfolio()
+    modified = False
+    for account in data.get('accounts', []):
+        if 'family_group' not in account:
+            account['family_group'] = 'All'
+            modified = True
+    if modified:
+        write_portfolio(data)
+
+
+
 def to_number(value: Any, default: float = 0.0) -> float:
     if value is None or value == "":
         return default
@@ -117,14 +131,20 @@ def normalize_market(value: Any, code: str, currency: str) -> str:
     return "KRX" if currency == "KRW" and code.isdigit() else ""
 
 
-def get_or_add_account(data: dict[str, Any], broker: str, account_name: str, source: str = "import") -> str:
+def get_or_add_account(data: dict[str, Any], broker: str, account_name: str, family_group: str = "All", source: str = "import") -> str:
     broker = broker or "기타 증권사"
     account_name = account_name or f"{broker} 계좌"
     for account in data["accounts"]:
         if account["broker"] == broker and account["name"] == account_name:
             return account["id"]
     account_id = str(uuid.uuid4())
-    data["accounts"].append({"id": account_id, "broker": broker, "name": account_name, "source": source})
+    data["accounts"].append({
+        "id": account_id,
+        "broker": broker,
+        "name": account_name,
+        "family_group": family_group,
+        "source": source,
+    })
     return account_id
 
 

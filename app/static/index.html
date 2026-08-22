@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260821-5" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260822-5" />
   </head>
   <body>
     <main class="shell">
@@ -22,6 +22,9 @@
         <div class="topbar-brand-wrap">
           <a class="brand" href="/" aria-label="시작 화면">W</a>
           <div class="title"><p>Human Index INVESTMENT</p><h1>인간지표의 투자 대시보드</h1></div>
+          <div class="family-tabs topbar-family-tabs" id="topbarFamilyTabs" style="display:flex;gap:0.3rem;align-items:center;flex-wrap:wrap;">
+            <button type="button" class="family-tab active" data-owner="모두">모두</button>
+          </div>
         </div>
         <div class="top-actions">
           <button id="syncKbButton" class="button secondary" type="button">KB</button>
@@ -29,7 +32,7 @@
           <button id="syncNamooButton" class="button secondary" type="button">나무</button>
           <button id="refreshButton" class="button primary" type="button">시세 갱신</button>
           <button id="refreshFxButton" class="button primary" type="button">환율 갱신</button>
-          <button id="clearButton" class="button text danger" type="button">로컬 데이터 지우기</button>
+
         </div>
       </header>
 
@@ -190,7 +193,7 @@
       <!-- 5. 증권사 통합 현황 -->
       <section class="dashboard-grid single-panel">
         <article class="panel account-panel">
-          <div class="panel-head"><div><p class="eyebrow">ACCOUNTS</p><h2>증권사 통합 현황</h2></div><span id="accountCount" class="muted"></span></div>
+          <div class="panel-head" style="flex-wrap:wrap;gap:0.5rem;"><div><p class="eyebrow">ACCOUNTS</p><h2>증권사 통합 현황</h2></div><div class="family-tabs" id="familyTabs" style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;"><button type="button" class="family-tab active" data-owner="돼두">돼두</button></div><button id="manageFamilyBtn" class="button text" type="button" title="가족 구성원 관리" style="padding:4px 8px;font-size:12px;">⚙️ 관리</button><button id="addAccountBtn" class="button secondary compact" type="button">＋ 계좌 추가</button><span id="accountCount" class="muted"></span></div>
           <div id="accountList" class="account-list"></div>
         </article>
       </section>
@@ -206,9 +209,9 @@
 
     </main>
 
-    <dialog id="holdingDialog" class="dialog"><form id="holdingForm" method="dialog"><div class="dialog-head"><h2>보유종목 직접 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><div class="form-grid"><label>증권사<input name="broker" value="기타 증권사" required /></label><label>계좌 이름<input name="account_name" value="내 주식 계좌" required /></label><label>종목 코드<input name="code" placeholder="005930 또는 AAPL" required /></label><label>종목명<input name="name" required /></label><label>보유 수량<input name="quantity" type="number" min="0.000001" step="any" required /></label><label>평균매입가<input name="avg_price" type="number" min="0" step="any" required /></label><label>현재가<input name="current_price" type="number" min="0" step="any" required /></label><label>통화<select name="currency"><option>KRW</option><option>USD</option><option>JPY</option><option>HKD</option><option>CNY</option></select></label><label>거래소<input name="market" placeholder="KRX, NAS, NYS 등" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
+    <dialog id="holdingDialog" class="dialog"><form id="holdingForm" method="dialog"><div class="dialog-head"><h2>보유종목 직접 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><div class="form-grid"><label>증권사<input name="broker" value="기타 증권사" required /></label><label>계좌 이름<input name="account_name" value="내 주식 계좌" required /></label><label>종목 코드<input name="code" placeholder="005930 또는 AAPL" required /></label><label>종목명<input name="name" required /></label><label>보유 수량<input name="quantity" type="number" min="0.000001" step="any" required /></label><label>평균매입가<input name="avg_price" type="number" min="0" step="any" required /></label><label>현재가<input name="current_price" type="number" min="0" step="any" required /></label><label>통화<select name="currency"><option>KRW</option><option>USD</option><option>JPY</option><option>HKD</option><option>CNY</option></select></label><label>거래소<input name="market" placeholder="KRX, NAS, NYS 등" /></label><label>소유자<select name="owner"><option value="모두">모두</option><option value="아빠">아빠</option><option value="엄마">엄마</option><option value="자녀">자녀</option></select></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
     <dialog id="importDialog" class="dialog"><form id="importForm" method="dialog"><div class="dialog-head"><h2>증권사 잔고 파일 가져오기</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">CSV 또는 XLSX 파일의 첫 줄에 종목코드와 수량을 포함해 주세요.</p><label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label><label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">가져오기</button></div></form></dialog>
-    <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
+    <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label><label>구성원<select name="owner"><option value="모두">모두</option><option value="아빠">아빠</option><option value="엄마">엄마</option><option value="자녀">자녀</option></select></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
 
     <!-- 계좌 예수금 직접 입력/수정 다이얼로그 (원화 & 달러 통합) -->
     <dialog id="accountCashDialog" class="dialog">
@@ -248,6 +251,14 @@
           <label>계좌 이름
             <input name="name" placeholder="종합계좌, ISA, IRP 등" required />
           </label>
+          <label>소유자
+            <select name="owner">
+              <option value="모두">모두</option>
+              <option value="아빠">아빠</option>
+              <option value="엄마">엄마</option>
+              <option value="자녀">자녀</option>
+            </select>
+          </label>
         </div>
         <div class="dialog-actions">
           <button class="button secondary" value="cancel" type="button">취소</button>
@@ -255,9 +266,65 @@
         </div>
       </form>
     </dialog>
+    <dialog id="accountAddDialog" class="dialog">
+      <form id="accountAddForm" method="dialog">
+        <div class="dialog-head">
+          <h2>계좌 추가</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <div class="form-grid">
+          <label>증권사<input name="broker" placeholder="KB증권, 토스증권, 나무증권 등" required /></label>
+          <label>계좌 이름<input name="account_name" placeholder="종합계좌, ISA, IRP 등" required /></label>
+          <label>소유자<select name="owner">
+            <option value="모두">모두</option>
+            <option value="아빠">아빠</option>
+            <option value="엄마">엄마</option>
+            <option value="자녀">자녀</option>
+          </select></label>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel">취소</button>
+          <button class="button primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
 
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/wealth.js?v=20260821-5"></script>
+    <div class="bottom-actions" style="text-align:center; margin-top:20px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center;">
+  <button id="exportButton" class="button secondary" type="button">💾 데이터 저장하기</button>
+  <button id="importBackupBtn" class="button secondary" type="button">📂 데이터 불러오기</button>
+  <button id="clearButton" class="button text danger" type="button">로컬 데이터 지우기</button>
+  <input id="importBackupFile" type="file" accept=".json" style="display:none;" />
+</div>
+
+    <!-- 가족 구성원 관리 다이얼로그 -->
+    <dialog id="familyManagerDialog" class="dialog">
+      <div class="dialog-head">
+        <h2>가족 구성원 관리</h2>
+        <button value="cancel" class="close" aria-label="닫기">×</button>
+      </div>
+      <p class="dialog-description">구성원을 추가하거나 이름을 변경·삭제할 수 있습니다. "모두"는 항상 유지됩니다.</p>
+      <div id="familyMemberList" style="display:flex;flex-direction:column;gap:8px;margin:12px 0;min-height:60px;"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input id="newMemberName" type="text" placeholder="새 구성원 이름" style="flex:1;" maxlength="20" />
+        <button id="addMemberBtn" class="button primary compact" type="button">추가</button>
+      </div>
+      <div class="dialog-actions">
+        <button class="button secondary" value="cancel" type="button">닫기</button>
+      </div>
+    </dialog>
+
+<script src="/static/wealth.js?v=20260822-9"></script>
+  
+
   </body>
 </html>
+
+
+
+
+
+
+
+
