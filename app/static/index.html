@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260822-5" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260822-11" />
   </head>
   <body>
     <main class="shell">
@@ -22,7 +22,7 @@
         <div class="topbar-brand-wrap">
           <a class="brand" href="/" aria-label="시작 화면">W</a>
           <div class="title"><p>Human Index INVESTMENT</p><h1>인간지표의 투자 대시보드</h1></div>
-          <div class="family-tabs topbar-family-tabs" id="topbarFamilyTabs" style="display:flex;gap:0.3rem;align-items:center;flex-wrap:wrap;">
+          <div class="family-tabs topbar-family-tabs" id="topbarFamilyTabs">
             <button type="button" class="family-tab active" data-owner="모두">모두</button>
           </div>
         </div>
@@ -291,12 +291,14 @@
 
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <div class="bottom-actions" style="text-align:center; margin-top:20px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center;">
-  <button id="exportButton" class="button secondary" type="button">💾 데이터 저장하기</button>
-  <button id="importBackupBtn" class="button secondary" type="button">📂 데이터 불러오기</button>
-  <button id="clearButton" class="button text danger" type="button">로컬 데이터 지우기</button>
+    <div class="bottom-actions" style="text-align:center; margin-top:20px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; padding-bottom:24px;">
+  <button id="exportButton" class="button secondary" type="button" style="font-size:14px;">💾 데이터 저장하기</button>
+  <button id="importBackupBtn" class="button secondary" type="button" style="font-size:14px;">📂 데이터 불러오기</button>
+  <button id="clearButton" class="button secondary danger" type="button" style="font-size:14px;">🗑️ 데이터 지우기</button>
+
   <input id="importBackupFile" type="file" accept=".json" style="display:none;" />
 </div>
+
 
     <!-- 가족 구성원 관리 다이얼로그 -->
     <dialog id="familyManagerDialog" class="dialog">
@@ -315,11 +317,13 @@
       </div>
     </dialog>
 
-<script src="/static/wealth.js?v=20260822-9"></script>
+<script src="/static/wealth.js?v=20260822-11"></script>
   
 
   </body>
 </html>
+
+
 
 
 

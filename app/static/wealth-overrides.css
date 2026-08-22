@@ -750,17 +750,79 @@
   outline: none;
 }
 
-/* ── 탑바 가족 탭 (더 컴팩트하게) ─────────────────────────────────────────── */
-.topbar-family-tabs {
-  margin-left: 12px;
-}
-.topbar-family-tabs .family-tab {
-  padding: 3px 10px;
-  font-size: 12px;
-}
+/* ── 탑바 가족 탭 반응형 레이아웃 ───────────────────────────────────────── */
 .topbar-brand-wrap {
   display: flex;
   align-items: center;
-  gap: 0;
-  flex-wrap: wrap;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topbar-family-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto; /* 기본: 우측 정렬 */
+}
+
+.topbar-family-tabs .family-tab {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 7px;
+  text-align: center;
+}
+
+/* 태블릿 및 넓은 모바일 (가로 화면, 601px ~ 1080px) */
+@media (min-width: 601px) and (max-width: 1080px) {
+  .topbar-brand-wrap {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .topbar-family-tabs {
+    margin-left: auto;
+    justify-content: flex-end;
+  }
+  .topbar-family-tabs .family-tab {
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+}
+
+/* 모바일 좁은 화면 (세로 화면, 600px 이하) */
+@media (max-width: 600px) {
+  .topbar-brand-wrap {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .topbar-family-tabs {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 4px;
+    display: flex;
+    gap: 6px;
+    justify-content: stretch;
+  }
+  .topbar-family-tabs .family-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 4px;
+    font-size: 13px;
+    text-align: center;
+  }
+}
+
+/* ── 하단 액션 버튼 – secondary + danger 조합 ──────────────────────────────── */
+.button.secondary.danger {
+  color: var(--color-danger, #e53e3e);
+  border-color: var(--color-danger, #e53e3e);
+}
+.button.secondary.danger:hover {
+  background: var(--color-danger, #e53e3e);
+  color: #fff;
+  border-color: var(--color-danger, #e53e3e);
 }
