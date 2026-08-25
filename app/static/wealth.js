@@ -1592,6 +1592,27 @@ function renderFamilyTabs(members) {
 
 // ── 전역 클릭 이벤트 위임 ───────────────────────────────────────────────────
 document.addEventListener('click', async (e) => {
+  // 🔽 섹션 접기 / 펼치기 버튼
+  const collapseBtn = e.target.closest('.section-collapse-btn');
+  if (collapseBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof toggleSection === 'function') {
+      toggleSection(collapseBtn.dataset.section);
+    }
+    return;
+  }
+
+  // 🎨 테마 변경 탭 버튼
+  const themeTab = e.target.closest('#themeSwitcherTabs .theme-tab');
+  if (themeTab) {
+    e.preventDefault();
+    if (typeof setAppTheme === 'function') {
+      setAppTheme(themeTab.dataset.theme);
+    }
+    return;
+  }
+
   // 가족 탭 선택
   const accountsTab = e.target.closest('#familyTabs .family-tab');
   if (accountsTab) { selectOwner(accountsTab.dataset.owner); return; }
@@ -2892,20 +2913,20 @@ function renderActualDividendDetail(month = null) {
   const rowsHtml = items.map(item => {
     const isUsd = item.currency === 'USD';
     const origAmt = isUsd ? `$${number(item.amount, 2)}` : money(item.amount_krw);
-    const fxInfo = isUsd ? `<br><small style="color:#8da0c7;">환율 ${number(item.fx_rate, 1)}원</small>` : '';
+    const fxInfo = isUsd ? `<br><small class="td-fx-info">환율 ${number(item.fx_rate, 1)}원</small>` : '';
 
     return `
       <tr>
-        <td class="center" style="color:#cbd5e1;white-space:nowrap;">${html(item.date)}</td>
-        <td class="center"><span style="background:rgba(167,139,250,0.18);color:#c084fc;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;">${html(item.owner || '모두')}</span></td>
-        <td>
-          <strong style="color:#f8fafc;">${html(item.name || item.code)}</strong>
-          <div style="font-size:11px;color:#8da0c7;">${html(item.code || '')}</div>
+        <td class="center td-date">${html(item.date)}</td>
+        <td class="center"><span class="td-owner-badge">${html(item.owner || '모두')}</span></td>
+        <td class="td-stock-col">
+          <strong class="td-stock-name">${html(item.name || item.code)}</strong>
+          <div class="td-stock-code">${html(item.code || '')}</div>
         </td>
-        <td class="center"><span style="color:#94a3b8;font-size:11px;font-weight:600;">${html(item.currency || 'KRW')}</span></td>
-        <td class="num" style="color:#e2e8f0;">${origAmt}${fxInfo}</td>
-        <td class="num" style="color:#f43f5e;font-size:13.5px;font-weight:700;">${money(item.amount_krw)}</td>
-        <td style="color:#94a3b8;font-size:11.5px;">${html(item.memo || '-')}</td>
+        <td class="center"><span class="td-currency">${html(item.currency || 'KRW')}</span></td>
+        <td class="num td-orig-amt">${origAmt}${fxInfo}</td>
+        <td class="num td-krw-amt pnl-gain-val" style="font-size:13.5px;font-weight:700;">${money(item.amount_krw)}</td>
+        <td class="td-memo">${html(item.memo || '-')}</td>
         <td class="center" style="white-space:nowrap;">
           <div class="account-row-actions" style="justify-content:center;">
             <button class="account-action-button edit-actual-div-btn" data-id="${item.id}" title="배당 수정" type="button">✎</button>
@@ -3067,9 +3088,6 @@ function renderRealizedPnl(data) {
   if (summaryPnlEl) {
     summaryPnlEl.textContent = `${totalPnl > 0 ? '+' : ''}${money(totalPnl)}`;
     summaryPnlEl.className = `${totalPnl > 0 ? 'gain up' : (totalPnl < 0 ? 'loss down' : '')}`;
-    if (totalPnl > 0) summaryPnlEl.style.color = '#f43f5e';
-    else if (totalPnl < 0) summaryPnlEl.style.color = '#38bdf8';
-    else summaryPnlEl.style.color = '#cbd5e1';
   }
   $("#summaryRealizedPnlSub") && ($("#summaryRealizedPnlSub").textContent = `승률 ${number(winRate, 1)}% · 총 ${recordCount}건 실현`);
 
@@ -3204,19 +3222,19 @@ function renderPnlMonthlyDetail(month = null) {
 
     return `
       <tr>
-        <td class="center" style="color:#cbd5e1;white-space:nowrap;">${html(item.date)}</td>
-        <td class="center"><span style="background:rgba(167,139,250,0.18);color:#c084fc;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;">${html(item.owner || '모두')}</span></td>
-        <td>
-          <strong style="color:#f8fafc;">${html(item.name || item.code)}</strong>
-          <div style="font-size:11px;color:#8da0c7;">${html(item.code || '')}</div>
+        <td class="center td-date">${html(item.date)}</td>
+        <td class="center"><span class="td-owner-badge">${html(item.owner || '모두')}</span></td>
+        <td class="td-stock-col">
+          <strong class="td-stock-name">${html(item.name || item.code)}</strong>
+          <div class="td-stock-code">${html(item.code || '')}</div>
         </td>
         <td class="center">
-          ${item.is_ipo ? '<span style="background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;">📦 공모주</span>' : '<span style="color:#94a3b8;font-size:11px;">일반거래</span>'}
+          ${item.is_ipo ? '<span class="td-ipo-badge">📦 공모주</span>' : '<span class="td-normal-badge">일반거래</span>'}
         </td>
-        <td class="center"><span style="color:#94a3b8;font-size:11px;font-weight:600;">${html(item.currency || 'KRW')}</span></td>
-        <td class="num" style="color:#e2e8f0;">${isUsd ? origText : sign + money(item.pnl_krw)}${fxInfo}</td>
+        <td class="center"><span class="td-currency">${html(item.currency || 'KRW')}</span></td>
+        <td class="num td-orig-amt">${isUsd ? origText : sign + money(item.pnl_krw)}${fxInfo}</td>
         <td class="num ${colorClass}" style="font-size:13.5px;font-weight:700;">${sign}${money(item.pnl_krw)}</td>
-        <td style="color:#94a3b8;font-size:11.5px;">${html(item.memo || '-')}</td>
+        <td class="td-memo">${html(item.memo || '-')}</td>
         <td class="center" style="white-space:nowrap;">
           <div class="account-row-actions" style="justify-content:center;">
             <button class="account-action-button edit-pnl-btn" data-id="${item.id}" title="손익 수정" type="button">✎</button>
@@ -3456,8 +3474,102 @@ document.getElementById("pnlYearSelect")?.addEventListener("change", (e) => {
   loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
 });
 
+// ── 화면 테마 관리 (Theme Switcher) ────────────────────────────────────────
+function setAppTheme(theme) {
+  const validThemes = ['purple', 'oled', 'white'];
+  if (!validThemes.includes(theme)) theme = 'purple';
+
+  if (theme === 'purple') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+
+  document.querySelectorAll('#themeSwitcherTabs .theme-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.theme === theme);
+  });
+
+  try {
+    localStorage.setItem('app_theme', theme);
+  } catch (e) {}
+}
+
+function initAppTheme() {
+  let savedTheme = 'purple';
+  try {
+    savedTheme = localStorage.getItem('app_theme') || 'purple';
+  } catch (e) {}
+  setAppTheme(savedTheme);
+}
+
+// ── 섹션 접기 / 펼치기 관리 (Accordion / Collapse) ───────────────────────────
+const SECTION_MAP = {
+  summary: '#summaryPanel',
+  allocation: '#allocationPanel',
+  records: '#recordsPanel',
+  heatmap: '#assetHeatmapPanel',
+  dividend: '#dividendPanel',
+  pnl: '#realizedPnlPanel',
+  market: '#marketPanel',
+  accounts: '#accountsPanel',
+  holdings: '#holdingsPanel'
+};
+
+function getCollapsedSections() {
+  try {
+    return JSON.parse(localStorage.getItem('collapsed_sections') || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCollapsedSections(list) {
+  try {
+    localStorage.setItem('collapsed_sections', JSON.stringify(list));
+  } catch (e) {}
+}
+
+function toggleSection(sectionKey) {
+  if (!sectionKey) return;
+  let list = getCollapsedSections();
+  const isNowCollapsed = list.includes(sectionKey);
+
+  if (isNowCollapsed) {
+    list = list.filter(k => k !== sectionKey);
+  } else {
+    list.push(sectionKey);
+  }
+  saveCollapsedSections(list);
+
+  applySectionCollapsedState(sectionKey, !isNowCollapsed);
+}
+
+function applySectionCollapsedState(sectionKey, isCollapsed) {
+  const selector = SECTION_MAP[sectionKey];
+  const panel = selector ? document.querySelector(selector) : null;
+  const btn = document.querySelector(`.section-collapse-btn[data-section="${sectionKey}"]`);
+
+  if (btn) {
+    btn.classList.toggle('is-collapsed', isCollapsed);
+    btn.textContent = isCollapsed ? '▶' : '▼';
+  }
+
+  if (panel) {
+    panel.classList.toggle('is-collapsed', isCollapsed);
+  }
+}
+
+function initCollapsedSections() {
+  const list = getCollapsedSections();
+  list.forEach(key => {
+    applySectionCollapsedState(key, true);
+  });
+}
+
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
 async function bootstrap() {
+  initAppTheme();
+  initCollapsedSections();
   try { await loadFamilyMembers(); } catch (e) {}
   try { await loadDashboard(); } catch (e) { toast(e.message || "대시보드를 불러오지 못했습니다.", true); }
   try { await loadMarkets(); } catch (e) {}

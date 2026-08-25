@@ -23,6 +23,8 @@ Thumbs.db
 *.xls
 *.xlsx
 !샘플_타증권사_보유종목.xlsx
+!샘플_매도실현손익.xlsx
+!샘플_배당.xlsx
 *.csv
 
 node_modules/

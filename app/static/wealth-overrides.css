@@ -17,6 +17,17 @@
   height: 100%;
 }
 
+/* ── 주요 섹션 카드 패널 간 일관된 여백 (16px) ── */
+.records-panel,
+.heatmap-panel,
+.dividend-panel,
+.pnl-panel,
+.market-panel,
+#accountsPanel,
+.holdings-panel {
+  margin-top: 16px !important;
+}
+
 .summary-item-list {
   display: flex;
   flex-direction: column;
@@ -1468,4 +1479,610 @@ dialog.dialog .dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* ── 섹션 접기 / 펼치기 (Accordion / Collapse) ── */
+.section-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--muted, #94a3b8);
+  font-size: 11px;
+  cursor: pointer;
+  margin-left: 8px;
+  vertical-align: middle;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+  user-select: none;
+}
+
+.section-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.section-collapse-btn.is-collapsed {
+  transform: rotate(-90deg);
+  background: rgba(147, 51, 234, 0.24);
+  color: #c084fc;
+}
+
+.panel.is-collapsed {
+  padding-bottom: 14px !important;
+}
+
+.panel.is-collapsed .panel-body,
+.panel.is-collapsed .records-grid,
+.panel.is-collapsed .heatmap-body,
+.panel.is-collapsed .dividend-body,
+.panel.is-collapsed .summary-item-list,
+.panel.is-collapsed #sectorDonutWrap,
+.panel.is-collapsed #sectorDetailToggleWrap,
+.panel.is-collapsed #classificationList,
+.panel.is-collapsed .table-wrap,
+.panel.is-collapsed #accountList,
+.panel.is-collapsed #marketGrid {
+  display: none !important;
+}
+
+.panel.is-collapsed .heatmap-controls-row,
+.panel.is-collapsed .heatmap-period-tabs,
+.panel.is-collapsed .heatmap-selects-wrap,
+.panel.is-collapsed .toolbar,
+.panel.is-collapsed .family-tabs {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ── 화면 테마 설정 (Theme Switcher) ── */
+.theme-switcher-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 32px auto 14px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  width: fit-content;
+  max-width: 95%;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+
+.theme-switcher-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-switcher-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.theme-tab {
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.theme-tab.active {
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  color: #ffffff !important;
+  border-color: #a855f7;
+  box-shadow: 0 3px 14px rgba(124, 58, 237, 0.4);
+}
+
+/* ── 테마별 변수 및 룩앤필 ── */
+/* 1. OLED BLACK (클래식 다크) */
+[data-theme="oled"] {
+  --bg: #000000;
+  --panel: #060608;
+  --panel-2: #0d0d11;
+  --line: #181822;
+  --text: #f1f5f9;
+  --muted: #808b9e;
+}
+
+[data-theme="oled"] body {
+  background: #000000 !important;
+}
+
+[data-theme="oled"] .market-card,
+[data-theme="oled"] .summary-card,
+[data-theme="oled"] .panel,
+[data-theme="oled"] .record-chart-wrap,
+[data-theme="oled"] .record-chart-meta div,
+[data-theme="oled"] .record-side-summary,
+[data-theme="oled"] .record-row,
+[data-theme="oled"] .div-summary-card,
+[data-theme="oled"] .dividend-chart-section,
+[data-theme="oled"] .broker-group,
+[data-theme="oled"] .div-item-card,
+[data-theme="oled"] .dialog,
+[data-theme="oled"] .theme-switcher-wrap {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.85);
+}
+
+[data-theme="oled"] .heatmap-period-tabs,
+[data-theme="oled"] .family-tabs {
+  background: #0a0a0f !important;
+  border-color: #1a1a26 !important;
+}
+
+[data-theme="oled"] .theme-tab.active {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 3px 14px rgba(37, 99, 235, 0.45);
+}
+
+/* 2. CLEAN WHITE (모던 화이트 라이트 모드) */
+[data-theme="white"] {
+  --bg: #f3f5f9;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --line: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+}
+
+[data-theme="white"] body {
+  background: #f3f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* 메인 패널 및 컨테이너 */
+[data-theme="white"] .summary-card,
+[data-theme="white"] .panel,
+[data-theme="white"] .dialog,
+[data-theme="white"] .theme-switcher-wrap {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05) !important;
+  color: #0f172a !important;
+}
+
+/* 주요지수 카드 (서브 카드 박스) */
+[data-theme="white"] .market-card {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme="white"] .market-card .symbol {
+  color: #6366f1 !important;
+}
+
+[data-theme="white"] .market-card p {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .market-card small {
+  color: #64748b !important;
+}
+
+/* 탭 캡슐 컨테이너 바 */
+[data-theme="white"] .heatmap-period-tabs,
+[data-theme="white"] .family-tabs {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="white"] .heatmap-tab,
+[data-theme="white"] .family-tab {
+  color: #475569 !important;
+  background: transparent !important;
+}
+
+[data-theme="white"] .heatmap-tab:hover,
+[data-theme="white"] .family-tab:hover {
+  background: rgba(255, 255, 255, 0.7) !important;
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .heatmap-tab.active,
+[data-theme="white"] .family-tab.active {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3) !important;
+}
+
+/* 계좌 통합 현황 (증권사 그룹 & 계좌 행) */
+[data-theme="white"] .broker-group {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme="white"] .broker-head {
+  border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .broker-head strong {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .broker-head span {
+  background: #edf2f7 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+[data-theme="white"] .account-row {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .account-row-info strong {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .account-row-info span {
+  color: #64748b !important;
+}
+
+/* 배당금 & 실현손익 하단 개별 종목 카드 */
+[data-theme="white"] .div-item-card {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme="white"] .div-item-card:hover {
+  background: #ffffff !important;
+  border-color: #818cf8 !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.12) !important;
+}
+
+[data-theme="white"] .div-item-info strong,
+[data-theme="white"] .div-item-val strong {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .div-item-info span,
+[data-theme="white"] .div-item-val small {
+  color: #64748b !important;
+}
+
+/* 자산기록 섹션 카드 및 차트 */
+[data-theme="white"] .record-chart-wrap {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .record-chart-meta div,
+[data-theme="white"] .record-side-summary,
+[data-theme="white"] .record-row {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .record-chart-meta strong,
+[data-theme="white"] .record-side-summary strong,
+[data-theme="white"] .record-row-main strong,
+[data-theme="white"] .record-row-values b {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .record-chart-meta span,
+[data-theme="white"] .record-chart-meta small,
+[data-theme="white"] .record-side-summary span,
+[data-theme="white"] .record-side-summary small,
+[data-theme="white"] .record-row-main span,
+[data-theme="white"] .record-row small {
+  color: #64748b !important;
+}
+
+/* 배당 & 실현손익 섹션 상단 4대 요약 카드 및 차트 */
+[data-theme="white"] .div-summary-card,
+[data-theme="white"] .dividend-chart-section {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .div-card-label,
+[data-theme="white"] .div-summary-card small,
+[data-theme="white"] .dividend-chart-header small {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .div-card-val:not(.gain):not(.loss) {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .div-detail-header,
+[data-theme="white"] .dividend-chart-header span {
+  color: #1e293b !important;
+}
+
+/* 핵심 요약 & 분류 행 */
+[data-theme="white"] .summary-row {
+  border-bottom-color: #f1f5f9 !important;
+}
+
+[data-theme="white"] .summary-row.featured {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), transparent) !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .summary-row-label strong,
+[data-theme="white"] .summary-row-val strong,
+[data-theme="white"] .classification-title strong,
+[data-theme="white"] .classification-value b,
+[data-theme="white"] h1, [data-theme="white"] h2, [data-theme="white"] h3,
+[data-theme="white"] strong:not(.tile-name):not(.heatmap-tile-inner *):not(.heatmap-tooltip *):not(.heatmap-stock-card *),
+[data-theme="white"] th, [data-theme="white"] td {
+  color: #0f172a;
+}
+
+[data-theme="white"] .classification-row {
+  border-bottom-color: #f1f5f9 !important;
+}
+
+[data-theme="white"] .classification-title span,
+[data-theme="white"] .classification-value span {
+  color: #64748b !important;
+}
+
+/* 계좌 액션 버튼 (화이트 테마) */
+[data-theme="white"] .account-action-button,
+[data-theme="white"] .account-row-actions .mini-delete-button {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+[data-theme="white"] .account-action-button:hover {
+  background: #e2e8f0 !important;
+  border-color: #818cf8 !important;
+  color: #1e1b4b !important;
+  transform: translateY(-1px);
+}
+
+[data-theme="white"] .account-row-actions .mini-delete-button:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #ef4444 !important;
+  transform: translateY(-1px);
+}
+
+/* 버튼, 탭, 입력창 컨트롤 */
+[data-theme="white"] .button.secondary,
+[data-theme="white"] .heatmap-select,
+[data-theme="white"] .toolbar input,
+[data-theme="white"] select,
+[data-theme="white"] input {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .topbar {
+  border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .detail-table-wrap {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme="white"] .detail-table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .detail-table td {
+  border-bottom-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  background: transparent !important;
+}
+
+[data-theme="white"] .detail-table tr:hover td {
+  background: #f8fafc !important;
+}
+
+[data-theme="white"] .td-stock-name {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .td-stock-code,
+[data-theme="white"] .td-date,
+[data-theme="white"] .td-currency,
+[data-theme="white"] .td-orig-amt,
+[data-theme="white"] .td-fx-info,
+[data-theme="white"] .td-memo,
+[data-theme="white"] .td-normal-badge,
+[data-theme="white"] .holding-name-cell small {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .holding-account-detail,
+[data-theme="white"] .holding-accounts {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .stock-chart-btn {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+
+[data-theme="white"] .stock-chart-btn:hover {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.3) !important;
+}
+
+[data-theme="white"] .mini-edit-button {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+[data-theme="white"] .mini-edit-button:hover {
+  background: #e2e8f0 !important;
+  color: #1e1b4b !important;
+}
+
+[data-theme="white"] .mini-edit-button.delete-button:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #ef4444 !important;
+}
+
+[data-theme="white"] .td-owner-badge {
+  background: rgba(124, 58, 237, 0.1) !important;
+  color: #6d28d9 !important;
+  border: 1px solid rgba(124, 58, 237, 0.2) !important;
+}
+
+[data-theme="oled"] .detail-table-wrap {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+}
+
+[data-theme="oled"] .detail-table th {
+  background: #0d0d12 !important;
+  color: #808b9e !important;
+  border-bottom-color: #1a1a24 !important;
+}
+
+[data-theme="oled"] .detail-table td {
+  border-bottom-color: #14141c !important;
+  color: #f1f5f9 !important;
+  background: transparent !important;
+}
+
+[data-theme="oled"] .detail-table tr:hover td {
+  background: #12121a !important;
+}
+
+[data-theme="oled"] .stock-chart-btn {
+  background: #0d0d12 !important;
+  border-color: #1a1a26 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="oled"] .holding-account-detail {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="white"] .section-collapse-btn {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+[data-theme="white"] .empty strong {
+  color: #334155 !important;
+}
+
+[data-theme="white"] .empty p {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .heatmap-legend {
+  color: #475569 !important;
+}
+
+[data-theme="white"] .legend-text,
+[data-theme="white"] .legend-cap,
+[data-theme="white"] .heatmap-tip-note {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .card-icon.mini {
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: #4f46e5 !important;
+}
+
+/* ── 자산 히트맵 타일 & 툴팁 글자색 (모든 테마에서 반드시 흰색 보장) ── */
+.heatmap-tile,
+.heatmap-tile *,
+.heatmap-tile-inner,
+.heatmap-tile-inner *,
+.tile-name,
+.tile-rate,
+.tile-val,
+.heatmap-stock-card,
+.heatmap-stock-card *,
+.heatmap-stock-card strong,
+.heatmap-stock-card span,
+.heatmap-stock-card small,
+[data-theme="white"] .heatmap-tile,
+[data-theme="white"] .heatmap-tile *,
+[data-theme="white"] .tile-name,
+[data-theme="white"] .tile-rate,
+[data-theme="white"] .heatmap-stock-card,
+[data-theme="white"] .heatmap-stock-card * {
+  color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9) !important;
+}
+
+/* 히트맵 툴팁 텍스트 (모든 테마에서 선명한 다크 플로팅 박스 & 흰색 글자 보장) */
+.heatmap-tooltip,
+[data-theme="white"] .heatmap-tooltip,
+[data-theme="oled"] .heatmap-tooltip {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55) !important;
+  color: #f8fafc !important;
+}
+
+.heatmap-tooltip strong,
+.heatmap-tooltip span,
+.heatmap-tooltip-title strong,
+.heatmap-tooltip-title span,
+[data-theme="white"] .heatmap-tooltip strong,
+[data-theme="white"] .heatmap-tooltip-title strong {
+  color: #ffffff !important;
+}
+
+.heatmap-tooltip-title span,
+[data-theme="white"] .heatmap-tooltip-title span {
+  color: #94a3b8 !important;
+}
+
+.heatmap-tooltip .label,
+[data-theme="white"] .heatmap-tooltip .label {
+  color: #94a3b8 !important;
+}
+
+.heatmap-tooltip .val,
+[data-theme="white"] .heatmap-tooltip .val {
+  color: #f8fafc !important;
 }
