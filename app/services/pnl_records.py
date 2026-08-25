@@ -1,0 +1,319 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+import re
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+import openpyxl
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = ROOT_DIR / "data"
+PNL_FILE = DATA_DIR / "realized_pnl_records.json"
+
+
+def _ensure_pnl_file() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not PNL_FILE.exists():
+        initial = {
+            "records": [],
+            "updated_at": datetime.now().astimezone().isoformat(),
+        }
+        with open(PNL_FILE, "w", encoding="utf-8") as f:
+            json.dump(initial, f, ensure_ascii=False, indent=2)
+
+
+def read_pnl_records() -> list[dict[str, Any]]:
+    _ensure_pnl_file()
+    try:
+        with open(PNL_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("records", [])
+    except Exception:
+        return []
+
+
+def write_pnl_records(records: list[dict[str, Any]]) -> None:
+    _ensure_pnl_file()
+    payload = {
+        "records": records,
+        "updated_at": datetime.now().astimezone().isoformat(),
+    }
+    with open(PNL_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
+    records = read_pnl_records()
+    now_iso = datetime.now().astimezone().isoformat()
+    
+    currency = str(payload.get("currency", "KRW")).upper()
+    pnl = float(payload.get("pnl", 0.0))
+    fx_rate = float(payload.get("fx_rate", 1385.0)) if currency == "USD" else 1.0
+    pnl_krw = float(payload.get("pnl_krw", 0.0))
+    if pnl_krw == 0.0 and pnl != 0.0:
+        pnl_krw = round(pnl * fx_rate, 0) if currency == "USD" else round(pnl, 0)
+
+    is_ipo = bool(payload.get("is_ipo", False))
+
+    record = {
+        "id": str(uuid.uuid4()),
+        "date": str(payload.get("date", datetime.now().strftime("%Y-%m-%d"))),
+        "code": str(payload.get("code", "")).strip(),
+        "name": str(payload.get("name", "")).strip(),
+        "currency": currency,
+        "pnl": pnl,
+        "fx_rate": fx_rate,
+        "pnl_krw": pnl_krw,
+        "is_ipo": is_ipo,
+        "owner": str(payload.get("owner", "모두")).strip(),
+        "broker": str(payload.get("broker", "")).strip(),
+        "account_name": str(payload.get("account_name", "")).strip(),
+        "memo": str(payload.get("memo", "")).strip(),
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    records.append(record)
+    write_pnl_records(records)
+    return record
+
+
+def update_pnl_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    records = read_pnl_records()
+    target = None
+    for r in records:
+        if r.get("id") == record_id:
+            target = r
+            break
+    if not target:
+        return None
+
+    currency = str(payload.get("currency", target.get("currency", "KRW"))).upper()
+    pnl = float(payload.get("pnl", target.get("pnl", 0.0)))
+    fx_rate = float(payload.get("fx_rate", target.get("fx_rate", 1385.0))) if currency == "USD" else 1.0
+    pnl_krw = float(payload.get("pnl_krw", 0.0))
+    if pnl_krw == 0.0 and pnl != 0.0:
+        pnl_krw = round(pnl * fx_rate, 0) if currency == "USD" else round(pnl, 0)
+
+    target["date"] = str(payload.get("date", target.get("date")))
+    target["code"] = str(payload.get("code", target.get("code"))).strip()
+    target["name"] = str(payload.get("name", target.get("name"))).strip()
+    target["currency"] = currency
+    target["pnl"] = pnl
+    target["fx_rate"] = fx_rate
+    target["pnl_krw"] = pnl_krw
+    if "is_ipo" in payload:
+        target["is_ipo"] = bool(payload.get("is_ipo"))
+    target["owner"] = str(payload.get("owner", target.get("owner", "모두"))).strip()
+    target["broker"] = str(payload.get("broker", target.get("broker", ""))).strip()
+    target["account_name"] = str(payload.get("account_name", target.get("account_name", ""))).strip()
+    target["memo"] = str(payload.get("memo", target.get("memo", ""))).strip()
+    target["updated_at"] = datetime.now().astimezone().isoformat()
+
+    write_pnl_records(records)
+    return target
+
+
+def delete_pnl_record(record_id: str) -> bool:
+    records = read_pnl_records()
+    initial_len = len(records)
+    records = [r for r in records if r.get("id") != record_id]
+    if len(records) < initial_len:
+        write_pnl_records(records)
+        return True
+    return False
+
+
+def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_type: str = "all") -> dict[str, Any]:
+    records = read_pnl_records()
+    
+    # 가용 연도 목록 추출
+    available_years = sorted(list({str(r.get("date", ""))[:4] for r in records if len(str(r.get("date", ""))) >= 4}), reverse=True)
+    if not available_years:
+        available_years = [str(datetime.now().year)]
+
+    filtered = []
+    for r in records:
+        if owner != "모두" and r.get("owner", "모두") != owner:
+            continue
+        r_date = str(r.get("date", ""))
+        if year and str(year) != "all" and str(year) != "전체":
+            if not r_date.startswith(str(year)):
+                continue
+        # 공모주 필터링 (all: 전체, ipo: 공모주만)
+        if trade_type == "ipo" and not r.get("is_ipo", False):
+            continue
+        filtered.append(r)
+
+    total_pnl_krw = sum(float(r.get("pnl_krw", 0.0)) for r in filtered)
+    
+    win_records = [r for r in filtered if float(r.get("pnl_krw", 0.0)) > 0]
+    loss_records = [r for r in filtered if float(r.get("pnl_krw", 0.0)) < 0]
+    
+    total_win_krw = sum(float(r.get("pnl_krw", 0.0)) for r in win_records)
+    total_loss_krw = sum(float(r.get("pnl_krw", 0.0)) for r in loss_records)
+    win_rate = (len(win_records) / len(filtered) * 100) if filtered else 0.0
+
+    monthly_schedule = {m: {"month": m, "total_krw": 0.0, "win_krw": 0.0, "loss_krw": 0.0, "items": []} for m in range(1, 13)}
+    
+    for r in filtered:
+        r_date = str(r.get("date", ""))
+        try:
+            m = int(r_date.split("-")[1])
+        except (IndexError, ValueError):
+            m = 1
+        if 1 <= m <= 12:
+            amt_krw = float(r.get("pnl_krw", 0.0))
+            monthly_schedule[m]["total_krw"] += amt_krw
+            if amt_krw > 0:
+                monthly_schedule[m]["win_krw"] += amt_krw
+            elif amt_krw < 0:
+                monthly_schedule[m]["loss_krw"] += amt_krw
+            monthly_schedule[m]["items"].append(r)
+
+    monthly_list = []
+    for m in range(1, 13):
+        item = monthly_schedule[m]
+        item["total_krw"] = round(item["total_krw"], 0)
+        item["win_krw"] = round(item["win_krw"], 0)
+        item["loss_krw"] = round(item["loss_krw"], 0)
+        item["items"].sort(key=lambda x: str(x.get("date", "")), reverse=True)
+        monthly_list.append(item)
+
+    filtered_sorted = sorted(filtered, key=lambda x: str(x.get("date", "")), reverse=True)
+
+    return {
+        "year": str(year) if year else str(datetime.now().year),
+        "trade_type": trade_type,
+        "available_years": available_years,
+        "total_pnl_krw": round(total_pnl_krw, 0),
+        "total_win_krw": round(total_win_krw, 0),
+        "win_count": len(win_records),
+        "total_loss_krw": round(total_loss_krw, 0),
+        "loss_count": len(loss_records),
+        "win_rate": round(win_rate, 1),
+        "record_count": len(filtered),
+        "monthly_schedule": monthly_list,
+        "records": filtered_sorted,
+    }
+
+
+def _clean_str(val: Any) -> str:
+    if val is None:
+        return ""
+    return str(val).strip()
+
+
+def _clean_num(val: Any) -> float:
+    if val is None or val == "":
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).replace(",", "").replace("₩", "").replace("$", "").replace("원", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def _parse_date(val: Any) -> str:
+    if val is None or val == "":
+        return datetime.now().strftime("%Y-%m-%d")
+    if isinstance(val, datetime):
+        return val.strftime("%Y-%m-%d")
+    s = str(val).strip().replace(".", "-").replace("/", "-")
+    m = re.search(r"(\d{4})[-_](\d{1,2})[-_](\d{1,2})", s)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    
+    if filename.lower().endswith(".xlsx"):
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        ws = wb.active
+        all_rows = list(ws.iter_rows(values_only=True))
+        if not all_rows:
+            return []
+        
+        headers = [_clean_str(h) for h in all_rows[0]]
+        for raw in all_rows[1:]:
+            if not any(raw):
+                continue
+            row_dict = {}
+            for h, v in zip(headers, raw):
+                if h:
+                    row_dict[h] = v
+            rows.append(row_dict)
+    else:
+        # CSV
+        text = ""
+        for enc in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
+            try:
+                text = content.decode(enc)
+                break
+            except Exception:
+                continue
+        reader = csv.DictReader(io.StringIO(text))
+        for r in reader:
+            if any(r.values()):
+                rows.append({_clean_str(k): v for k, v in r.items() if k})
+
+    imported_records = []
+    for r in rows:
+        owner = _clean_str(r.get("소유자") or r.get("owner") or "모두")
+        broker = _clean_str(r.get("증권사") or r.get("broker") or "")
+        account_name = _clean_str(r.get("계좌명") or r.get("account_name") or "")
+        
+        raw_date = r.get("매도일 (Date)") or r.get("매도일") or r.get("date") or r.get("일자")
+        date_str = _parse_date(raw_date)
+        
+        code = _clean_str(r.get("종목코드") or r.get("code") or r.get("심볼") or "")
+        name = _clean_str(r.get("종목명") or r.get("name") or r.get("종목") or code)
+        if not code and not name:
+            continue
+        if not code:
+            code = name
+
+        raw_curr = _clean_str(r.get("통화") or r.get("currency") or "").upper()
+        if not raw_curr:
+            raw_curr = "USD" if any(c.isalpha() for c in code) and len(code) <= 5 else "KRW"
+
+        raw_pnl = r.get("실현손익") or r.get("실현 손익") or r.get("손익") or r.get("pnl") or r.get("수익금")
+        pnl = _clean_num(raw_pnl)
+
+        raw_ipo = _clean_str(r.get("공모주 여부") or r.get("공모주여부") or r.get("공모주") or r.get("is_ipo") or r.get("ipo") or "").upper()
+        is_ipo = raw_ipo in ("Y", "O", "YES", "TRUE", "1", "공모주", "공모")
+
+        memo = _clean_str(r.get("메모") or r.get("memo") or "")
+        if broker or account_name:
+            extra = f"[{broker} {account_name}]".strip()
+            if extra not in memo:
+                memo = f"{extra} {memo}".strip()
+
+        fx = fx_rate if raw_curr == "USD" else 1.0
+        pnl_krw = round(pnl * fx, 0) if raw_curr == "USD" else round(pnl, 0)
+
+        record_payload = {
+            "date": date_str,
+            "code": code,
+            "name": name,
+            "currency": raw_curr,
+            "pnl": pnl,
+            "fx_rate": fx,
+            "pnl_krw": pnl_krw,
+            "is_ipo": is_ipo,
+            "owner": owner,
+            "broker": broker,
+            "account_name": account_name,
+            "memo": memo,
+        }
+        rec = create_pnl_record(record_payload)
+        imported_records.append(rec)
+
+    return imported_records

@@ -21,6 +21,7 @@ from app.services.web_finance import (
     fetch_fx_rate_usd_krw,
     refresh_all_holdings_prices,
     fetch_stock_chart_data,
+    get_web_dividend_summary,
 )
 fetch_market_overview = get_web_market_overview
 from app.services.portfolio import (
@@ -28,6 +29,14 @@ from app.services.portfolio import (
     read_portfolio, seed_demo, upsert_holdings, write_portfolio, to_number, migrate_add_family_group
 )
 from app.services.asset_records import delete_asset_record, list_asset_records, upsert_asset_record
+from app.services.dividend_records import (
+    create_dividend_record, delete_dividend_record, get_actual_dividend_summary,
+    read_dividend_records, update_dividend_record, import_dividend_file_data
+)
+from app.services.pnl_records import (
+    create_pnl_record, delete_pnl_record, get_pnl_summary,
+    read_pnl_records, update_pnl_record, import_pnl_file_data
+)
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -243,6 +252,173 @@ async def dashboard() -> dict:
     return data
 
 
+@app.get("/api/dividends")
+async def get_dividends(owner: str = "모두") -> dict:
+    """Return dividend summary and 12-month schedule for holdings."""
+    full = get_dashboard()
+    holdings = full.get("holdings", [])
+    if owner != "모두":
+        holdings = [h for h in holdings if h.get("owner", "모두") == owner]
+    fx_rate = full.get("fx_rates", {}).get("USD", 1385.0)
+    summary = await get_web_dividend_summary(holdings, fx_rate=fx_rate)
+    return summary
+
+
+@app.get("/api/actual-dividends")
+async def get_actual_dividends(owner: str = "모두", year: str | None = None) -> dict:
+    """Return actual dividend records and 12-month summary."""
+    return get_actual_dividend_summary(owner=owner, year=year)
+
+
+@app.post("/api/actual-dividends")
+async def add_actual_dividend(request: Request) -> dict:
+    """Add a new actual dividend record."""
+    body = await request.json()
+    record = create_dividend_record(body)
+    return {"message": "배당금이 등록되었습니다.", "record": record}
+
+
+@app.put("/api/actual-dividends/{record_id}")
+async def edit_actual_dividend(record_id: str, request: Request) -> dict:
+    """Update an existing actual dividend record."""
+    body = await request.json()
+    record = update_dividend_record(record_id, body)
+    if not record:
+        raise HTTPException(status_code=404, detail="배당 기록을 찾을 수 없습니다.")
+    return {"message": "배당금이 수정되었습니다.", "record": record}
+
+
+@app.delete("/api/actual-dividends/{record_id}")
+async def remove_actual_dividend(record_id: str) -> dict:
+    """Delete an actual dividend record."""
+    ok = delete_dividend_record(record_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="배당 기록을 찾을 수 없습니다.")
+    return {"message": "배당 기록이 삭제되었습니다."}
+
+
+@app.post("/api/import-dividends")
+async def import_dividends_endpoint(file: UploadFile = File(...)) -> dict:
+    """Import actual dividend records from Excel or CSV."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="업로드할 파일을 선택하세요.")
+    contents = await file.read()
+    full = get_dashboard()
+    fx_rate = full.get("fx_rates", {}).get("USD", 1385.0)
+    try:
+        records = import_dividend_file_data(contents, file.filename, fx_rate=fx_rate)
+        return {
+            "message": f"총 {len(records)}건의 배당금 내역을 가져왔습니다.",
+            "count": len(records),
+            "records": records,
+        }
+    except Exception as e:
+        logger.exception("배당 파일 가져오기 실패")
+        raise HTTPException(status_code=400, detail=f"배당 파일 처리 실패: {e}")
+
+
+@app.get("/api/sample/dividends")
+async def download_sample_dividends():
+    """Download sample Excel file for actual dividend tracking."""
+    p = ROOT_DIR / "data" / "샘플_배당.xlsx"
+    if not p.exists():
+        p = ROOT_DIR / "샘플_배당.xlsx"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="샘플_배당.xlsx 파일을 찾을 수 없습니다.")
+    return FileResponse(
+        path=str(p),
+        filename="샘플_배당.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/api/sample/holdings")
+async def download_sample_holdings():
+    """Download sample Excel file for portfolio holdings."""
+    p = ROOT_DIR / "data" / "샘플_타증권사_보유종목.xlsx"
+    if not p.exists():
+        p = ROOT_DIR / "샘플_타증권사_보유종목.xlsx"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="샘플_타증권사_보유종목.xlsx 파일을 찾을 수 없습니다.")
+    return FileResponse(
+        path=str(p),
+        filename="샘플_타증권사_보유종목.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Realized PnL API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/realized-pnl")
+async def get_realized_pnl(owner: str = "모두", year: str | None = None, trade_type: str = "all") -> dict:
+    """Return realized profit and loss records and summary."""
+    return get_pnl_summary(owner=owner, year=year, trade_type=trade_type)
+
+
+@app.post("/api/realized-pnl")
+async def add_realized_pnl(request: Request) -> dict:
+    """Add a new realized PnL record."""
+    body = await request.json()
+    record = create_pnl_record(body)
+    return {"message": "매도 실현손익이 등록되었습니다.", "record": record}
+
+
+@app.put("/api/realized-pnl/{record_id}")
+async def edit_realized_pnl(record_id: str, request: Request) -> dict:
+    """Update an existing realized PnL record."""
+    body = await request.json()
+    record = update_pnl_record(record_id, body)
+    if not record:
+        raise HTTPException(status_code=404, detail="실현손익 기록을 찾을 수 없습니다.")
+    return {"message": "매도 실현손익이 수정되었습니다.", "record": record}
+
+
+@app.delete("/api/realized-pnl/{record_id}")
+async def remove_realized_pnl(record_id: str) -> dict:
+    """Delete a realized PnL record."""
+    ok = delete_pnl_record(record_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="실현손익 기록을 찾을 수 없습니다.")
+    return {"message": "실현손익 기록이 삭제되었습니다."}
+
+
+@app.post("/api/import-realized-pnl")
+async def import_realized_pnl_endpoint(file: UploadFile = File(...)) -> dict:
+    """Import realized PnL records from Excel or CSV."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="업로드할 파일을 선택하세요.")
+    contents = await file.read()
+    full = get_dashboard()
+    fx_rate = full.get("fx_rates", {}).get("USD", 1385.0)
+    try:
+        records = import_pnl_file_data(contents, file.filename, fx_rate=fx_rate)
+        return {
+            "message": f"총 {len(records)}건의 실현손익 내역을 가져왔습니다.",
+            "count": len(records),
+            "records": records,
+        }
+    except Exception as e:
+        logger.exception("실현손익 파일 가져오기 실패")
+        raise HTTPException(status_code=400, detail=f"실현손익 파일 처리 실패: {e}")
+
+
+@app.get("/api/sample/realized-pnl")
+async def download_sample_pnl():
+    """Download sample Excel file for realized profit/loss tracking."""
+    p = ROOT_DIR / "data" / "샘플_매도실현손익.xlsx"
+    if not p.exists():
+        p = ROOT_DIR / "샘플_매도실현손익.xlsx"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="샘플_매도실현손익.xlsx 파일을 찾을 수 없습니다.")
+    return FileResponse(
+        path=str(p),
+        filename="샘플_매도실현손익.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.get("/api/status")
 async def status() -> dict:
     return {
@@ -295,7 +471,7 @@ async def create_account(request: Request) -> dict:
     import uuid
     body = await request.json()
     broker = (body.get("broker") or "").strip()
-    account_name = (body.get("account_name") or "").strip()
+    account_name = (body.get("account_name") or body.get("name") or "").strip()
     owner = (body.get("owner") or "모두").strip()
     if not broker or not account_name:
         raise HTTPException(status_code=400, detail="증권사와 계좌 이름은 필수입니다.")

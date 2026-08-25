@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260825-mktbtn" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260826-accountfix" />
   </head>
   <body>
     <main class="shell">
@@ -102,6 +102,30 @@
                 <small id="usdCaption">주식 평가 US$0</small>
               </div>
             </div>
+            <div class="summary-row">
+              <div class="summary-row-label">
+                <span class="card-icon mini">📈</span>
+                <strong>전체 실현손익</strong>
+              </div>
+              <div class="summary-row-val">
+                <div class="val-line">
+                  <strong id="summaryRealizedPnl" class="gain up" style="color:#f43f5e;font-weight:700;">+₩0</strong>
+                </div>
+                <small id="summaryRealizedPnlSub">승률 0.0% · 총 0건</small>
+              </div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-row-label">
+                <span class="card-icon mini">💰</span>
+                <strong>총 배당금</strong>
+              </div>
+              <div class="summary-row-val">
+                <div class="val-line">
+                  <strong id="summaryActualDividend" style="color:#f43f5e;font-weight:700;">₩0</strong>
+                </div>
+                <small id="summaryEstimatedDividend">예상 연간 배당금 ₩0 (0.00%)</small>
+              </div>
+            </div>
           </div>
         </article>
 
@@ -115,6 +139,11 @@
             <span class="muted" style="margin-left:auto;font-size:11px;">수익률 · 비중</span>
           </div>
           <div id="sectorDonutWrap" style="display:none;margin:10px 0 16px;"></div>
+          <div id="sectorDetailToggleWrap" style="display:none;text-align:center;margin-bottom:12px;">
+            <button id="toggleSectorDetailBtn" class="button secondary compact" type="button" style="font-size:12px;color:#c4b5fd;">
+              자세히 🔍
+            </button>
+          </div>
           <div id="classificationList" class="classification-list"></div>
         </article>
       </section>
@@ -202,6 +231,127 @@
         </div>
       </section>
 
+      <!-- 3.5 배당금 & 월별 캘린더 -->
+      <section id="dividendPanel" class="panel dividend-panel">
+        <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
+          <div class="dividend-title-wrap">
+            <p class="eyebrow">DIVIDEND CALENDAR</p>
+            <h2>배당금 & 월별 캘린더</h2>
+          </div>
+          <div class="heatmap-period-tabs" id="dividendModeTabs" style="margin-left:8px;">
+            <button type="button" class="heatmap-tab active" data-div-mode="estimated">🔮 예상</button>
+            <button type="button" class="heatmap-tab" data-div-mode="actual">💵 실제</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+            <select id="dividendYearSelect" class="heatmap-select" style="min-width:90px;font-size:12px;" aria-label="배당 연도 선택">
+              <option value="2026">2026년</option>
+              <option value="all">전체 기간</option>
+            </select>
+          </div>
+          <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+            <button id="refreshDividendBtn" class="button secondary compact" type="button" title="배당 정보 재조회">↻ 조회</button>
+            <button id="addDividendBtn" class="button secondary compact" type="button" title="실제 입금 배당금 추가" style="display:none;">➕ 배당 추가</button>
+            <button id="importDividendBtn" class="button secondary compact" type="button" title="실제 배당금 엑셀 가져오기" style="display:none;">📂 가져오기</button>
+          </div>
+        </div>
+
+        <!-- 상단 배당 4대 요약 카드 -->
+        <div class="dividend-summary-cards">
+          <div class="div-summary-card">
+            <span class="div-card-label" id="divCardLabel1">연간 예상 배당금</span>
+            <strong id="divTotalAnnual" class="div-card-val">₩0</strong>
+            <small id="divTotalAnnualUsd" class="muted">$0.00 환산 포함</small>
+          </div>
+          <div class="div-summary-card">
+            <span class="div-card-label" id="divCardLabel2">포트폴리오 배당수익률</span>
+            <strong id="divYield" class="div-card-val gain">0.00%</strong>
+            <small id="divYieldSub" class="muted">총 평가금액 대비</small>
+          </div>
+          <div class="div-summary-card">
+            <span class="div-card-label" id="divCardLabel3">월평균 예상 배당금</span>
+            <strong id="divMonthlyAvg" class="div-card-val">₩0</strong>
+            <small class="muted">연간 배당금 ÷ 12개월</small>
+          </div>
+          <div class="div-summary-card">
+            <span class="div-card-label" id="divCardLabel4">배당 지급 종목 수</span>
+            <strong id="divPayingCount" class="div-card-val">0개</strong>
+            <small id="divTotalHoldings" class="muted">전체 0개 종목 중</small>
+          </div>
+        </div>
+
+        <!-- 1월~12월 월별 예상/실제 배당금 막대그래프 -->
+        <div class="dividend-chart-section">
+          <div class="dividend-chart-header">
+            <span id="dividendChartTitle">📊 1월 ~ 12월 월별 예상 배당금 추이</span>
+            <small class="muted">막대를 클릭하면 해당 월의 배당 내역을 확인할 수 있습니다.</small>
+          </div>
+          <div id="dividendBarChartWrap" class="dividend-chart-wrap"></div>
+        </div>
+
+        <!-- 선택 월별 배당 상세 목록 -->
+        <div id="dividendMonthlyDetail" class="dividend-detail-wrap"></div>
+      </section>
+
+      <!-- 3.7 매도 실현손익 -->
+      <section id="realizedPnlPanel" class="panel dividend-panel pnl-panel">
+        <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
+          <div class="dividend-title-wrap">
+            <p class="eyebrow">REALIZED PROFIT & LOSS</p>
+            <h2>매도 실현손익</h2>
+          </div>
+          <div class="heatmap-period-tabs" id="pnlTradeTypeTabs" style="margin-left:8px;">
+            <button type="button" class="heatmap-tab active" data-trade-type="all">🏢 전체</button>
+            <button type="button" class="heatmap-tab" data-trade-type="ipo">📦 공모주</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+            <select id="pnlYearSelect" class="heatmap-select" style="min-width:90px;font-size:12px;" aria-label="실현손익 연도 선택">
+              <option value="2026">2026년</option>
+              <option value="all">전체 기간</option>
+            </select>
+          </div>
+          <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+            <button id="addPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 추가">➕ 손익 추가</button>
+            <button id="importPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 엑셀 가져오기">📂 가져오기</button>
+          </div>
+        </div>
+
+        <!-- 상단 실현손익 4대 요약 카드 -->
+        <div class="dividend-summary-cards">
+          <div class="div-summary-card">
+            <span class="div-card-label">총 실현손익</span>
+            <strong id="pnlTotal" class="div-card-val">₩0</strong>
+            <small id="pnlTotalCount" class="muted">총 0건 매도</small>
+          </div>
+          <div class="div-summary-card">
+            <span class="div-card-label">수익 실현 합계</span>
+            <strong id="pnlTotalWin" class="div-card-val gain">+₩0</strong>
+            <small id="pnlWinCount" class="muted">0건 실현</small>
+          </div>
+          <div class="div-summary-card">
+            <span class="div-card-label">손실 실현 합계</span>
+            <strong id="pnlTotalLoss" class="div-card-val loss">-₩0</strong>
+            <small id="pnlLossCount" class="muted">0건 실현</small>
+          </div>
+          <div class="div-summary-card">
+            <span class="div-card-label">매도 승률 (Win Rate)</span>
+            <strong id="pnlWinRate" class="div-card-val">0.0%</strong>
+            <small class="muted">수익 건수 비율</small>
+          </div>
+        </div>
+
+        <!-- 1월~12월 월별 실현손익 막대그래프 -->
+        <div class="dividend-chart-section">
+          <div class="dividend-chart-header">
+            <span id="pnlChartTitle">📊 1월 ~ 12월 월별 매도 실현손익 추이</span>
+            <small class="muted">막대를 클릭하면 해당 월의 매도 손익 내역을 확인할 수 있습니다.</small>
+          </div>
+          <div id="pnlBarChartWrap" class="dividend-chart-wrap"></div>
+        </div>
+
+        <!-- 선택 월별 실현손익 상세 목록 -->
+        <div id="pnlMonthlyDetail" class="dividend-detail-wrap"></div>
+      </section>
+
       <!-- 4. 주요지수 -->
       <section class="intro"><div><p class="eyebrow">주요지수</p><h2>주요지수</h2><p id="updatedAt" class="muted">데이터를 불러오는 중입니다.</p></div><button id="refreshMarketButton" class="button secondary compact" type="button">↻ 조회</button></section>
       <section id="marketGrid" class="market-grid" aria-label="주요 시장 지수"></section>
@@ -252,7 +402,57 @@
   <option value="채권·안전자산">채권·안전자산</option>
   <option value="기타">기타</option>
 </select></label><label>소유자<select name="owner"><option value="모두">모두</option><option value="아빠">아빠</option><option value="엄마">엄마</option><option value="자녀">자녀</option></select></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
-    <dialog id="importDialog" class="dialog"><form id="importForm" method="dialog"><div class="dialog-head"><h2>증권사 잔고 파일 가져오기</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">CSV 또는 XLSX 파일의 첫 줄에 종목코드와 수량을 포함해 주세요.</p><label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label><label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">가져오기</button></div></form></dialog>
+    <!-- 보유종목 파일 가져오기 다이얼로그 -->
+    <dialog id="importDialog" class="dialog">
+      <form id="importForm" method="dialog">
+        <div class="dialog-head">
+          <h2>증권사 잔고 파일 가져오기</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-description">
+          엑셀(.xlsx) 또는 CSV 파일로 보유종목을 일괄 등록합니다.<br>
+          <strong>[소유자 / 증권사 / 계좌명 / 종목코드 / 종목명 / 보유수량 / 평균매입가 / 현재가 / 통화]</strong>
+        </p>
+        <div style="margin:4px 0 12px;">
+          <a href="/api/sample/holdings" download="샘플_타증권사_보유종목.xlsx" class="button text compact" style="color:#a78bfa;font-size:12px;text-decoration:underline;">
+            📥 샘플_타증권사_보유종목.xlsx 다운로드
+          </a>
+        </div>
+        <label>기본 증권사 이름<input id="importBroker" name="broker" value="기타 증권사" /></label>
+        <label>파일 선택<input id="importFile" name="file" type="file" accept=".csv,.xlsx,.xlsm" required /></label>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel">취소</button>
+          <button class="button primary" type="submit">가져오기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 실제 배당금 엑셀 가져오기 다이얼로그 -->
+    <dialog id="dividendImportDialog" class="dialog" style="max-width:540px;width:95vw;">
+      <form id="dividendImportForm" method="dialog">
+        <div class="dialog-head">
+          <h2>실제 배당금 파일 가져오기</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-description">
+          엑셀(.xlsx) 또는 CSV 파일로 배당 입금 내역을 일괄 등록합니다.<br>
+          <strong>[소유자 / 증권사 / 계좌명 / 입금일 / 종목코드 / 종목명 / 통화 / 실제 배당금 / 메모]</strong>
+        </p>
+        <div style="margin:4px 0 12px;">
+          <a href="/api/sample/dividends" download="샘플_배당.xlsx" class="button text compact" style="color:#34d399;font-size:12px;text-decoration:underline;">
+            📥 샘플_배당.xlsx 다운로드
+          </a>
+        </div>
+        <label>
+          파일 선택
+          <input id="divImportFileInput" name="file" type="file" accept=".csv,.xlsx" required />
+        </label>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button">취소</button>
+          <button class="button primary" type="submit">가져오기</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="assetRecordDialog" class="dialog"><form id="assetRecordForm" method="dialog"><div class="dialog-head"><h2 id="assetRecordDialogTitle">자산기록 추가</h2><button value="cancel" class="close" aria-label="닫기">×</button></div><p class="dialog-description">하루 한 번의 자산기록을 저장하고, 필요하면 나중에 직접 수정할 수 있습니다.</p><div class="form-grid record-form-grid"><label>날짜<input name="date" type="date" required /></label><label>총 투자자산<input name="total_value_krw" type="number" min="0" step="any" required /></label><label>총 매입금액<input name="total_cost_krw" type="number" min="0" step="any" required /></label><label>총 수익<input name="profit_krw" type="number" step="any" /></label><label>수익률<input name="return_rate" type="number" step="any" /></label><label>일간 수익<input name="day_profit_krw" type="number" step="any" /></label><label>원화 자산<input name="krw_value_krw" type="number" min="0" step="any" /></label><label>달러 자산 환산<input name="usd_value_krw" type="number" min="0" step="any" /></label><label>보유 종목 수<input name="holding_count" type="number" min="0" step="1" /></label><label>메모<input name="memo" /></label><label>구성원<select name="owner"><option value="모두">모두</option><option value="아빠">아빠</option><option value="엄마">엄마</option><option value="자녀">자녀</option></select></label></div><div class="dialog-actions"><button class="button secondary" value="cancel">취소</button><button class="button primary" type="submit">저장</button></div></form></dialog>
 
     <!-- 계좌 예수금 직접 입력/수정 다이얼로그 (원화 & 달러 통합) -->
@@ -309,7 +509,7 @@
       </form>
     </dialog>
     <dialog id="accountAddDialog" class="dialog">
-      <form id="accountAddForm" method="dialog">
+      <form id="accountAddForm" onsubmit="return false;">
         <div class="dialog-head">
           <h2>계좌 추가</h2>
           <button value="cancel" class="close" aria-label="닫기">×</button>
@@ -325,8 +525,8 @@
           </select></label>
         </div>
         <div class="dialog-actions">
-          <button class="button secondary" value="cancel">취소</button>
-          <button class="button primary" type="submit">저장</button>
+          <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
+          <button id="accountAddSaveBtn" class="button primary" type="button">저장</button>
         </div>
       </form>
     </dialog>
@@ -359,10 +559,6 @@
       </div>
     </dialog>
 
-<script src="/static/wealth.js?v=20260825-mktbtn"></script>
-  
-
-
     <!-- 종목 가격 & 거래량 인터랙티브 차트 모달 -->
     <dialog id="stockChartDialog" class="dialog" style="max-width:760px;width:95vw;">
       <div class="dialog-head" style="flex-wrap:wrap;gap:8px;align-items:center;">
@@ -386,8 +582,189 @@
       <div id="stockChartContainer" style="padding:12px 24px 20px;min-height:300px;"></div>
     </dialog>
 
+    <!-- 공용 종목 검색 datalist -->
+    <datalist id="holdingCodeList"></datalist>
+    <datalist id="holdingNameList"></datalist>
+
+    <!-- 실제 배당금 기록 추가/수정 다이얼로그 -->
+    <dialog id="dividendRecordDialog" class="dialog" style="max-width:620px;width:95vw;">
+      <div class="dialog-head">
+        <h2 id="dividendDialogTitle">실제 배당금 추가</h2>
+        <button value="cancel" class="close" aria-label="닫기">×</button>
+      </div>
+      <form id="dividendRecordForm" onsubmit="return false;">
+        <div class="form-grid">
+          <label>
+            입금일 (Date)
+            <input name="date" type="date" required />
+          </label>
+          <label>
+            소유자
+            <select name="owner">
+              <option value="모두">모두</option>
+            </select>
+          </label>
+          <label>
+            종목코드
+            <input name="code" list="holdingCodeList" placeholder="예: 005930, QQQM" autocomplete="off" required />
+          </label>
+          <label>
+            종목명
+            <input name="name" list="holdingNameList" placeholder="예: 삼성전자, QQQM" autocomplete="off" required />
+          </label>
+          <label>
+            통화
+            <select name="currency" id="divFormCurrency">
+              <option value="KRW">KRW (원화 ₩)</option>
+              <option value="USD">USD (달러 $)</option>
+            </select>
+          </label>
+          <label>
+            실제 배당금 (입금액)
+            <input name="amount" id="divFormAmount" type="number" step="any" min="0" placeholder="실제 수령 금액" required />
+          </label>
+          <label id="fxRateField" style="display:none;">
+            적용 환율 (USD/KRW)
+            <input name="fx_rate" id="divFormFxRate" type="number" step="0.1" min="0" placeholder="1385.0" />
+          </label>
+          <label id="amountKrwField" style="display:none;">
+            원화 환산금액 (₩)
+            <input name="amount_krw" id="divFormAmountKrw" type="number" step="any" readonly style="opacity:0.85;background:#131c33;" />
+          </label>
+          <label style="grid-column:1 / -1;">
+            메모 / 계좌
+            <input name="memo" placeholder="예: 토스증권 2분기 배당 입금" maxlength="60" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
+          <button id="dividendSaveBtn" class="button primary" type="button">저장하기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 매도 실현손익 추가/수정 다이얼로그 -->
+    <dialog id="pnlRecordDialog" class="dialog" style="max-width:620px;width:95vw;">
+      <div class="dialog-head">
+        <h2 id="pnlDialogTitle">매도 실현손익 추가</h2>
+        <button value="cancel" class="close" aria-label="닫기">×</button>
+      </div>
+      <form id="pnlRecordForm" onsubmit="return false;">
+        <div class="form-grid">
+          <label>
+            매도일 (Date)
+            <input name="date" type="date" required />
+          </label>
+          <label>
+            소유자
+            <select name="owner">
+              <option value="모두">모두</option>
+            </select>
+          </label>
+          <label>
+            증권사
+            <input name="broker" placeholder="예: 토스증권, 키움증권" />
+          </label>
+          <label>
+            계좌명
+            <input name="account_name" placeholder="예: 종합계좌" />
+          </label>
+          <label>
+            종목코드
+            <input name="code" list="holdingCodeList" placeholder="예: 005930, NVDA" autocomplete="off" required />
+          </label>
+          <label>
+            종목명
+            <input name="name" list="holdingNameList" placeholder="예: 삼성전자, NVIDIA" autocomplete="off" required />
+          </label>
+          <label>
+            통화
+            <select name="currency" id="pnlFormCurrency">
+              <option value="KRW">KRW (원화 ₩)</option>
+              <option value="USD">USD (달러 $)</option>
+            </select>
+          </label>
+          <label>
+            실현손익 (+수익 / -손실)
+            <input name="pnl" id="pnlFormAmount" type="number" step="any" placeholder="예: 250000 또는 -50000" required />
+          </label>
+          <label id="pnlFxRateField" style="display:none;">
+            적용 환율 (USD/KRW)
+            <input name="fx_rate" id="pnlFormFxRate" type="number" step="0.1" min="0" placeholder="1385.0" />
+          </label>
+          <label id="pnlAmountKrwField" style="display:none;">
+            원화 환산손익 (₩)
+            <input name="pnl_krw" id="pnlFormAmountKrw" type="number" step="any" readonly style="opacity:0.85;background:#131c33;" />
+          </label>
+          <label>
+            거래 유형 (공모주 여부)
+            <select name="is_ipo" id="pnlFormIsIpo">
+              <option value="false">일반 주식거래</option>
+              <option value="true">📦 공모주 청약/매매</option>
+            </select>
+          </label>
+          <label style="grid-column:1 / -1;">
+            메모
+            <input name="memo" placeholder="예: 목표가 달성 익절" maxlength="60" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
+          <button id="pnlSaveBtn" class="button primary" type="button">저장하기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 매도 실현손익 엑셀 가져오기 다이얼로그 -->
+    <dialog id="pnlImportDialog" class="dialog" style="max-width:540px;width:95vw;">
+      <form id="pnlImportForm" method="dialog">
+        <div class="dialog-head">
+          <h2>매도 실현손익 파일 가져오기</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-description">
+          엑셀(.xlsx) 또는 CSV 파일로 매도 실현손익을 일괄 등록합니다.<br>
+          <strong>[소유자 / 증권사 / 계좌명 / 매도일 / 종목코드 / 종목명 / 통화 / 실현손익 / 공모주 여부 / 메모]</strong>
+        </p>
+        <div style="margin:4px 0 12px;">
+          <a href="/api/sample/realized-pnl" download="샘플_매도실현손익.xlsx" class="button text compact" style="color:#f59e0b;font-size:12px;text-decoration:underline;">
+            📥 샘플_매도실현손익.xlsx 다운로드
+          </a>
+        </div>
+        <label>
+          파일 선택
+          <input id="pnlImportFileInput" name="file" type="file" accept=".csv,.xlsx" required />
+        </label>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button">취소</button>
+          <button class="button primary" type="submit">가져오기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/static/wealth.js?v=20260826-accountfix"></script>
   </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

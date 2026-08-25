@@ -467,3 +467,206 @@ async def refresh_all_holdings_prices(holdings: list[dict[str, Any]]) -> dict[st
         "period_rates": period_rates,
         "fx_rate": fx_rate,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. 배당(분배금) 수집 및 1월~12월 캘린더 분석 엔진
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def fetch_us_dividend(client: httpx.AsyncClient, symbol: str) -> dict[str, Any]:
+    """미국 주식/ETF의 1년치 배당 이력, 배당월, 주당 배당금 수집"""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1y&events=div"
+    try:
+        resp = await client.get(url, headers=HEADERS, timeout=6.0)
+        if resp.status_code != 200:
+            return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+        data = resp.json()
+        result = (data.get("chart", {}).get("result") or [{}])[0]
+        meta = result.get("meta", {})
+        price = _to_float(meta.get("regularMarketPrice"))
+        divs = result.get("events", {}).get("dividends", {})
+        if not divs:
+            return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+
+        amounts = [float(d["amount"]) for d in divs.values() if "amount" in d]
+        annual_div = round(sum(amounts), 4)
+        div_count = len(amounts)
+
+        months = set()
+        for d in divs.values():
+            if "date" in d:
+                dt = datetime.fromtimestamp(d["date"], tz=timezone.utc)
+                months.add(dt.month)
+
+        payout_months = sorted(list(months))
+        if not payout_months and div_count >= 10:
+            payout_months = list(range(1, 13))
+        elif not payout_months and div_count == 4:
+            payout_months = [3, 6, 9, 12]
+
+        div_yield = round((annual_div / price * 100), 2) if price > 0 else 0.0
+
+        return {
+            "annual_div": annual_div,
+            "payout_months": payout_months,
+            "div_yield": div_yield,
+            "div_count": div_count,
+        }
+    except Exception:
+        return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+
+
+async def fetch_kr_dividend(client: httpx.AsyncClient, code: str, current_price: float) -> dict[str, Any]:
+    """국내 주식/ETF의 배당수익률 및 배당월 수집"""
+    clean_code = str(code).strip().zfill(6)
+    url = f"https://finance.naver.com/item/main.naver?code={clean_code}"
+    try:
+        resp = await client.get(url, headers=HEADERS, timeout=6.0)
+        if resp.status_code != 200:
+            return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+        import re
+        html = resp.text
+        dvd_yield_match = re.findall(r"배당수익률.*?<em[^>]*>([^<]+)</em>", html, re.DOTALL)
+        dvd_yield = _to_float(dvd_yield_match[0]) if dvd_yield_match else 0.0
+
+        dvd_amt_match = re.findall(r"주당배당금.*?<td[^>]*>([^<]+)</td>", html, re.DOTALL)
+        dvd_amt = _to_float(dvd_amt_match[0]) if dvd_amt_match else 0.0
+
+        if dvd_amt == 0.0 and dvd_yield > 0.0 and current_price > 0:
+            dvd_amt = round(current_price * (dvd_yield / 100), 0)
+
+        # 주요 분기배당 및 월배당 ETF 판별
+        quarterly_codes = {"005930", "005935", "005380", "005385", "005387", "005490", "055550", "105560", "086790"}
+        if clean_code in quarterly_codes:
+            payout_months = [4, 5, 8, 11] # 국내 분기배당 실제 지급월 (4월, 5월, 8월, 11월)
+        elif dvd_yield > 0:
+            payout_months = [4] # 12월 결산법인 일반 배당 지급월 (4월)
+        else:
+            payout_months = []
+
+        return {
+            "annual_div": dvd_amt,
+            "payout_months": payout_months,
+            "div_yield": dvd_yield,
+            "div_count": len(payout_months),
+        }
+    except Exception:
+        return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+
+
+async def get_web_dividend_summary(holdings: list[dict[str, Any]], fx_rate: float = 1385.0) -> dict[str, Any]:
+    """
+    전체 보유 종목에 대해 실시간 배당 정보를 집계하고,
+    1월부터 12월까지의 월별 예상 배당금 캘린더 데이터를 계산합니다.
+    """
+    if not holdings:
+        return {
+            "total_annual_dividend_krw": 0.0,
+            "portfolio_yield": 0.0,
+            "monthly_avg_dividend_krw": 0.0,
+            "dividend_paying_count": 0,
+            "monthly_schedule": {m: {"total_krw": 0.0, "items": []} for m in range(1, 13)},
+            "holding_dividends": [],
+        }
+
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        # 중복 종목 코드 제거 후 병렬 조회
+        unique_stocks = {}
+        for h in holdings:
+            code = str(h.get("code", "")).strip()
+            if code and code not in unique_stocks:
+                currency = str(h.get("currency", "KRW")).upper()
+                curr_p = _to_float(h.get("current_price") or h.get("purchase_price"))
+                unique_stocks[code] = (currency, curr_p)
+
+        div_tasks = {}
+        for code, (currency, curr_p) in unique_stocks.items():
+            if currency == "USD" or not code.isdigit():
+                div_tasks[code] = fetch_us_dividend(client, code)
+            else:
+                div_tasks[code] = fetch_kr_dividend(client, code, curr_p)
+
+        results = await asyncio.gather(*div_tasks.values(), return_exceptions=True)
+        div_map = {}
+        for code, res in zip(div_tasks.keys(), results):
+            if isinstance(res, dict):
+                div_map[code] = res
+            else:
+                div_map[code] = {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+
+    total_annual_krw = 0.0
+    total_eval_krw = 0.0
+    dividend_paying_count = 0
+    monthly_schedule = {m: {"month": m, "total_krw": 0.0, "items": []} for m in range(1, 13)}
+    holding_dividends = []
+
+    for h in holdings:
+        code = str(h.get("code", "")).strip()
+        name = str(h.get("name", code))
+        qty = _to_float(h.get("quantity", 0))
+        currency = str(h.get("currency", "KRW")).upper()
+        curr_p = _to_float(h.get("current_price") or h.get("purchase_price"))
+        market_val_krw = qty * curr_p * (fx_rate if currency == "USD" else 1.0)
+        total_eval_krw += market_val_krw
+
+        d_info = div_map.get(code, {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0})
+        annual_div_per_share = d_info.get("annual_div", 0.0)
+        div_yield = d_info.get("div_yield", 0.0)
+        payout_months = d_info.get("payout_months", [])
+
+        annual_payout_orig = qty * annual_div_per_share
+        annual_payout_krw = annual_payout_orig * (fx_rate if currency == "USD" else 1.0)
+
+        if annual_payout_krw > 0:
+            dividend_paying_count += 1
+            total_annual_krw += annual_payout_krw
+
+            # 월별 분배
+            if payout_months:
+                per_month_krw = annual_payout_krw / len(payout_months)
+                per_month_orig = annual_payout_orig / len(payout_months)
+                for m in payout_months:
+                    if 1 <= m <= 12:
+                        monthly_schedule[m]["total_krw"] += per_month_krw
+                        monthly_schedule[m]["items"].append({
+                            "code": code,
+                            "name": name,
+                            "quantity": qty,
+                            "currency": currency,
+                            "payout_krw": round(per_month_krw, 0),
+                            "payout_orig": round(per_month_orig, 2),
+                            "div_yield": div_yield,
+                        })
+
+        holding_dividends.append({
+            "code": code,
+            "name": name,
+            "quantity": qty,
+            "currency": currency,
+            "annual_div_per_share": annual_div_per_share,
+            "div_yield": div_yield,
+            "annual_payout_krw": round(annual_payout_krw, 0),
+            "annual_payout_orig": round(annual_payout_orig, 2),
+            "payout_months": payout_months,
+        })
+
+    portfolio_yield = round((total_annual_krw / total_eval_krw * 100), 2) if total_eval_krw > 0 else 0.0
+    monthly_avg_krw = round(total_annual_krw / 12, 0)
+
+    # 월별 일정 정렬
+    monthly_list = []
+    for m in range(1, 13):
+        item = monthly_schedule[m]
+        item["total_krw"] = round(item["total_krw"], 0)
+        item["items"].sort(key=lambda x: x["payout_krw"], reverse=True)
+        monthly_list.append(item)
+
+    return {
+        "total_annual_dividend_krw": round(total_annual_krw, 0),
+        "portfolio_yield": portfolio_yield,
+        "monthly_avg_dividend_krw": monthly_avg_krw,
+        "dividend_paying_count": dividend_paying_count,
+        "monthly_schedule": monthly_list,
+        "holding_dividends": sorted(holding_dividends, key=lambda x: x["annual_payout_krw"], reverse=True),
+    }
+

@@ -28,6 +28,7 @@ EMPTY_PORTFOLIO: dict[str, Any] = {
 FIELD_ALIASES = {
     "broker": ("증권사", "broker", "brokerage"),
     "account": ("계좌명", "계좌번호", "계좌", "account", "account_name"),
+    "owner": ("소유자", "소유자명", "가족", "owner", "member"),
     "code": ("종목코드", "종목번호", "단축코드", "code", "symbol", "ticker"),
     "name": ("종목명", "종목", "name", "security_name"),
     "quantity": ("보유수량", "수량", "잔고수량", "quantity", "shares"),
@@ -574,14 +575,29 @@ def import_rows(filename: str, contents: bytes, default_broker: str = "기타 �
         if not code or quantity <= 0:
             errors.append(f"{number}행: 종목코드 또는 보유수량이 없어 건너뛰었습니다.")
             continue
+        owner = clean_text(find_column(row, "owner")) or "모두"
         broker = clean_text(find_column(row, "broker")) or default_broker
         account_name = clean_text(find_column(row, "account")) or f"{broker} 가져온 계좌"
-        account_id = get_or_add_account(data, broker, account_name, "import")
-        normalized.append(normalize_holding({
+        account_id = get_or_add_account(data, broker, account_name, family_group=owner, source="import")
+        
+        # 계좌 소유자 필드 갱신
+        for acc in data.get("accounts", []):
+            if acc.get("id") == account_id:
+                if owner and owner != "모두":
+                    acc["owner"] = owner
+                    acc["family_group"] = owner
+                elif not acc.get("owner"):
+                    acc["owner"] = "모두"
+                    acc["family_group"] = "All"
+                break
+
+        h_item = normalize_holding({
             "code": code, "name": find_column(row, "name"), "quantity": quantity,
             "avg_price": find_column(row, "avg_price"), "current_price": find_column(row, "current_price"),
             "currency": find_column(row, "currency"), "market": find_column(row, "market"),
-        }, account_id, broker, account_name, "import"))
+        }, account_id, broker, account_name, "import")
+        h_item["owner"] = owner
+        normalized.append(h_item)
     count = upsert_holdings(data, normalized)
     write_portfolio(data)
     return count, errors[:10]
