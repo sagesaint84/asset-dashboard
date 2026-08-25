@@ -1188,71 +1188,65 @@ function renderAssetRecords(records) {
     return;
   }
 
-  if (currentRecordView === 'monthly') {
-    const monthlyMap = new Map();
-    filtered.forEach(r => {
-      if (!r.date) return;
-      const ym = r.date.slice(0, 7);
-      monthlyMap.set(ym, r);
-    });
-    const monthlyList = [...monthlyMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-
-    const values = monthlyList.map(m => Number(m[1].total_value_krw || 0));
+  if (currentRecordView === 'bar' || currentRecordView === 'monthly') {
+    const values = filtered.map(item => Number(item.total_value_krw || 0));
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
+    const spanVal = maxVal - (minVal * 0.8) || 1;
 
     const w = 900, h = 260, pad = 30;
     const hBarArea = 180;
-    const barWidth = Math.max(16, Math.min(54, (w - pad * 2) / monthlyList.length - 16));
+    const barWidth = Math.max(12, Math.min(48, (w - pad * 2) / filtered.length - 8));
 
     let prevVal = 0;
-    const bars = monthlyList.map(([ym, item], idx) => {
+    const bars = filtered.map((item, idx) => {
       const val = Number(item.total_value_krw || 0);
-      const delta = prevVal ? val - prevVal : 0;
+      const delta = prevVal ? val - prevVal : Number(item.day_profit_krw || 0);
       const deltaRate = prevVal ? (delta / prevVal) * 100 : 0;
       prevVal = val;
       const isGain = delta >= 0;
 
-      const x = pad + ((w - pad * 2) * (idx + 0.5)) / Math.max(monthlyList.length, 1) - barWidth / 2;
-      const barH = Math.max(12, ((val - minVal * 0.8) / (maxVal - minVal * 0.8 || 1)) * (hBarArea - 20));
+      const x = pad + ((w - pad * 2) * (idx + 0.5)) / Math.max(filtered.length, 1) - barWidth / 2;
+      const barH = Math.max(10, ((val - minVal * 0.8) / spanVal) * (hBarArea - 25));
       const y = hBarArea - barH;
 
       const sign = delta >= 0 ? "+" : "";
       const deltaText = delta !== 0 ? `${sign}${number(deltaRate, 1)}%` : "-";
-      const deltaClass = delta !== 0 ? (isGain ? "#ff5c77" : "#4f9dff") : "#8e9bb5";
+      const deltaColor = delta !== 0 ? (isGain ? "#ff5c77" : "#4f9dff") : "#8e9bb5";
+      const shortDate = item.date ? item.date.slice(5) : ""; // MM-DD
 
       return `
         <g class="monthly-bar-group">
-          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="url(#monthlyBarGrad)" rx="4" opacity="0.9">
-            <title>${ym}: ${money(val)} (전월대비 ${sign}${money(delta)} / ${deltaRate.toFixed(1)}%)</title>
+          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="url(#assetBarGrad)" rx="3.5" opacity="0.9">
+            <title>${item.date}: ${money(val)} (변동 ${sign}${money(delta)} / ${deltaRate.toFixed(2)}%)</title>
           </rect>
-          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="#f3f5ff" font-size="10.5" font-weight="700" text-anchor="middle">
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="#f3f5ff" font-size="10" font-weight="700" text-anchor="middle">
             ${money(val)}
           </text>
-          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 16).toFixed(1)}" fill="#c4d1eb" font-size="11" font-weight="700" text-anchor="middle">
-            ${ym}
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 16).toFixed(1)}" fill="#c4d1eb" font-size="10.5" font-weight="700" text-anchor="middle">
+            ${shortDate}
           </text>
-          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 30).toFixed(1)}" fill="${deltaClass}" font-size="9.5" font-weight="700" text-anchor="middle">
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 28).toFixed(1)}" fill="${deltaColor}" font-size="9" font-weight="700" text-anchor="middle">
             ${deltaText}
           </text>
         </g>
       `;
     }).join('');
 
-    const firstItem = monthlyList[0][1];
-    const lastItem = monthlyList[monthlyList.length - 1][1];
-    const totalDelta = Number(lastItem.total_value_krw || 0) - Number(firstItem.total_value_krw || 0);
-    const totalDeltaRate = Number(firstItem.total_value_krw || 0) ? (totalDelta / Number(firstItem.total_value_krw || 0)) * 100 : 0;
+    const first = filtered[0];
+    const last = filtered.at(-1);
+    const totalDelta = Number(last.total_value_krw || 0) - Number(first.total_value_krw || 0);
+    const totalDeltaRate = Number(first.total_value_krw || 0) ? (totalDelta / Number(first.total_value_krw || 0)) * 100 : 0;
 
     if (wrap) {
       wrap.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 8px;font-size:12px;font-weight:700;">
-          <span style="color:#c4b5fd;">📊 월별 말일 기준 자산 추이 막대그래프 (${monthlyList.length}개월)</span>
+          <span style="color:#c4b5fd;">📊 총 투자자산 일자별 막대그래프 (${filtered.length}개 기록)</span>
           <span class="${signClass(totalDelta)}" style="font-size:12px;">기간 변동: ${totalDelta >= 0 ? '+' : ''}${money(totalDelta)} (${totalDelta >= 0 ? '+' : ''}${number(totalDeltaRate, 2)}%)</span>
         </div>
         <svg class="record-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:260px;overflow:visible;">
           <defs>
-            <linearGradient id="monthlyBarGrad" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="assetBarGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#a78bfa" />
               <stop offset="100%" stop-color="#6366f1" />
             </linearGradient>
@@ -1260,6 +1254,11 @@ function renderAssetRecords(records) {
           <line x1="${pad}" y1="${hBarArea}" x2="${w - pad}" y2="${hBarArea}" stroke="#283758" stroke-width="1.2" />
           ${bars}
         </svg>
+        <div class="record-chart-meta">
+          <div><span>기간 시작</span><strong>${html(first.date)}</strong><small>${money(first.total_value_krw)}</small></div>
+          <div><span>최근 기록</span><strong>${html(last.date)}</strong><small>${money(last.total_value_krw)}</small></div>
+          <div><span>최저 / 최고 자산</span><strong>${money(minVal)} / ${money(maxVal)}</strong><small>해당 기간 ${number(filtered.length, 0)}개 기록</small></div>
+        </div>
       `;
     }
   } else {
@@ -1644,6 +1643,58 @@ document.addEventListener('click', async (e) => {
     await loadStockChartData();
     return;
   }
+
+  // 자산기록 뷰 전환 탭 (📈 콤보 차트 vs 📊 막대 차트)
+  const recordViewTab = e.target.closest('#recordViewTabs .heatmap-tab');
+  if (recordViewTab) {
+    document.querySelectorAll('#recordViewTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
+    recordViewTab.classList.add('active');
+    currentRecordView = recordViewTab.dataset.view || 'combo';
+    renderAssetRecords(assetRecords);
+    return;
+  }
+
+  // 자산기록 기간 탭 (1M, 3M, 6M, 1Y, ALL)
+  const recordPeriodTab = e.target.closest('#recordPeriodTabs .heatmap-tab');
+  if (recordPeriodTab) {
+    document.querySelectorAll('#recordPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
+    recordPeriodTab.classList.add('active');
+    currentRecordPeriod = recordPeriodTab.dataset.period || 'ALL';
+    renderAssetRecords(assetRecords);
+    return;
+  }
+
+  // 투자자산 분류 탭 (자산군별 vs 섹터별)
+  const allocTab = e.target.closest('#allocTabs .heatmap-tab');
+  if (allocTab) {
+    document.querySelectorAll('#allocTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
+    allocTab.classList.add('active');
+    currentAllocTab = allocTab.dataset.tab || 'asset_class';
+    renderClassifications(dashboard?.classifications || []);
+    return;
+  }
+
+  // 히트맵 뷰 전환 탭 (면적형 vs 카드형)
+  const hmViewTab = e.target.closest('#heatmapViewTabs .heatmap-tab');
+  if (hmViewTab) {
+    document.querySelectorAll('#heatmapViewTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
+    hmViewTab.classList.add('active');
+    heatmapViewMode = hmViewTab.dataset.view || 'treemap';
+    localStorage.setItem("heatmap_view_mode", heatmapViewMode);
+    if (dashboard) renderHeatmaps(dashboard);
+    return;
+  }
+
+  // 히트맵 기간 탭 (1D, 1W, 1M, YTD, 1Y, TOTAL)
+  const hmPeriodTab = e.target.closest('#heatmapPeriodTabs .heatmap-tab');
+  if (hmPeriodTab) {
+    document.querySelectorAll('#heatmapPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
+    hmPeriodTab.classList.add('active');
+    heatmapPeriod = hmPeriodTab.dataset.period || '1D';
+    localStorage.setItem("heatmap_period", heatmapPeriod);
+    if (dashboard) renderHeatmaps(dashboard);
+    return;
+  }
 });
 
 // ── 이벤트 리스너 바인딩 ─────────────────────────────────────────────────────
@@ -1651,6 +1702,7 @@ document.addEventListener('click', async (e) => {
 // 1. 상단 계좌 연결 & 갱신 버튼
 $("#syncAccountsButton")?.addEventListener("click", (e) => action(e.currentTarget, () => api("/api/sync/all", { method: "POST" }), async () => { await loadDashboard(); await loadMarkets(); }));
 $("#refreshButton")?.addEventListener("click", (e) => action(e.currentTarget, () => api("/api/refresh-prices", { method: "POST" }), async () => { await loadDashboard(); await loadMarkets(); }));
+$("#refreshMarketButton")?.addEventListener("click", (e) => action(e.currentTarget, () => api("/api/refresh-prices", { method: "POST" }), async () => { await loadDashboard(); await loadMarkets(); }));
 $("#demoButton")?.addEventListener("click", (e) => action(e.currentTarget, () => api("/api/demo", { method: "POST" })));
 $("#addButton")?.addEventListener("click", () => openHoldingDialog());
 $("#importButton")?.addEventListener("click", openImport);
