@@ -359,31 +359,38 @@
    ========================================================================= */
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
   margin-top: 10px;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
   .market-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(5, 1fr);
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .market-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 600px) {
   .market-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 }
 
 .toss-market-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   background: #111a33;
   border: 1px solid #1f2b48;
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   overflow: hidden;
 }
@@ -825,4 +832,230 @@
   background: var(--color-danger, #e53e3e);
   color: #fff;
   border-color: var(--color-danger, #e53e3e);
+}
+
+/* =========================================================================
+   추가 기능 스타일 (테이블 정렬, 섹터 도넛, 자산기록 콤보/월별, 종목 차트)
+   ========================================================================= */
+
+/* 1. 테이블 컬럼 정렬 */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.sortable-th:hover {
+  color: #c4b5fd !important;
+  background-color: rgba(142, 112, 250, 0.08);
+}
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: #7182a6;
+}
+.sortable-th.sort-asc .sort-icon {
+  color: #8e70fa;
+}
+.sortable-th.sort-asc .sort-icon::after {
+  content: "▲";
+}
+.sortable-th.sort-desc .sort-icon {
+  color: #8e70fa;
+}
+.sortable-th.sort-desc .sort-icon::after {
+  content: "▼";
+}
+
+/* 2. 섹터 뱃지 */
+.sector-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(142, 112, 250, 0.14);
+  color: #c4b5fd;
+  border: 1px solid rgba(142, 112, 250, 0.28);
+  white-space: nowrap;
+}
+
+/* 3. 종목 상세 차트 버튼 */
+.stock-chart-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #192545;
+  color: #8fa0c5;
+  border: 1px solid #2a3c66;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.stock-chart-btn:hover {
+  background: #8e70fa;
+  color: #fff;
+  border-color: #8e70fa;
+  transform: translateY(-1px);
+}
+.holding-name-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.holding-name-link:hover {
+  color: #8e70fa;
+  text-decoration: underline;
+}
+
+/* 4. 섹터 도넛 차트 컨테이너 & 범례 */
+.sector-donut-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px;
+  background: #090e1d;
+  border: 1px solid #1a2542;
+  border-radius: 10px;
+}
+.sector-donut-svg-wrap {
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+  position: relative;
+}
+.sector-donut-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.sector-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 160px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.sector-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  gap: 8px;
+}
+.sector-legend-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* 5. 자산기록 월별 막대 차트 뷰 */
+.monthly-records-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 10px;
+}
+.monthly-bar-card {
+  background: #090e1d;
+  border: 1px solid #1a2542;
+  border-radius: 8px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.monthly-bar-card .month-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #aebbd7;
+}
+.monthly-bar-card .month-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: #f3f5ff;
+}
+.monthly-bar-card .month-delta {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 6. 히트맵 카드형 뷰 스타일 (와이드 카드) */
+.heatmap-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 10px 4px;
+}
+.heatmap-card-item {
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 74px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+.heatmap-card-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* 7. 계좌 목록 액션 버튼 (다크 테마 일체화) */
+.account-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-action-button,
+.account-row-actions .mini-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  background: #141d33;
+  border: 1px solid #273656;
+  color: #c4d1eb;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.account-action-button:hover {
+  background: #25355e;
+  border-color: #8e70fa;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.account-row-actions .mini-delete-button:hover {
+  background: rgba(255, 92, 119, 0.2);
+  border-color: #ff5c77;
+  color: #ff5c77;
+  transform: translateY(-1px);
+}
+
+/* 8. 월별 자산 막대그래프 인터랙션 */
+.monthly-bar-group {
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.monthly-bar-group:hover rect {
+  opacity: 1;
+  filter: brightness(1.25) drop-shadow(0 4px 12px rgba(142, 112, 250, 0.5));
 }

@@ -148,6 +148,66 @@ def get_or_add_account(data: dict[str, Any], broker: str, account_name: str, fam
     return account_id
 
 
+
+DEFAULT_SECTOR_MAP = {
+    # 반도체
+    "005930": "반도체", "005935": "반도체", "000660": "반도체", "0193T0": "반도체", "0193W0": "반도체",
+    "091160": "반도체", "240810": "반도체", "353200": "반도체", "395160": "반도체", "471990": "반도체",
+    "NVDA": "반도체", "AVGO": "반도체", "TSM": "반도체", "NVDL": "반도체",
+
+    # IT·빅테크
+    "AAPL": "IT·빅테크", "MSFT": "IT·빅테크", "035420": "IT·빅테크", "030000": "IT·빅테크",
+
+    # 2차전지·모빌리티
+    "364980": "2차전지", "TSLA": "모빌리티·2차전지", "005380": "자동차·운송",
+
+    # 금융·지주
+    "0089D0": "금융·지주", "039490": "금융·지주", "055550": "금융·지주", "086790": "금융·지주",
+    "091170": "금융·지주", "102970": "금융·지주", "105560": "금융·지주", "138040": "금융·지주", "316140": "금융·지주",
+
+    # 전력·인프라·건설
+    "015760": "전력·인프라", "117700": "건설·인프라", "267260": "전력·인프라",
+    "487130": "전력·인프라", "487240": "전력·인프라",
+
+    # 방산·조선
+    "449450": "방산·우주", "466920": "조선·기계",
+
+    # 바이오·헬스케어
+    "244580": "바이오·헬스케어",
+
+    # 소비재·엔터·유통
+    "228790": "소비재·뷰티", "475050": "엔터·미디어", "KO": "음료·소비재", "WMT": "도소매·유통",
+
+    # 리츠·부동산
+    "481850": "리츠·부동산",
+
+    # 미국 대표지수·ETF
+    "QQQM": "미국 대표지수", "SPYG": "미국 대표지수", "QLD": "미국 대표지수", "TQQQ": "미국 대표지수",
+    "QNDX": "미국 대표지수", "IVV": "미국 대표지수", "0015B0": "미국 대표지수", "0026S0": "미국 대표지수",
+    "0069M0": "미국 대표지수", "0104H0": "미국 대표지수", "0190M0": "미국 대표지수", "379810": "미국 대표지수",
+
+    # 국내 대표지수·ETF
+    "069500": "국내 대표지수", "0163Y0": "국내 대표지수", "0088N0": "국내 대표지수",
+
+    # 채권·안전자산
+    "TLT": "채권·안전자산",
+}
+
+
+def get_default_sector(code: str, name: str = "") -> str:
+    c = str(code).strip().upper()
+    if c in DEFAULT_SECTOR_MAP:
+        return DEFAULT_SECTOR_MAP[c]
+    n = name.upper()
+    if any(k in n for k in ["반도체", "SEMICONDUCTOR", "CHIP"]): return "반도체"
+    if any(k in n for k in ["2차전지", "배터리", "BATTERY"]): return "2차전지"
+    if any(k in n for k in ["금융", "은행", "증권", "지주", "FINANCIAL", "BANK"]): return "금융·지주"
+    if any(k in n for k in ["전력", "인프라", "에너지", "ENERGY", "POWER"]): return "전력·인프라"
+    if any(k in n for k in ["바이오", "헬스케어", "PHARMA", "BIO", "HEALTH"]): return "바이오·헬스케어"
+    if any(k in n for k in ["나스닥", "S&P", "다우", "INDEX", "200", "코스닥"]): return "대표지수·ETF"
+    return "기타"
+
+
 def normalize_holding(raw: dict[str, Any], account_id: str, broker: str, account_name: str, source: str = "manual") -> dict[str, Any]:
     code = clean_text(raw.get("code")).upper()
     name = clean_text(raw.get("name")) or code
@@ -165,6 +225,7 @@ def normalize_holding(raw: dict[str, Any], account_id: str, broker: str, account
         "currency": currency,
         "market": normalize_market(raw.get("market"), code, currency),
         "source": source,
+        "sector": clean_text(raw.get("sector")) or get_default_sector(code, name),
         "price_updated_at": raw.get("price_updated_at"),
     }
 
@@ -305,7 +366,11 @@ def get_dashboard() -> dict[str, Any]:
             rec_data = json.loads(rec_file.read_text(encoding="utf-8"))
             past_records = [
                 r for r in rec_data.get("records", [])
-                if isinstance(r, dict) and r.get("date") and r.get("date") < today_str and to_number(r.get("total_value_krw")) > 0
+                if isinstance(r, dict)
+                and (r.get("owner") or "모두") == "모두"
+                and r.get("date")
+                and r.get("date") < today_str
+                and to_number(r.get("total_value_krw")) > 0
             ]
             if past_records:
                 past_records.sort(key=lambda x: x["date"])
@@ -405,6 +470,43 @@ def get_dashboard() -> dict[str, Any]:
         classification_list.append(classification)
     classification_list.sort(key=lambda item: item["market_value_krw"], reverse=True)
 
+    # 섹터별 포트폴리오 집계
+    sectors: dict[str, dict[str, Any]] = {}
+    for item in enriched:
+        sec = item.get("sector") or get_default_sector(item.get("code", ""), item.get("name", ""))
+        item["sector"] = sec
+        s_obj = sectors.setdefault(sec, {
+            "name": sec,
+            "market_value_krw": 0.0,
+            "cost_value_krw": 0.0,
+            "profit_krw": 0.0,
+            "return_rate": 0.0,
+            "holding_count": 0,
+            "weight": 0.0,
+        })
+        s_obj["market_value_krw"] += item["market_value_krw"]
+        s_obj["cost_value_krw"] += item["cost_value_krw"]
+        s_obj["profit_krw"] += item["profit_krw"]
+        s_obj["holding_count"] += 1
+
+    if total_cash_krw_combined > 0:
+        sectors["현금·예수금"] = {
+            "name": "현금·예수금",
+            "market_value_krw": total_cash_krw_combined,
+            "cost_value_krw": total_cash_krw_combined,
+            "profit_krw": 0.0,
+            "return_rate": 0.0,
+            "holding_count": len([a for a in account_list if a.get("cash_total_krw", 0) > 0]),
+            "weight": total_cash_krw_combined / total_value * 100 if total_value else 0.0,
+        }
+
+    sector_list = []
+    for s_obj in sectors.values():
+        s_obj["return_rate"] = s_obj["profit_krw"] / s_obj["cost_value_krw"] * 100 if s_obj["cost_value_krw"] else 0.0
+        s_obj["weight"] = s_obj["market_value_krw"] / total_value * 100 if total_value else 0.0
+        sector_list.append(s_obj)
+    sector_list.sort(key=lambda x: x["market_value_krw"], reverse=True)
+
     return {
         "summary": {
             "total_value_krw": total_value,
@@ -430,6 +532,7 @@ def get_dashboard() -> dict[str, Any]:
         "fx_info": data["settings"].get("fx_info", {}),
         "currency_summary": currency_summary,
         "classifications": classification_list,
+        "sector_classifications": sector_list,
         "updated_at": data["updated_at"],
     }
 

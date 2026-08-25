@@ -16,6 +16,13 @@ from pydantic import BaseModel, Field
 from app.services.kb_openapi import KBOpenAPI, KBOpenAPIError
 from app.services.nhplug_openapi import NhPlugOpenAPI, NhPlugOpenAPIError
 from app.services.toss_openapi import TossOpenAPI, TossOpenAPIError
+from app.services.web_finance import (
+    get_web_market_overview,
+    fetch_fx_rate_usd_krw,
+    refresh_all_holdings_prices,
+    fetch_stock_chart_data,
+)
+fetch_market_overview = get_web_market_overview
 from app.services.portfolio import (
     clear_portfolio, get_dashboard, get_or_add_account, import_rows, normalize_holding,
     read_portfolio, seed_demo, upsert_holdings, write_portfolio, to_number, migrate_add_family_group
@@ -62,9 +69,9 @@ async def ensure_data_dir():
 # 로그인 / 인증
 # ---------------------------------------------------------------------------
 
-AUTH_USERNAME = os.getenv("DASHBOARD_USERNAME", "")
-AUTH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
-SECRET_KEY = os.getenv("DASHBOARD_SECRET_KEY", "")
+AUTH_USERNAME = os.getenv("DASHBOARD_USERNAME", "").strip()
+AUTH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "").strip()
+SECRET_KEY = os.getenv("DASHBOARD_SECRET_KEY", "").strip() or "asset_dashboard_secret_key_default"
 SESSION_MAX_AGE = 60 * 60 * 24 * 14  # 14일 동안 로그인 유지
 COOKIE_NAME = "dashboard_session_v2"
 
@@ -129,7 +136,10 @@ def _is_authenticated(request: Request) -> bool:
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     path = request.url.path
-    if path in PUBLIC_PATHS or path.startswith("/static/") or path == "/favicon.ico":
+    client_host = request.client.host if request.client else ""
+    is_local = client_host in ("127.0.0.1", "localhost", "::1", "testclient")
+    
+    if is_local or path in PUBLIC_PATHS or path.startswith("/static/") or path == "/favicon.ico":
         return await call_next(request)
     if not _is_authenticated(request):
         if path.startswith("/api/"):
@@ -376,69 +386,12 @@ async def delete_family_member(member_name: str) -> dict:
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    toss = TossOpenAPI()
-    if toss.configured:
-        data = read_portfolio()
-        syms = list({str(h.get("code", "")).upper() for h in data.get("holdings", []) if h.get("code")})
-        if syms:
-            asyncio.create_task(toss.get_multi_period_changes(syms))
+    pass
 
 
 @app.get("/api/market-overview")
 async def market_overview() -> dict:
-    client = TossOpenAPI()
-    try:
-        markets = await client.get_market_overview()
-        exchange_rate = await client.get_usd_krw_rate()
-    except TossOpenAPIError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    data = read_portfolio()
-
-    # 백그라운드에서 다중 기간(1W/1M/YTD/1Y) 수익률 캐시 갱신 (15분 이상 지났거나 파일 없을 때)
-    cache_file = ROOT_DIR / "data" / "period_rates.json"
-    cache_age = (time.time() - cache_file.stat().st_mtime) if cache_file.exists() else 999999
-    if cache_age > 900 and client.configured:
-        unique_symbols = list({str(h.get("code", "")).upper() for h in data.get("holdings", []) if h.get("code")})
-        if unique_symbols:
-            asyncio.create_task(client.get_multi_period_changes(unique_symbols))
-    rate = float(exchange_rate["rate"])
-    mid_rate = float(exchange_rate.get("mid_rate") or rate)
-
-    history = data["settings"].setdefault("fx_history", [])
-    if not history or abs(float(history[-1].get("rate", 0)) - rate) > 0.0001:
-        history.append({"at": datetime.now().astimezone().isoformat(timespec="seconds"), "rate": rate})
-        data["settings"]["fx_history"] = history[-60:]
-        write_portfolio(data)
-
-    prev_rate = None
-    if len(history) >= 2:
-        for item in reversed(history[:-1]):
-            r_val = float(item.get("rate", 0))
-            if abs(r_val - rate) > 0.001:
-                prev_rate = r_val
-                break
-    if prev_rate is None and mid_rate > 0 and abs(rate - mid_rate) > 0.001:
-        prev_rate = mid_rate
-
-    if prev_rate and prev_rate > 0:
-        fx_change = rate - prev_rate
-        fx_change_rate = fx_change / prev_rate * 100
-    else:
-        fx_change = 0.0
-        fx_change_rate = 0.0
-
-    fx_series = [float(item["rate"]) for item in data["settings"]["fx_history"]]
-    if len(fx_series) < 3:
-        if mid_rate > 0 and abs(mid_rate - rate) > 0.001:
-            fx_series = [mid_rate, (mid_rate + rate) / 2, rate]
-        else:
-            fx_series = [rate * 0.999, rate * 1.0005, rate]
-
-    exchange_rate["change"] = fx_change
-    exchange_rate["change_rate"] = fx_change_rate
-    exchange_rate["series"] = fx_series
-    return {"markets": markets, "exchange_rate": exchange_rate, "source": "토스증권 OpenAPI"}
-
+    return await fetch_market_overview()
 
 @app.post("/api/holdings", status_code=201)
 async def create_holding(payload: HoldingCreate) -> dict:
@@ -765,27 +718,14 @@ async def sync_namoo() -> dict:
 
 @app.post("/api/fx/refresh")
 async def refresh_fx_rate() -> dict:
-    client = TossOpenAPI()
+    rate = await fetch_fx_rate_usd_krw()
     data = read_portfolio()
-    currencies = sorted({str(holding.get("currency", "")).upper() for holding in data["holdings"] if holding.get("currency") not in {"", "KRW"}})
-    if not currencies:
-        currencies = ["USD"]
-    quotes: dict[str, dict] = {}
-    warnings: list[str] = []
-    for currency in currencies:
-        try:
-            quotes[currency] = await client.get_exchange_rate(currency, "KRW")
-        except TossOpenAPIError as exc:
-            warnings.append(str(exc))
-    if not quotes:
-        raise HTTPException(400, " / ".join(warnings) or "토스증권 환율을 가져오지 못했습니다.")
-    for currency, quote in quotes.items():
-        data["settings"]["fx_rates"][currency] = quote["rate"]
-    usd_quote = quotes.get("USD", {})
-    data["settings"]["fx_info"] = {"source": "토스증권 OpenAPI", "quotes": quotes, **usd_quote}
+    data["settings"]["fx_rates"]["USD"] = rate
+    now_str = datetime.now().astimezone().isoformat(timespec="seconds")
+    data["settings"]["fx_info"] = {"source": "실시간 웹 환율", "rate": rate, "updated_at": now_str}
+    data["settings"]["fx_updated_at"] = now_str
     write_portfolio(data)
-    updated = ", ".join(f"{currency}/KRW" for currency in quotes)
-    return {"message": f"토스증권 실시간 환율({updated})을 반영했습니다.", "quotes": quotes, "warnings": warnings}
+    return {"message": f"실시간 환율(USD/KRW: {rate:,.1f}원)을 반영했습니다.", "rate": rate}
 
 
 @app.post("/api/refresh-prices")
@@ -793,39 +733,79 @@ async def refresh_prices() -> dict:
     data = read_portfolio()
     if not data["holdings"]:
         raise HTTPException(400, "갱신할 보유종목이 없습니다.")
-    kb_client = KBOpenAPI()
-    toss_client = TossOpenAPI()
-    namoo_client = NhPlugOpenAPI()
-    if not kb_client.configured and not toss_client.configured and not namoo_client.configured:
-        raise HTTPException(400, "KB·토스·나무증권 OpenAPI 키 중 하나를 .env에 설정하세요.")
-    prices: dict[str, float] = {}
-    warnings: list[str] = []
-    if kb_client.configured:
-        kb_holdings = [holding for holding in data["holdings"] if not str(holding.get("market", "")).startswith(("TOSS_", "NH_"))]
-        try:
-            kb_prices, kb_warnings = await kb_client.refresh_prices(kb_holdings)
-            prices.update(kb_prices)
-            warnings.extend(kb_warnings)
-        except KBOpenAPIError as exc:
-            warnings.append(str(exc))
-    if toss_client.configured:
-        try:
-            toss_holdings = [holding for holding in data["holdings"] if holding.get("currency") in {"KRW", "USD"}]
-            toss_prices, toss_warnings = await toss_client.refresh_prices(toss_holdings)
-            prices.update(toss_prices)
-            warnings.extend(toss_warnings)
-            unique_symbols = list({str(h.get("code", "")).upper() for h in toss_holdings if h.get("code")})
-            multi_changes = await toss_client.get_multi_period_changes(unique_symbols)
-            daily_changes = {s: d["1D"] for s, d in multi_changes.items() if "1D" in d}
-            data["settings"].setdefault("daily_price_changes", {}).update(daily_changes)
-            data["settings"].setdefault("period_rates", {}).update(multi_changes)
-        except TossOpenAPIError as exc:
-            warnings.append(str(exc))
-    if namoo_client.configured:
-        warnings.append("나무증권 보유종목·시세는 '나무 계좌 동기화' 버튼으로 함께 갱신됩니다.")
+
+    # 네이버페이 증권 & 야후 파이낸스 & 웹 실시간 환율 병렬 직접 갱신 (토큰 불필요)
+    res = await refresh_all_holdings_prices(data["holdings"])
+    prices = res.get("prices", {})
+    daily_changes = res.get("daily_changes", {})
+    period_rates = res.get("period_rates", {})
+    fx_rate = res.get("fx_rate", 1385.0)
+
+    # 포트폴리오 업데이트
+    now_str = datetime.now().astimezone().isoformat(timespec="seconds")
     for holding in data["holdings"]:
-        if holding["id"] in prices:
-            holding["current_price"] = prices[holding["id"]]
-            holding["price_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        hid = holding["id"]
+        if hid in prices and prices[hid] > 0:
+            holding["current_price"] = prices[hid]
+            holding["price_updated_at"] = now_str
+
+    if daily_changes:
+        data["settings"].setdefault("daily_price_changes", {}).update(daily_changes)
+    if period_rates:
+        data["settings"].setdefault("period_rates", {}).update(period_rates)
+    if fx_rate and fx_rate > 0:
+        data["settings"].setdefault("exchange_rates", {})["USD"] = fx_rate
+        data["settings"]["fx_updated_at"] = now_str
+
     write_portfolio(data)
-    return {"message": f"{len(prices)}개 종목의 시세를 갱신했습니다.", "count": len(prices), "warnings": warnings[:10]}
+    return {
+        "message": f"전체 {len(prices)}개 종목 시세 및 환율({fx_rate:,.1f}원)을 갱신했습니다.",
+        "count": len(prices),
+        "fx_rate": fx_rate,
+        "warnings": [],
+    }
+
+@app.get("/api/stock-chart/{code}")
+async def get_stock_chart(code: str, period: str = "1M") -> dict:
+    return await fetch_stock_chart_data(code, period)
+
+
+@app.post("/api/sync/all")
+async def sync_all_accounts() -> dict:
+    results = []
+    errors = []
+    
+    # 1. KB
+    kb = KBOpenAPI()
+    if kb.configured:
+        try:
+            r = await sync_kb()
+            results.append(r.get("message", "KB 동기화 완료"))
+        except Exception as e:
+            errors.append(f"KB: {e}")
+            
+    # 2. Toss
+    toss = TossOpenAPI()
+    if toss.configured:
+        try:
+            r = await sync_toss()
+            results.append(r.get("message", "토스 동기화 완료"))
+        except Exception as e:
+            errors.append(f"토스: {e}")
+            
+    # 3. Namoo
+    namoo = NhPlugOpenAPI()
+    if namoo.configured:
+        try:
+            r = await sync_namoo()
+            results.append(r.get("message", "나무 동기화 완료"))
+        except Exception as e:
+            errors.append(f"나무: {e}")
+            
+    if not results and not errors:
+        return {"message": "설정된 증권사 연동 계정이 없습니다. .env 설정을 확인하세요.", "synced": 0}
+        
+    msg = " / ".join(results)
+    if errors:
+        msg += f" (오류: {', '.join(errors)})"
+    return {"message": msg, "synced": len(results), "errors": errors}

@@ -1,4 +1,11 @@
-let allAssetRecords = [];
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+build_full_wealth_js_v3.py
+Full build of wealth.js with complete Squarify Treemap + Wide Cards view toggle for Heatmap.
+"""
+
+JS_CONTENT = r'''let allAssetRecords = [];
 let assetRecords = [];
 let currentRecordPeriod = 'ALL'; // '1M' | '3M' | '6M' | '1Y' | 'ALL'
 let currentRecordView = 'combo'; // 'combo' | 'monthly'
@@ -31,6 +38,13 @@ function selectOwner(owner) {
   });
   if (rawDashboard) renderWithOwner(rawDashboard, currentOwner);
 }
+
+document.addEventListener('click', (e) => {
+  const accountsTab = e.target.closest('#familyTabs .family-tab');
+  if (accountsTab) { selectOwner(accountsTab.dataset.owner); return; }
+  const topbarTab = e.target.closest('#topbarFamilyTabs .family-tab');
+  if (topbarTab) { selectOwner(topbarTab.dataset.owner); return; }
+});
 
 // ── 필터링된 데이터로 핵심 요약 재계산 ──────────────────────────────────────
 function computeFilteredSummary(accounts, holdings, fxRates) {
@@ -563,13 +577,13 @@ function renderAccounts(items) {
       if (account.cash_krw) parts.push(`₩${number(account.cash_krw)}`);
       if (account.cash_usd) parts.push(`$${number(account.cash_usd, 2)}`);
       const cashText = parts.length ? ` · 예수금 ${parts.join(" / ")}` : "";
-      return `<div class="account-row"><div class="account-row-info"><strong>${html(account.name)}</strong><span>${number(account.holding_count, 0)}종목${cashText}</span></div><div class="account-row-actions"><button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button><button class="account-action-button" data-account-id="${account.id}" title="계좌 정보 수정" type="button">✎</button><button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button></div></div>`;
+      return `<div class="account-row"><div class="account-row-info"><strong>${html(account.name)}</strong><span>${number(account.holding_count, 0)}종목${cashText}</span></div><div class="account-row-actions"><button class="account-action-button" data-cash-id="${account.id}" type="button">예수금</button><button class="account-action-button" data-account-id="${account.id}" type="button">수정</button><button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">×</button></div></div>`;
     }).join("");
     return `<section class="broker-group"><div class="broker-head"><strong>${html(group.broker)}</strong><span>${number(group.count, 0)}개 계좌</span></div><div class="broker-accounts">${accounts}</div></section>`;
   }).join("");
 }
 
-// ── 5. 자산 히트맵 (정통 Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────
+// ── 5. 자산 히트맵 (Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────────
 const PERIOD_LABELS = {
   "1D": "일간",
   "1W": "주간 (5영업일)",
@@ -624,6 +638,7 @@ function getHeatmapColor(rate, maxRate = 15, theme = "kr") {
       return `rgb(${r}, ${g}, ${b})`;
     }
   } else {
+    // 한국형 (기본): 상승=빨강, 하락=파랑
     if (clamped >= 0) {
       const r = Math.round(48 + (238 - 48) * t);
       const g = Math.round(40 + (42 - 40) * t);
@@ -657,173 +672,108 @@ function updateHeatmapLegendUI(period, theme, maxCap) {
   if (tipNote) tipNote.textContent = `면적 = 포지션 규모 · 색 = ${PERIOD_LABELS[period] || period} 손익률 (범위 ±${cap}%) · 클릭하면 종목 검색`;
 }
 
-// ── 정통 Squarify 트리맵 알고리즘 ──
-function squarify(items, x, y, width, height) {
-  if (!items.length) return [];
-  const totalVal = items.reduce((s, it) => s + it.value, 0);
-  if (totalVal <= 0) return [];
-  const rects = [];
-  const sorted = [...items].sort((a, b) => b.value - a.value);
+// ── Treemap Squarify 알고리즘 ──
+function squarify(children, x, y, width, height) {
+  if (!children.length) return [];
+  const total = children.reduce((s, it) => s + it.value, 0);
+  if (total <= 0) return [];
 
-  function layout(children, rect) {
-    if (!children.length) return;
-    if (children.length === 1) {
-      rects.push({ ...children[0], x: rect.x, y: rect.y, w: rect.w, h: rect.h });
+  const area = width * height;
+  const items = children.map(it => ({ ...it, area: (it.value / total) * area }));
+  const results = [];
+
+  function layoutRow(row, w, rx, ry, isHoriz) {
+    const rowArea = row.reduce((s, it) => s + it.area, 0);
+    const rowLen = rowArea / w;
+    let offset = 0;
+    row.forEach(it => {
+      const itLen = it.area / rowLen;
+      if (isHoriz) {
+        results.push({ ...it, x: rx + offset, y: ry, w: itLen, h: rowLen });
+      } else {
+        results.push({ ...it, x: rx, y: ry + offset, w: rowLen, h: itLen });
+      }
+      offset += itLen;
+    });
+  }
+
+  function worst(row, w) {
+    if (!row.length) return Infinity;
+    const rowArea = row.reduce((s, it) => s + it.area, 0);
+    const rowLen = rowArea / w;
+    let maxAspect = 0;
+    row.forEach(it => {
+      const itLen = it.area / rowLen;
+      const aspect = Math.max(rowLen / itLen, itLen / rowLen);
+      if (aspect > maxAspect) maxAspect = aspect;
+    });
+    return maxAspect;
+  }
+
+  function recurse(remaining, rx, ry, rw, rh) {
+    if (!remaining.length) return;
+    if (remaining.length === 1) {
+      results.push({ ...remaining[0], x: rx, y: ry, w: rw, h: rh });
       return;
     }
-    const isHoriz = rect.w < rect.h;
-    const side = isHoriz ? rect.w : rect.h;
-    let row = [];
-    let rowSum = 0;
-    let bestWorst = Infinity;
+    const isHoriz = rw >= rh;
+    const shortSide = isHoriz ? rh : rw;
 
-    for (let i = 0; i < children.length; i++) {
-      const nextRow = [...row, children[i]];
-      const nextSum = rowSum + children[i].value;
-      const curWorst = worst(nextRow, nextSum, side, rect.total, rect.w * rect.h);
-      if (row.length === 0 || curWorst <= bestWorst) {
-        row = nextRow;
-        rowSum = nextSum;
-        bestWorst = curWorst;
+    const row = [remaining[0]];
+    let bestWorst = worst(row, shortSide);
+
+    let i = 1;
+    while (i < remaining.length) {
+      const candidate = [...row, remaining[i]];
+      const candidateWorst = worst(candidate, shortSide);
+      if (candidateWorst <= bestWorst) {
+        row.push(remaining[i]);
+        bestWorst = candidateWorst;
+        i++;
       } else {
-        const remaining = children.slice(i);
-        const frac = rowSum / rect.total;
-        if (isHoriz) {
-          const rowH = rect.h * frac;
-          layoutRow(row, { x: rect.x, y: rect.y, w: rect.w, h: rowH }, isHoriz);
-          layout(remaining, { x: rect.x, y: rect.y + rowH, w: rect.w, h: rect.h - rowH, total: rect.total - rowSum });
-        } else {
-          const rowW = rect.w * frac;
-          layoutRow(row, { x: rect.x, y: rect.y, w: rowW, h: rect.h }, isHoriz);
-          layout(remaining, { x: rect.x + rowW, y: rect.y, w: rect.w - rowW, h: rect.h, total: rect.total - rowSum });
-        }
-        return;
+        break;
       }
     }
-    layoutRow(row, rect, isHoriz);
-  }
 
-  function worst(row, s, side, total, totalArea) {
-    if (!row.length || s === 0 || side === 0) return Infinity;
-    const rowArea = (s / total) * totalArea;
-    const otherSide = rowArea / side;
-    if (otherSide === 0) return Infinity;
-    let maxRatio = 0;
-    for (const item of row) {
-      const itemArea = (item.value / total) * totalArea;
-      const itemLen = itemArea / otherSide;
-      if (itemLen === 0) return Infinity;
-      const ratio = Math.max(itemLen / otherSide, otherSide / itemLen);
-      if (ratio > maxRatio) maxRatio = ratio;
-    }
-    return maxRatio;
-  }
+    layoutRow(row, shortSide, rx, ry, isHoriz);
+    const rowArea = row.reduce((s, it) => s + it.area, 0);
+    const rowLength = rowArea / shortSide;
 
-  function layoutRow(row, rect, isHoriz) {
-    if (!row.length) return;
-    let offset = isHoriz ? rect.x : rect.y;
-    const totalRowVal = row.reduce((s, it) => s + it.value, 0);
-    for (const item of row) {
-      const frac = totalRowVal > 0 ? item.value / totalRowVal : 1 / row.length;
-      if (isHoriz) {
-        const w = rect.w * frac;
-        rects.push({ ...item, x: offset, y: rect.y, w, h: rect.h });
-        offset += w;
-      } else {
-        const h = rect.h * frac;
-        rects.push({ ...item, x: rect.x, y: offset, w: rect.w, h });
-        offset += h;
-      }
+    const nextRemaining = remaining.slice(row.length);
+    if (isHoriz) {
+      recurse(nextRemaining, rx, ry + rowLength, rw, rh - rowLength);
+    } else {
+      recurse(nextRemaining, rx + rowLength, ry, rw - rowLength, rh);
     }
   }
 
-  layout(sorted, { x, y, w: width, h: height, total: totalVal });
-  return rects;
+  recurse(items, x, y, width, height);
+  return results;
 }
 
-function renderTreemapContainer(container, items, period = "1D", theme = "kr", capSetting = "auto") {
-  if (!container) return;
-  if (!items.length) {
-    container.innerHTML = '<div class="empty">평가금액이 있는 보유종목이 없습니다.</div>';
-    return;
+function getRateForPeriod(holding, period) {
+  if (period === "TOTAL") {
+    const cost = Number(holding.cost_value_krw || 0);
+    const profit = Number(holding.profit_krw || 0);
+    return cost > 0 ? (profit / cost) * 100 : 0;
   }
-
-  const maxCap = getEffectiveCap(period, capSetting);
-  const totalVal = items.reduce((s, it) => s + it.value, 0);
-  items.forEach((it) => {
-    it.weight = totalVal > 0 ? (it.value / totalVal) * 100 : 0;
-  });
-
-  const width = container.clientWidth || 920;
-  const height = Math.max(380, Math.min(540, Math.round(width * 0.46)));
-  container.style.position = "relative";
-  container.style.height = `${height}px`;
-
-  const tiles = squarify(items, 0, 0, width, height);
-
-  container.innerHTML = tiles.map((tile) => {
-    const periodRates = tile.period_changes || {};
-    let rateVal = 0;
-    if (period === "TOTAL") {
-      rateVal = Number(tile.rate || 0);
-    } else if (periodRates[period] != null) {
-      rateVal = Number(periodRates[period]);
-    } else if (period === "1D") {
-      rateVal = Number(tile.day_change_rate || 0);
-    } else {
-      rateVal = Number(tile.rate || 0);
-    }
-
-    const color = getHeatmapColor(rateVal, maxCap, theme);
-    const sign = rateVal >= 0 ? "+" : "";
-    const rateText = `${sign}${number(rateVal, 1)}%`;
-
-    const isTiny = tile.w < 38 || tile.h < 26;
-    const isSmall = !isTiny && (tile.w < 62 || tile.h < 42);
-    const isMed = !isTiny && !isSmall && (tile.w < 98 || tile.h < 64);
-
-    let inner = "";
-    if (isTiny) {
-      inner = `<span class="tile-tiny-dot"></span>`;
-    } else if (isSmall) {
-      inner = `<span class="tile-name small">${html(tile.name)}</span><span class="tile-rate small">${rateText}</span>`;
-    } else if (isMed) {
-      inner = `<strong class="tile-name med">${html(tile.name)}</strong><span class="tile-rate med">${rateText}</span>`;
-    } else {
-      inner = `<strong class="tile-name">${html(tile.name)}</strong><span class="tile-rate">${rateText}</span>`;
-    }
-
-    const infoStr = JSON.stringify({
-      period,
-      name: tile.name,
-      code: tile.code,
-      market: tile.market || tile.currency,
-      value: tile.market_value_krw,
-      cost: tile.cost_value_krw,
-      profit: tile.profit_krw,
-      rate: tile.rate,
-      selected_rate: rateVal,
-      day_change_rate: tile.day_change_rate || 0,
-      period_changes: tile.period_changes,
-      weight: tile.weight,
-    }).replace(/"/g, "&quot;");
-
-    return `<div class="heatmap-tile" data-symbol="${html(tile.name)}" data-info="${infoStr}" style="left:${tile.x.toFixed(1)}px;top:${tile.y.toFixed(1)}px;width:${tile.w.toFixed(1)}px;height:${tile.h.toFixed(1)}px;background-color:${color};"><div class="heatmap-tile-inner">${inner}</div></div>`;
-  }).join("");
-
-  updateHeatmapLegendUI(period, theme, capSetting);
+  const multi = dashboard?.settings?.period_rates || {};
+  const code = (holding.code || "").toUpperCase();
+  if (multi[code] && multi[code][period] != null) return Number(multi[code][period]);
+  return Number(holding.day_change_rate || 0);
 }
 
 function renderHeatmaps(data) {
-  const holdings = data?.holdings || [];
   const container = $("#assetHeatmapContainer");
   if (!container) return;
+  const holdings = data?.holdings || [];
 
   if (!holdings.length) {
     container.innerHTML = '<div class="empty">보유종목이 없습니다. 증권사 동기화 후 히트맵이 표시됩니다.</div>';
     return;
   }
 
+  // 종목별 통합 집계
   const groups = new Map();
   holdings.forEach((item) => {
     const key = `${item.code}|${item.currency}|${item.name}`;
@@ -837,25 +787,12 @@ function renderHeatmaps(data) {
       cost_value_krw: 0,
       profit_krw: 0,
       day_change_rate: Number(item.day_change_rate || 0),
-      period_changes: item.period_changes || {
-        "1D": Number(item.day_change_rate || 0),
-        "1W": Number(item.day_change_rate || 0),
-        "1M": Number(item.day_change_rate || 0),
-        "YTD": Number(item.day_change_rate || 0),
-        "1Y": Number(item.day_change_rate || 0),
-        "TOTAL": Number(item.return_rate || 0),
-      },
+      period_changes: item.period_changes,
     };
     group.quantity += Number(item.quantity || 0);
     group.market_value_krw += Number(item.market_value_krw || 0);
     group.cost_value_krw += Number(item.cost_value_krw || 0);
     group.profit_krw += Number(item.profit_krw || 0);
-    if (item.day_change_rate != null && Number(item.day_change_rate) !== 0) {
-      group.day_change_rate = Number(item.day_change_rate);
-    }
-    if (item.period_changes) {
-      group.period_changes = item.period_changes;
-    }
     groups.set(key, group);
   });
 
@@ -863,7 +800,7 @@ function renderHeatmaps(data) {
   const items = [...groups.values()]
     .filter((it) => it.market_value_krw > 0)
     .map((it) => {
-      const rate = it.cost_value_krw ? (it.profit_krw / it.cost_value_krw) * 100 : 0;
+      const rate = getRateForPeriod(it, heatmapPeriod);
       return {
         ...it,
         value: it.market_value_krw,
@@ -873,20 +810,17 @@ function renderHeatmaps(data) {
     })
     .sort((a, b) => b.value - a.value);
 
+  const maxCap = getEffectiveCap(heatmapPeriod, heatmapMaxCap);
+  updateHeatmapLegendUI(heatmapPeriod, heatmapTheme, heatmapMaxCap);
+
+  // 뷰 모드 1: 카드형 뷰 (와이드 카드)
   if (heatmapViewMode === 'cards') {
     container.style.height = "auto";
     container.style.position = "static";
-    updateHeatmapLegendUI(heatmapPeriod, heatmapTheme, heatmapMaxCap);
     container.innerHTML = `
       <div class="heatmap-cards-grid">
         ${items.map(it => {
-          const periodRates = it.period_changes || {};
-          let selRate = 0;
-          if (heatmapPeriod === 'TOTAL') selRate = it.rate;
-          else if (periodRates[heatmapPeriod] != null) selRate = Number(periodRates[heatmapPeriod]);
-          else selRate = Number(it.day_change_rate || 0);
-
-          const isUp = selRate >= 0;
+          const isUp = it.rate >= 0;
           const color = isUp ? 'rgba(255, 92, 119, 0.16)' : 'rgba(79, 157, 255, 0.16)';
           const borderColor = isUp ? '#ff5c77' : '#4f9dff';
           return `
@@ -898,7 +832,7 @@ function renderHeatmaps(data) {
               </div>
               <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;">
                 <small class="muted" style="font-size:11px;">${money(it.value)}</small>
-                <b class="${signClass(selRate)}" style="font-size:13px;font-weight:800;">${selRate >= 0 ? '+' : ''}${number(selRate, 2)}%</b>
+                <b class="${signClass(it.rate)}" style="font-size:13px;font-weight:800;">${it.rate >= 0 ? '+' : ''}${number(it.rate, 2)}%</b>
               </div>
             </div>
           `;
@@ -906,69 +840,47 @@ function renderHeatmaps(data) {
       </div>
     `;
   } else {
-    renderTreemapContainer(container, items, heatmapPeriod, heatmapTheme, heatmapMaxCap);
+    // 뷰 모드 2: 면적형 트리맵 (Squarify 알고리즘)
+    container.style.position = "relative";
+    const width = container.clientWidth || 920;
+    const height = Math.max(380, Math.min(540, Math.round(width * 0.44)));
+    container.style.height = `${height}px`;
+
+    const tiles = squarify(items, 0, 0, width, height);
+
+    container.innerHTML = tiles.map((tile) => {
+      const color = getHeatmapColor(tile.rate, maxCap, heatmapTheme);
+      const sign = tile.rate >= 0 ? "+" : "";
+      const rateText = `${sign}${number(tile.rate, 1)}%`;
+
+      const isTiny = tile.w < 38 || tile.h < 26;
+      const isSmall = !isTiny && (tile.w < 62 || tile.h < 42);
+      const isMed = !isTiny && !isSmall && (tile.w < 98 || tile.h < 64);
+
+      let inner = "";
+      if (isTiny) {
+        inner = `<span class="tile-tiny-dot"></span>`;
+      } else if (isSmall) {
+        inner = `<span class="tile-name small">${html(tile.name)}</span><span class="tile-rate small">${rateText}</span>`;
+      } else if (isMed) {
+        inner = `<strong class="tile-name med">${html(tile.name)}</strong><span class="tile-rate med">${rateText}</span>`;
+      } else {
+        inner = `<strong class="tile-name">${html(tile.name)}</strong><span class="tile-rate">${rateText}</span><span class="tile-weight">${number(tile.weight, 1)}%</span>`;
+      }
+
+      const infoStr = JSON.stringify({
+        name: tile.name,
+        code: tile.code,
+        value: tile.market_value_krw,
+        cost: tile.cost_value_krw,
+        profit: tile.profit_krw,
+        rate: tile.rate,
+        weight: tile.weight,
+      }).replace(/"/g, "&quot;");
+
+      return `<div class="heatmap-tile" data-symbol="${html(tile.name)}" data-info="${infoStr}" style="left:${tile.x.toFixed(1)}px;top:${tile.y.toFixed(1)}px;width:${tile.w.toFixed(1)}px;height:${tile.h.toFixed(1)}px;background-color:${color};"><div class="heatmap-tile-inner">${inner}</div></div>`;
+    }).join("");
   }
-}
-
-// ── 히트맵 툴팁 바인딩 ──
-const tooltip = $("#heatmapTooltip");
-function bindHeatmapInteractions(container) {
-  if (!container || !tooltip) return;
-  container.addEventListener("mousemove", (e) => {
-    const tile = e.target.closest(".heatmap-tile");
-    if (!tile || !tile.dataset.info) {
-      tooltip.style.display = "none";
-      return;
-    }
-    try {
-      const info = JSON.parse(tile.dataset.info);
-      const period = info.period || heatmapPeriod || "1D";
-      const selRate = Number(info.selected_rate != null ? info.selected_rate : (period === "TOTAL" ? info.rate : (info.period_changes?.[period] || info.day_change_rate || 0)));
-      const sign = selRate >= 0 ? "+" : "";
-      const rateClass = selRate >= 0 ? "up" : "down";
-      const periodLabel = PERIOD_LABELS[period] || period;
-
-      tooltip.innerHTML = `
-        <div class="heatmap-tooltip-title">
-          <strong>${html(info.name)}</strong>
-          <span>${html(info.code)} · ${html(info.market)}</span>
-        </div>
-        <div class="heatmap-tooltip-row">
-          <span class="label">포지션 규모:</span>
-          <span class="val">${money(info.value)} (${number(info.weight, 1)}%)</span>
-        </div>
-        <div class="heatmap-tooltip-row">
-          <span class="label">${periodLabel}:</span>
-          <span class="val ${rateClass}">${sign}${number(selRate, 2)}%</span>
-        </div>
-        <div class="heatmap-tooltip-row">
-          <span class="label">누적 수익률:</span>
-          <span class="val ${info.rate >= 0 ? "up" : "down"}">${info.rate >= 0 ? "+" : ""}${number(info.rate, 2)}%</span>
-        </div>
-      `;
-      tooltip.style.display = "block";
-      const x = Math.min(e.pageX + 14, window.innerWidth - tooltip.offsetWidth - 20);
-      const y = Math.max(10, e.pageY - tooltip.offsetHeight - 12);
-      tooltip.style.left = `${x}px`;
-      tooltip.style.top = `${y}px`;
-    } catch {
-      tooltip.style.display = "none";
-    }
-  });
-
-  container.addEventListener("mouseleave", () => {
-    tooltip.style.display = "none";
-  });
-
-  container.addEventListener("click", (e) => {
-    const tile = e.target.closest(".heatmap-tile");
-    if (!tile || !tile.dataset.symbol) return;
-    const search = $("#searchInput");
-    if (search) {
-      search.value = tile.dataset.symbol;
-      if (dashboard) renderHoldings(dashboard);
-    }
-  });
 }
 
 // ── 6. 보유종목 테이블 (정렬 + 섹터 뱃지 + 인터랙티브 차트 모달) ─────────────
@@ -1197,69 +1109,34 @@ function renderAssetRecords(records) {
     });
     const monthlyList = [...monthlyMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
-    const values = monthlyList.map(m => Number(m[1].total_value_krw || 0));
-    const minVal = Math.min(...values);
-    const maxVal = Math.max(...values);
-
-    const w = 900, h = 260, pad = 30;
-    const hBarArea = 180;
-    const barWidth = Math.max(16, Math.min(54, (w - pad * 2) / monthlyList.length - 16));
-
     let prevVal = 0;
-    const bars = monthlyList.map(([ym, item], idx) => {
+    const cardsHtml = monthlyList.map(([ym, item]) => {
       const val = Number(item.total_value_krw || 0);
       const delta = prevVal ? val - prevVal : 0;
       const deltaRate = prevVal ? (delta / prevVal) * 100 : 0;
       prevVal = val;
       const isGain = delta >= 0;
 
-      const x = pad + ((w - pad * 2) * (idx + 0.5)) / Math.max(monthlyList.length, 1) - barWidth / 2;
-      const barH = Math.max(12, ((val - minVal * 0.8) / (maxVal - minVal * 0.8 || 1)) * (hBarArea - 20));
-      const y = hBarArea - barH;
-
-      const sign = delta >= 0 ? "+" : "";
-      const deltaText = delta !== 0 ? `${sign}${number(deltaRate, 1)}%` : "-";
-      const deltaClass = delta !== 0 ? (isGain ? "#ff5c77" : "#4f9dff") : "#8e9bb5";
-
       return `
-        <g class="monthly-bar-group">
-          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="url(#monthlyBarGrad)" rx="4" opacity="0.9">
-            <title>${ym}: ${money(val)} (전월대비 ${sign}${money(delta)} / ${deltaRate.toFixed(1)}%)</title>
-          </rect>
-          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="#f3f5ff" font-size="10.5" font-weight="700" text-anchor="middle">
-            ${money(val)}
-          </text>
-          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 16).toFixed(1)}" fill="#c4d1eb" font-size="11" font-weight="700" text-anchor="middle">
-            ${ym}
-          </text>
-          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 30).toFixed(1)}" fill="${deltaClass}" font-size="9.5" font-weight="700" text-anchor="middle">
-            ${deltaText}
-          </text>
-        </g>
+        <div class="monthly-bar-card">
+          <span class="month-label">${ym}</span>
+          <strong class="month-val">${money(val)}</strong>
+          <span class="month-delta ${signClass(delta)}" style="font-size:11px;">
+            ${delta !== 0 ? (isGain ? '+' : '') + money(delta) + ' (' + (isGain ? '+' : '') + number(deltaRate, 1) + '%)' : '기준월'}
+          </span>
+          <small class="muted" style="font-size:10px;">${item.holding_count || 0}종목</small>
+        </div>
       `;
     }).join('');
 
-    const firstItem = monthlyList[0][1];
-    const lastItem = monthlyList[monthlyList.length - 1][1];
-    const totalDelta = Number(lastItem.total_value_krw || 0) - Number(firstItem.total_value_krw || 0);
-    const totalDeltaRate = Number(firstItem.total_value_krw || 0) ? (totalDelta / Number(firstItem.total_value_krw || 0)) * 100 : 0;
-
     if (wrap) {
       wrap.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 8px;font-size:12px;font-weight:700;">
-          <span style="color:#c4b5fd;">📊 월별 말일 기준 자산 추이 막대그래프 (${monthlyList.length}개월)</span>
-          <span class="${signClass(totalDelta)}" style="font-size:12px;">기간 변동: ${totalDelta >= 0 ? '+' : ''}${money(totalDelta)} (${totalDelta >= 0 ? '+' : ''}${number(totalDeltaRate, 2)}%)</span>
+        <div style="padding:4px 0 10px;font-size:12px;font-weight:700;color:#c4b5fd;">
+          📊 월별 말일 기준 자산 추이 (${monthlyList.length}개월)
         </div>
-        <svg class="record-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:260px;overflow:visible;">
-          <defs>
-            <linearGradient id="monthlyBarGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#a78bfa" />
-              <stop offset="100%" stop-color="#6366f1" />
-            </linearGradient>
-          </defs>
-          <line x1="${pad}" y1="${hBarArea}" x2="${w - pad}" y2="${hBarArea}" stroke="#283758" stroke-width="1.2" />
-          ${bars}
-        </svg>
+        <div class="monthly-records-grid">
+          ${cardsHtml}
+        </div>
       `;
     }
   } else {
@@ -1469,183 +1346,6 @@ function openAccountEditDialog(account) {
   $("#accountEditDialog")?.showModal();
 }
 
-// ── 14. 가족 구성원 관리 함수들 ──────────────────────────────────────────────
-function renderFamilyMemberList(members) {
-  const list = document.getElementById('familyMemberList');
-  if (!list) return;
-  if (!members.length) {
-    list.innerHTML = '<p style="color:var(--muted);font-size:13px;">구성원이 없습니다.</p>';
-    return;
-  }
-  list.innerHTML = members.map(m => `
-    <div class="family-member-row" style="display:flex;align-items:center;gap:8px;">
-      <input class="family-member-name-input" type="text" value="${m}" data-original="${m}"
-        style="flex:1;font-size:13px;" maxlength="20" />
-      <button class="button secondary compact family-rename-btn" data-name="${m}" type="button">수정</button>
-      <button class="button text danger compact family-delete-btn" data-name="${m}" type="button">삭제</button>
-    </div>
-  `).join('');
-}
-
-async function openFamilyManager() {
-  const dlg = document.getElementById('familyManagerDialog');
-  if (!dlg) return;
-  try {
-    const res = await api('/api/family-members');
-    renderFamilyMemberList(res.members || []);
-  } catch(e) {
-    renderFamilyMemberList([]);
-  }
-  dlg.showModal();
-}
-
-async function loadFamilyMembers() {
-  try {
-    const res = await api('/api/family-members');
-    const members = res.members || [];
-    renderFamilyTabs(members);
-    updateOwnerSelectOptions(members);
-  } catch (e) {}
-}
-
-function updateOwnerSelectOptions(members) {
-  const opts = ['<option value="모두">모두</option>'].concat(members.map(m => `<option value="${m}">${m}</option>`)).join('');
-  document.querySelectorAll('select[name="owner"]').forEach(sel => {
-    const prev = sel.value;
-    sel.innerHTML = opts;
-    if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
-  });
-}
-
-function renderFamilyTabs(members) {
-  const allBtn = '<button type="button" class="family-tab' + (currentOwner === '모두' ? ' active' : '') + '" data-owner="모두">모두</button>';
-  const memberBtns = members.map(m =>
-    '<button type="button" class="family-tab' + (currentOwner === m ? ' active' : '') + '" data-owner="' + m + '">' + m + '</button>'
-  ).join('');
-  const inner = allBtn + memberBtns;
-  const container = document.getElementById('familyTabs');
-  if (container) container.innerHTML = inner;
-  const topbar = document.getElementById('topbarFamilyTabs');
-  if (topbar) topbar.innerHTML = inner;
-}
-
-// ── 전역 클릭 이벤트 위임 ───────────────────────────────────────────────────
-document.addEventListener('click', async (e) => {
-  // 가족 탭 선택
-  const accountsTab = e.target.closest('#familyTabs .family-tab');
-  if (accountsTab) { selectOwner(accountsTab.dataset.owner); return; }
-  const topbarTab = e.target.closest('#topbarFamilyTabs .family-tab');
-  if (topbarTab) { selectOwner(topbarTab.dataset.owner); return; }
-
-  // ⚙️ 가족 관리 모달 열기
-  if (e.target.closest('#manageFamilyBtn')) {
-    await openFamilyManager();
-    return;
-  }
-
-  // ➕ 계좌 추가 모달 열기
-  if (e.target.closest('#addAccountBtn')) {
-    const form = $("#accountAddForm");
-    if (form) form.reset();
-    $("#accountAddDialog")?.showModal();
-    return;
-  }
-
-  // 가족 구성원 추가
-  if (e.target.closest('#addMemberBtn')) {
-    const input = document.getElementById('newMemberName');
-    const name = (input?.value || '').trim();
-    if (!name) { toast('이름을 입력해 주세요.', true); return; }
-    try {
-      const res = await api('/api/family-members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      toast(res.message || '추가했습니다.');
-      if (input) input.value = '';
-      renderFamilyTabs(res.members || []);
-      updateOwnerSelectOptions(res.members || []);
-      renderFamilyMemberList(res.members || []);
-    } catch(err) { toast(err.message, true); }
-    return;
-  }
-
-  // 가족 구성원 이름 수정
-  const renameBtn = e.target.closest('.family-rename-btn');
-  if (renameBtn) {
-    const row = renameBtn.closest('.family-member-row');
-    const input = row?.querySelector('.family-member-name-input');
-    const oldName = renameBtn.dataset.name;
-    const newName = (input?.value || '').trim();
-    if (!newName || newName === oldName) return;
-    try {
-      const res = await api(`/api/family-members/${encodeURIComponent(oldName)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName }),
-      });
-      toast(res.message || '수정했습니다.');
-      renderFamilyTabs(res.members || []);
-      updateOwnerSelectOptions(res.members || []);
-      renderFamilyMemberList(res.members || []);
-      await loadDashboard();
-    } catch(err) { toast(err.message, true); }
-    return;
-  }
-
-  // 가족 구성원 삭제
-  const deleteMemberBtn = e.target.closest('.family-delete-btn');
-  if (deleteMemberBtn) {
-    const name = deleteMemberBtn.dataset.name;
-    if (!confirm(`'${name}' 구성원을 삭제할까요?\n연결된 계좌는 '모두'로 변경됩니다.`)) return;
-    try {
-      const res = await api(`/api/family-members/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      toast(res.message || '삭제했습니다.');
-      renderFamilyTabs(res.members || []);
-      updateOwnerSelectOptions(res.members || []);
-      renderFamilyMemberList(res.members || []);
-      await loadDashboard();
-    } catch(err) { toast(err.message, true); }
-    return;
-  }
-
-  // 보유종목 정렬 헤더 클릭
-  const th = e.target.closest('.sortable-th');
-  if (th && th.dataset.sort) {
-    const sortField = th.dataset.sort;
-    if (holdingSortField === sortField) {
-      holdingSortOrder = holdingSortOrder === 'asc' ? 'desc' : 'asc';
-    } else {
-      holdingSortField = sortField;
-      holdingSortOrder = 'desc';
-    }
-    if (dashboard) renderHoldings(dashboard);
-    return;
-  }
-
-  // 종목 차트 버튼 또는 종목명 클릭
-  const chartBtn = e.target.closest('.stock-chart-btn, .holding-name-link');
-  if (chartBtn) {
-    const code = chartBtn.dataset.code;
-    const name = chartBtn.dataset.name;
-    const price = chartBtn.dataset.price;
-    const currency = chartBtn.dataset.currency;
-    if (code) openStockChart(code, name, price, currency);
-    return;
-  }
-
-  // 종목 차트 모달 기간 탭 클릭
-  const chartTab = e.target.closest('#stockChartPeriodTabs .heatmap-tab');
-  if (chartTab) {
-    document.querySelectorAll('#stockChartPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
-    chartTab.classList.add('active');
-    currentStockChartPeriod = chartTab.dataset.period || '3M';
-    await loadStockChartData();
-    return;
-  }
-});
-
 // ── 이벤트 리스너 바인딩 ─────────────────────────────────────────────────────
 
 // 1. 상단 계좌 연결 & 갱신 버튼
@@ -1756,10 +1456,43 @@ document.getElementById('heatmapThemeSelect')?.addEventListener('change', (e) =>
   if (dashboard) renderHeatmaps(dashboard);
 });
 
-// 히트맵 인터랙션 바인딩
-bindHeatmapInteractions($("#assetHeatmapContainer"));
+// 8. 보유종목 테이블 컬럼 정렬 클릭 & 차트 열기
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('.sortable-th');
+  if (th && th.dataset.sort) {
+    const sortField = th.dataset.sort;
+    if (holdingSortField === sortField) {
+      holdingSortOrder = holdingSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      holdingSortField = sortField;
+      holdingSortOrder = 'desc';
+    }
+    if (dashboard) renderHoldings(dashboard);
+    return;
+  }
 
-// 8. 검색창 및 종목 수정/삭제 리스너
+  const chartBtn = e.target.closest('.stock-chart-btn, .holding-name-link');
+  if (chartBtn) {
+    const code = chartBtn.dataset.code;
+    const name = chartBtn.dataset.name;
+    const price = chartBtn.dataset.price;
+    const currency = chartBtn.dataset.currency;
+    if (code) openStockChart(code, name, price, currency);
+    return;
+  }
+});
+
+// 9. 종목 차트 기간 탭 클릭
+document.getElementById('stockChartPeriodTabs')?.addEventListener('click', async (e) => {
+  const tab = e.target.closest('.heatmap-tab');
+  if (!tab) return;
+  document.querySelectorAll('#stockChartPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentStockChartPeriod = tab.dataset.period || '3M';
+  await loadStockChartData();
+});
+
+// 10. 검색창 및 종목 수정/삭제 리스너
 $("#searchInput")?.addEventListener("input", () => dashboard && renderHoldings(dashboard));
 $("#clearButton")?.addEventListener("click", () => {
   if (confirm("저장된 보유내역을 모두 지울까요?")) {
@@ -1780,7 +1513,7 @@ $("#holdingsBody")?.addEventListener("click", (e) => {
   }
 });
 
-// 9. 계좌 목록 클릭
+// 11. 계좌 목록 클릭
 $("#accountList")?.addEventListener("click", async (e) => {
   const cashBtn = e.target.closest("[data-cash-id]");
   const editBtn = e.target.closest("[data-account-id]");
@@ -1800,7 +1533,7 @@ $("#accountList")?.addEventListener("click", async (e) => {
   }
 });
 
-// 10. 자산기록 리스트 수정/삭제
+// 12. 자산기록 리스트 수정/삭제
 $("#assetRecordList")?.addEventListener("click", async (e) => {
   const editButton = e.target.closest("[data-record-edit]");
   const deleteButton = e.target.closest("[data-record-delete]");
@@ -1813,7 +1546,7 @@ $("#assetRecordList")?.addEventListener("click", async (e) => {
   }
 });
 
-// 11. 폼 서브밋 핸들러들
+// 13. 폼 서브밋 핸들러들
 $("#holdingForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
@@ -1941,7 +1674,38 @@ $("#accountAddForm")?.addEventListener("submit", async (e) => {
   }
 });
 
-// 12. 데이터 백업 / 복원
+// 14. 가족 구성원 관리
+async function loadFamilyMembers() {
+  try {
+    const res = await api('/api/family-members');
+    const members = res.members || [];
+    renderFamilyTabs(members);
+    updateOwnerSelectOptions(members);
+  } catch (e) {}
+}
+
+function updateOwnerSelectOptions(members) {
+  const opts = ['<option value="모두">모두</option>'].concat(members.map(m => `<option value="${m}">${m}</option>`)).join('');
+  document.querySelectorAll('select[name="owner"]').forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML = opts;
+    if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  });
+}
+
+function renderFamilyTabs(members) {
+  const allBtn = '<button type="button" class="family-tab' + (currentOwner === '모두' ? ' active' : '') + '" data-owner="모두">모두</button>';
+  const memberBtns = members.map(m =>
+    '<button type="button" class="family-tab' + (currentOwner === m ? ' active' : '') + '" data-owner="' + m + '">' + m + '</button>'
+  ).join('');
+  const inner = allBtn + memberBtns;
+  const container = document.getElementById('familyTabs');
+  if (container) container.innerHTML = inner;
+  const topbar = document.getElementById('topbarFamilyTabs');
+  if (topbar) topbar.innerHTML = inner;
+}
+
+// 15. 데이터 백업 / 복원
 document.getElementById('exportButton')?.addEventListener('click', async () => {
   try {
     const response = await fetch('/api/export', { credentials: 'include' });
@@ -2009,3 +1773,9 @@ if (document.readyState === 'loading') {
 } else {
   bootstrap();
 }
+'''
+
+with open("app/static/wealth.js", "w", encoding="utf-8") as f:
+    f.write(JS_CONTENT.strip())
+
+print("wealth.js updated with Squarify Treemap + Wide Cards view toggle!")

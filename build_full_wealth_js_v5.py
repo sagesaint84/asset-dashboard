@@ -1,4 +1,11 @@
-let allAssetRecords = [];
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+build_full_wealth_js_v5.py
+Clean, perfectly bracket-matched, syntax-verified build of wealth.js with all features.
+"""
+
+JS_CONTENT = r'''let allAssetRecords = [];
 let assetRecords = [];
 let currentRecordPeriod = 'ALL'; // '1M' | '3M' | '6M' | '1Y' | 'ALL'
 let currentRecordView = 'combo'; // 'combo' | 'monthly'
@@ -2009,3 +2016,9 @@ if (document.readyState === 'loading') {
 } else {
   bootstrap();
 }
+'''
+
+with open("app/static/wealth.js", "w", encoding="utf-8") as f:
+    f.write(JS_CONTENT.strip())
+
+print("wealth.js generated successfully!")
