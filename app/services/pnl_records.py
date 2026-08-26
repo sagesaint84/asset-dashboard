@@ -11,6 +11,7 @@ from typing import Any
 import openpyxl
 
 from app.services.historical_fx import get_historical_fx_rate
+from app.services.stock_master import resolve_stock_info
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
@@ -55,6 +56,7 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
     currency = str(payload.get("currency", "KRW")).upper()
     pnl = float(payload.get("pnl", 0.0))
     date_val = str(payload.get("date", datetime.now().strftime("%Y-%m-%d")))
+    fx_pnl_krw = float(payload.get("fx_pnl_krw", 0.0))
     
     raw_fx = payload.get("fx_rate")
     if currency == "USD":
@@ -66,8 +68,8 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
         fx_rate = 1.0
 
     pnl_krw = float(payload.get("pnl_krw", 0.0))
-    if pnl_krw == 0.0 and pnl != 0.0:
-        pnl_krw = round(pnl * fx_rate, 0) if currency == "USD" else round(pnl, 0)
+    if pnl_krw == 0.0 and (pnl != 0.0 or fx_pnl_krw != 0.0):
+        pnl_krw = round(pnl * fx_rate + fx_pnl_krw, 0) if currency == "USD" else round(pnl, 0)
 
     is_ipo = bool(payload.get("is_ipo", False))
 
@@ -79,6 +81,7 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
         "currency": currency,
         "pnl": pnl,
         "fx_rate": fx_rate,
+        "fx_pnl_krw": fx_pnl_krw,
         "pnl_krw": pnl_krw,
         "is_ipo": is_ipo,
         "owner": str(payload.get("owner", "모두")).strip(),
@@ -105,10 +108,12 @@ def update_pnl_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any]
 
     currency = str(payload.get("currency", target.get("currency", "KRW"))).upper()
     pnl = float(payload.get("pnl", target.get("pnl", 0.0)))
+    fx_pnl_krw = float(payload.get("fx_pnl_krw", target.get("fx_pnl_krw", 0.0)))
     fx_rate = float(payload.get("fx_rate", target.get("fx_rate", 1385.0))) if currency == "USD" else 1.0
+    
     pnl_krw = float(payload.get("pnl_krw", 0.0))
-    if pnl_krw == 0.0 and pnl != 0.0:
-        pnl_krw = round(pnl * fx_rate, 0) if currency == "USD" else round(pnl, 0)
+    if pnl_krw == 0.0 and (pnl != 0.0 or fx_pnl_krw != 0.0):
+        pnl_krw = round(pnl * fx_rate + fx_pnl_krw, 0) if currency == "USD" else round(pnl, 0)
 
     target["date"] = str(payload.get("date", target.get("date")))
     target["code"] = str(payload.get("code", target.get("code"))).strip()
@@ -116,6 +121,7 @@ def update_pnl_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any]
     target["currency"] = currency
     target["pnl"] = pnl
     target["fx_rate"] = fx_rate
+    target["fx_pnl_krw"] = fx_pnl_krw
     target["pnl_krw"] = pnl_krw
     if "is_ipo" in payload:
         target["is_ipo"] = bool(payload.get("is_ipo"))
@@ -336,7 +342,12 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
             if any(r.values()):
                 rows.append({_clean_str(k): v for k, v in r.items() if k})
 
+    from app.services.stock_master import resolve_stock_info
+
+    existing_records = read_pnl_records()
+    now_iso = datetime.now().astimezone().isoformat()
     imported_records = []
+
     for r in rows:
         owner = _clean_str(r.get("소유자") or r.get("owner") or "모두")
         broker = _clean_str(r.get("증권사") or r.get("broker") or "")
@@ -345,19 +356,20 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
         raw_date = r.get("매도일 (Date)") or r.get("매도일") or r.get("date") or r.get("일자")
         date_str = _parse_date(raw_date)
         
-        code = _clean_str(r.get("종목코드") or r.get("code") or r.get("심볼") or "")
-        name = _clean_str(r.get("종목명") or r.get("name") or r.get("종목") or code)
-        if not code and not name:
-            continue
-        if not code:
-            code = name
-
+        raw_code = _clean_str(r.get("종목코드") or r.get("code") or r.get("심볼") or "")
+        raw_name = _clean_str(r.get("종목명") or r.get("name") or r.get("종목") or "")
         raw_curr = _clean_str(r.get("통화") or r.get("currency") or "").upper()
-        if not raw_curr:
-            raw_curr = "USD" if any(c.isalpha() for c in code) and len(code) <= 5 else "KRW"
+
+        if not raw_code and not raw_name:
+            continue
+
+        code, name, raw_curr = resolve_stock_info(raw_code, raw_name, raw_curr)
 
         raw_pnl = r.get("실현손익") or r.get("실현 손익") or r.get("손익") or r.get("pnl") or r.get("수익금")
         pnl = _clean_num(raw_pnl)
+
+        raw_fx_pnl = r.get("환차손익") or r.get("환차손") or r.get("환차익") or r.get("fx_pnl") or r.get("fx_pnl_krw")
+        fx_pnl_krw = _clean_num(raw_fx_pnl)
 
         raw_ipo = _clean_str(r.get("공모주 여부") or r.get("공모주여부") or r.get("공모주") or r.get("is_ipo") or r.get("ipo") or "").upper()
         is_ipo = raw_ipo in ("Y", "O", "YES", "TRUE", "1", "공모주", "공모")
@@ -369,23 +381,50 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
                 memo = f"{extra} {memo}".strip()
 
         fx = get_historical_fx_rate(date_str, fallback=fx_rate) if raw_curr == "USD" else 1.0
-        pnl_krw = round(pnl * fx, 0) if raw_curr == "USD" else round(pnl, 0)
+        pnl_krw = round(pnl * fx + fx_pnl_krw, 0) if raw_curr == "USD" else round(pnl, 0)
 
-        record_payload = {
+        record = {
+            "id": str(uuid.uuid4()),
             "date": date_str,
             "code": code,
             "name": name,
             "currency": raw_curr,
             "pnl": pnl,
             "fx_rate": fx,
+            "fx_pnl_krw": fx_pnl_krw,
             "pnl_krw": pnl_krw,
             "is_ipo": is_ipo,
             "owner": owner,
             "broker": broker,
             "account_name": account_name,
             "memo": memo,
+            "created_at": now_iso,
+            "updated_at": now_iso,
         }
-        rec = create_pnl_record(record_payload)
-        imported_records.append(rec)
+        imported_records.append(record)
+
+    if imported_records:
+        existing_records.extend(imported_records)
+        write_pnl_records(existing_records)
 
     return imported_records
+
+
+def recalculate_pnl_historical_fx() -> int:
+    """기존에 저장된 매도 실현손익 중 USD 레코드들의 환율과 원화 손익을 매도일자 기준으로 일괄 재계산합니다."""
+    records = read_pnl_records()
+    updated_count = 0
+    for r in records:
+        if str(r.get("currency", "KRW")).upper() == "USD":
+            d_str = str(r.get("date", ""))
+            if d_str:
+                new_fx = get_historical_fx_rate(d_str, fallback=float(r.get("fx_rate", 1385.0)))
+                pnl = float(r.get("pnl", 0.0))
+                fx_pnl = float(r.get("fx_pnl_krw", 0.0))
+                r["fx_rate"] = new_fx
+                r["pnl_krw"] = round(pnl * new_fx + fx_pnl, 0)
+                r["updated_at"] = datetime.now().astimezone().isoformat()
+                updated_count += 1
+    if updated_count > 0:
+        write_pnl_records(records)
+    return updated_count

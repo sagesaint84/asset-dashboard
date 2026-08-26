@@ -11,6 +11,7 @@ from typing import Any
 import openpyxl
 
 from app.services.historical_fx import get_historical_fx_rate
+from app.services.stock_master import resolve_stock_info
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
@@ -330,7 +331,8 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
             if any(r.values()):
                 rows.append({_clean_str(k): v for k, v in r.items() if k})
 
-    name_to_code_map = _get_stock_name_to_code_map()
+    existing_records = read_dividend_records()
+    now_iso = datetime.now().astimezone().isoformat()
     imported_records = []
 
     for r in rows:
@@ -341,31 +343,14 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
         raw_date = r.get("입금일 (Date)") or r.get("입금일") or r.get("date") or r.get("일자")
         date_str = _parse_date(raw_date)
         
-        code = _clean_str(r.get("종목코드") or r.get("code") or r.get("심볼") or "")
-        name = _clean_str(r.get("종목명") or r.get("name") or r.get("종목") or code)
-        if not code and not name:
-            continue
-
+        raw_code = _clean_str(r.get("종목코드") or r.get("code") or r.get("심볼") or "")
+        raw_name = _clean_str(r.get("종목명") or r.get("name") or r.get("종목") or "")
         raw_curr = _clean_str(r.get("통화") or r.get("currency") or "").upper()
 
-        # 종목코드가 없거나 name과 같을 때 보유종목 마스터에서 자동 보정
-        if name and (not code or code == name):
-            lookup_key = name.lower()
-            clean_key = re.sub(r"[\(\)\s_\-]", "", lookup_key)
-            if lookup_key in name_to_code_map:
-                code, mapped_curr = name_to_code_map[lookup_key]
-                if not raw_curr:
-                    raw_curr = mapped_curr
-            elif clean_key in name_to_code_map:
-                code, mapped_curr = name_to_code_map[clean_key]
-                if not raw_curr:
-                    raw_curr = mapped_curr
+        if not raw_code and not raw_name:
+            continue
 
-        if not code:
-            code = name
-
-        if not raw_curr:
-            raw_curr = "USD" if any(c.isalpha() for c in code) and len(code) <= 5 else "KRW"
+        code, name, raw_curr = resolve_stock_info(raw_code, raw_name, raw_curr)
 
         raw_amt = r.get("실제 배당금 (입금액)") or r.get("실제 배당금") or r.get("배당금") or r.get("amount") or r.get("입금액")
         amount = _clean_num(raw_amt)
@@ -373,31 +358,35 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
             continue
 
         memo = _clean_str(r.get("메모") or r.get("memo") or "")
-        # 증권사/계좌 정보가 있고 메모에 없으면 보조로 기록
         if broker or account_name:
             extra = f"[{broker} {account_name}]".strip()
             if extra not in memo:
                 memo = f"{extra} {memo}".strip()
 
-        # 입금일 기준 과거 환율 자동 조회
         fx = get_historical_fx_rate(date_str, fallback=fx_rate) if raw_curr == "USD" else 1.0
-        amt_krw = round(amount * fx, 0) if raw_curr == "USD" else round(amount, 0)
+        amount_krw = round(amount * fx, 0) if raw_curr == "USD" else round(amount, 0)
 
-        record_payload = {
+        record = {
+            "id": str(uuid.uuid4()),
             "date": date_str,
             "code": code,
             "name": name,
             "currency": raw_curr,
             "amount": amount,
             "fx_rate": fx,
-            "amount_krw": amt_krw,
+            "amount_krw": amount_krw,
             "owner": owner,
             "broker": broker,
             "account_name": account_name,
             "memo": memo,
+            "created_at": now_iso,
+            "updated_at": now_iso,
         }
-        rec = create_dividend_record(record_payload)
-        imported_records.append(rec)
+        imported_records.append(record)
+
+    if imported_records:
+        existing_records.extend(imported_records)
+        write_dividend_records(existing_records)
 
     return imported_records
 

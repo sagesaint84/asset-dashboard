@@ -37,9 +37,10 @@ from app.services.dividend_records import (
 from app.services.pnl_records import (
     create_pnl_record, delete_pnl_record, get_pnl_summary,
     read_pnl_records, update_pnl_record, import_pnl_file_data,
-    clear_pnl_records
+    clear_pnl_records, recalculate_pnl_historical_fx
 )
 from app.services.historical_fx import get_historical_fx_rate, sync_historical_fx
+from app.services.stock_master import sync_stock_master_online
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -75,6 +76,8 @@ async def ensure_data_dir():
     migrate_add_family_group()
     # 5년치 과거 환율 비동기 동기화
     asyncio.create_task(sync_historical_fx())
+    # 종목 마스터(국내 ETF/상장사/미국주식) 비동기 동기화
+    asyncio.create_task(sync_stock_master_online())
 
 
 
@@ -448,6 +451,16 @@ async def import_realized_pnl_endpoint(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail=f"실현손익 파일 처리 실패: {e}")
 
 
+@app.post("/api/realized-pnl/recalculate-fx")
+async def recalculate_realized_pnl_fx_endpoint() -> dict:
+    """Recalculate historical FX rates and KRW amounts for all USD realized PnL records."""
+    count = recalculate_pnl_historical_fx()
+    return {
+        "message": f"총 {count}건의 달러 실현손익 내역을 매도일자 기준 환율 및 환차손익으로 재계산했습니다.",
+        "count": count,
+    }
+
+
 @app.get("/api/sample/realized-pnl")
 async def download_sample_pnl():
     """Download sample Excel file for realized profit/loss tracking."""
@@ -724,20 +737,24 @@ async def import_portfolio(file: UploadFile = File(...), broker: str = "기타 �
 @app.get("/api/export")
 async def export_data():
     """포트폴리오 전체 데이터를 JSON 파일로 다운로드"""
-    from fastapi.responses import JSONResponse
     import json
     from app.services.portfolio import read_portfolio
     from app.services.asset_records import read_asset_records
+    from app.services.dividend_records import read_dividend_records
+    from app.services.pnl_records import read_pnl_records
 
     bundle = {
-        "version": "1.0",
+        "version": "2.0",
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "portfolio": read_portfolio(),
         "asset_records": read_asset_records(),
+        "dividend_records": read_dividend_records(),
+        "realized_pnl_records": read_pnl_records(),
     }
     content = json.dumps(bundle, ensure_ascii=False, indent=2)
     from starlette.responses import Response
-    filename = f"dashboard_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"asset-dashboard_{today_str}.json"
     return Response(
         content=content.encode("utf-8"),
         media_type="application/json",
@@ -751,6 +768,8 @@ async def import_backup(file: UploadFile = File(...)) -> dict:
     import json
     from app.services.portfolio import write_portfolio
     from app.services.asset_records import write_asset_records
+    from app.services.dividend_records import write_dividend_records
+    from app.services.pnl_records import write_pnl_records
 
     try:
         raw = await file.read()
@@ -768,6 +787,12 @@ async def import_backup(file: UploadFile = File(...)) -> dict:
     if "asset_records" in bundle:
         write_asset_records(bundle["asset_records"])
         msgs.append("자산기록")
+    if "dividend_records" in bundle:
+        write_dividend_records(bundle["dividend_records"])
+        msgs.append("배당내역")
+    if "realized_pnl_records" in bundle:
+        write_pnl_records(bundle["realized_pnl_records"])
+        msgs.append("매도실현손익")
 
     return {"message": f"{', '.join(msgs)} 데이터를 복원했습니다."}
 

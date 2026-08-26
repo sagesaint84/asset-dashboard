@@ -210,9 +210,14 @@ def get_default_sector(code: str, name: str = "") -> str:
 
 
 def normalize_holding(raw: dict[str, Any], account_id: str, broker: str, account_name: str, source: str = "manual") -> dict[str, Any]:
-    code = clean_text(raw.get("code")).upper()
-    name = clean_text(raw.get("name")) or code
-    currency = normalize_currency(raw.get("currency"))
+    from app.services.stock_master import resolve_stock_info
+    raw_code = clean_text(raw.get("code"))
+    raw_name = clean_text(raw.get("name"))
+    raw_curr = normalize_currency(raw.get("currency"))
+
+    code, name, currency = resolve_stock_info(raw_code, raw_name, raw_curr)
+    if not name:
+        name = code
     return {
         "id": clean_text(raw.get("id")) or str(uuid.uuid4()),
         "account_id": account_id,
@@ -606,10 +611,11 @@ def import_rows(filename: str, contents: bytes, default_broker: str = "기타 �
     normalized: list[dict[str, Any]] = []
     errors: list[str] = []
     for number, row in enumerate(rows, start=2):
-        code = clean_text(find_column(row, "code"))
+        raw_code = clean_text(find_column(row, "code"))
+        raw_name = clean_text(find_column(row, "name"))
         quantity = to_number(find_column(row, "quantity"))
-        if not code or quantity <= 0:
-            errors.append(f"{number}행: 종목코드 또는 보유수량이 없어 건너뛰었습니다.")
+        if (not raw_code and not raw_name) or quantity <= 0:
+            errors.append(f"{number}행: 종목코드/종목명 또는 보유수량이 없어 건너뛰었습니다.")
             continue
         owner = clean_text(find_column(row, "owner")) or "모두"
         broker = clean_text(find_column(row, "broker")) or default_broker
@@ -628,7 +634,7 @@ def import_rows(filename: str, contents: bytes, default_broker: str = "기타 �
                 break
 
         h_item = normalize_holding({
-            "code": code, "name": find_column(row, "name"), "quantity": quantity,
+            "code": raw_code, "name": raw_name, "quantity": quantity,
             "avg_price": find_column(row, "avg_price"), "current_price": find_column(row, "current_price"),
             "currency": find_column(row, "currency"), "market": find_column(row, "market"),
         }, account_id, broker, account_name, "import")

@@ -2627,7 +2627,7 @@ document.getElementById('exportButton')?.addEventListener('click', async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `내자산대시보드_백업_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `asset-dashboard_${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -3430,7 +3430,9 @@ function renderPnlMonthlyDetail(month = null) {
     const sign = pnlVal > 0 ? '+' : '';
     const colorClass = pnlVal > 0 ? 'pnl-gain-val' : (pnlVal < 0 ? 'pnl-loss-val' : 'pnl-zero-val');
     const origText = isUsd ? `${Number(item.pnl) > 0 ? '+' : ''}$${number(item.pnl, 2)}` : '';
-    const fxInfo = isUsd ? `<br><small style="color:#8da0c7;">환율 ${number(item.fx_rate, 1)}원</small>` : '';
+    const fxPnlVal = Number(item.fx_pnl_krw || 0);
+    const fxPnlInfo = (isUsd && fxPnlVal !== 0) ? `<br><small style="color:#c4b5fd;">환차손익 ${fxPnlVal > 0 ? '+' : ''}${money(fxPnlVal)}</small>` : '';
+    const fxInfo = isUsd ? `<br><small style="color:#8da0c7;">환율 ${number(item.fx_rate, 1)}원</small>${fxPnlInfo}` : '';
 
     return `
       <tr>

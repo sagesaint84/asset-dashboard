@@ -987,16 +987,16 @@
   flex-shrink: 0;
 }
 
-/* 섹터별/자산군별 상세 리스트 스크롤바 (5개 항목 표시 높이) */
+/* 섹터별/자산군별 상세 리스트 스크롤바 (5개 항목 완벽 표시 높이) */
 .classification-panel .classification-list.sector-mode {
-  max-height: 335px;
+  max-height: 385px;
   overflow-y: auto;
   padding-right: 6px;
   margin-top: 10px;
   gap: 0;
 }
 .classification-panel .classification-list.sector-mode .classification-row {
-  padding: 9px 4px;
+  padding: 8px 4px;
 }
 .classification-panel .classification-list.sector-mode::-webkit-scrollbar,
 .sector-legend-list::-webkit-scrollbar {
