@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 import openpyxl
 
+from app.services.historical_fx import get_historical_fx_rate
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 DIVIDEND_FILE = DATA_DIR / "dividend_records.json"
@@ -52,14 +54,24 @@ def create_dividend_record(payload: dict[str, Any]) -> dict[str, Any]:
     
     currency = str(payload.get("currency", "KRW")).upper()
     amount = float(payload.get("amount", 0.0))
-    fx_rate = float(payload.get("fx_rate", 1385.0)) if currency == "USD" else 1.0
+    date_val = str(payload.get("date", datetime.now().strftime("%Y-%m-%d")))
+    
+    raw_fx = payload.get("fx_rate")
+    if currency == "USD":
+        if raw_fx is not None and float(raw_fx) > 0:
+            fx_rate = float(raw_fx)
+        else:
+            fx_rate = get_historical_fx_rate(date_val)
+    else:
+        fx_rate = 1.0
+
     amount_krw = float(payload.get("amount_krw", 0.0))
     if amount_krw <= 0.0:
         amount_krw = round(amount * fx_rate, 0) if currency == "USD" else round(amount, 0)
 
     record = {
         "id": str(uuid.uuid4()),
-        "date": str(payload.get("date", datetime.now().strftime("%Y-%m-%d"))),
+        "date": date_val,
         "code": str(payload.get("code", "")).strip(),
         "name": str(payload.get("name", "")).strip(),
         "currency": currency,
@@ -122,6 +134,10 @@ def delete_dividend_record(record_id: str) -> bool:
     return False
 
 
+def clear_dividend_records() -> None:
+    write_dividend_records([])
+
+
 def get_actual_dividend_summary(owner: str = "모두", year: int | str | None = None) -> dict[str, Any]:
     records = read_dividend_records()
     
@@ -164,6 +180,24 @@ def get_actual_dividend_summary(owner: str = "모두", year: int | str | None = 
         item["items"].sort(key=lambda x: str(x.get("date", "")), reverse=True)
         monthly_list.append(item)
 
+    # 연도별 집계 (오름차순 2022 -> 2026)
+    yearly_dict: dict[str, dict[str, Any]] = {
+        y: {"year": y, "total_krw": 0.0, "items": []} for y in sorted(available_years)
+    }
+    for r in filtered:
+        y_str = str(r.get("date", ""))[:4]
+        if y_str in yearly_dict:
+            amt_krw = float(r.get("amount_krw", 0.0))
+            yearly_dict[y_str]["total_krw"] += amt_krw
+            yearly_dict[y_str]["items"].append(r)
+
+    yearly_list = []
+    for y in sorted(yearly_dict.keys()):
+        item = yearly_dict[y]
+        item["total_krw"] = round(item["total_krw"], 0)
+        item["items"].sort(key=lambda x: str(x.get("date", "")), reverse=True)
+        yearly_list.append(item)
+
     filtered_sorted = sorted(filtered, key=lambda x: str(x.get("date", "")), reverse=True)
 
     return {
@@ -174,6 +208,7 @@ def get_actual_dividend_summary(owner: str = "모두", year: int | str | None = 
         "record_count": len(filtered),
         "paying_stock_count": len(unique_codes),
         "monthly_schedule": monthly_list,
+        "yearly_schedule": yearly_list,
         "records": filtered_sorted,
     }
 
@@ -196,23 +231,77 @@ def _clean_num(val: Any) -> float:
         return 0.0
 
 
+from datetime import date, datetime, timedelta
+
+
 def _parse_date(val: Any) -> str:
     if val is None or val == "":
         return datetime.now().strftime("%Y-%m-%d")
-    if isinstance(val, datetime):
+    if isinstance(val, (datetime, date)):
         return val.strftime("%Y-%m-%d")
-    s = str(val).strip().replace(".", "-").replace("/", "-")
+    if isinstance(val, (int, float)):
+        # 엑셀 시리얼 날짜 지원 (e.g. 46255 -> 2026-08-21, 10000~90000 범위)
+        if 10000 <= val <= 90000:
+            d = date(1899, 12, 30) + timedelta(days=int(val))
+            return d.strftime("%Y-%m-%d")
+    s = str(val).strip()
+    # 숫자 5자리 시리얼 문자열 (e.g. "46255")
+    if s.isdigit() and 10000 <= int(s) <= 90000:
+        d = date(1899, 12, 30) + timedelta(days=int(s))
+        return d.strftime("%Y-%m-%d")
+    # YYYYMMDD 컴팩트 형식
+    m_compact = re.match(r"^(\d{4})(\d{2})(\d{2})$", s)
+    if m_compact:
+        return f"{m_compact.group(1)}-{m_compact.group(2)}-{m_compact.group(3)}"
+    s = s.replace(".", "-").replace("/", "-")
     m = re.search(r"(\d{4})[-_](\d{1,2})[-_](\d{1,2})", s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def _get_stock_name_to_code_map() -> dict[str, tuple[str, str]]:
+    """보유종목 DB에서 종목명 -> (종목코드, 통화) 매핑 생성."""
+    mapping: dict[str, tuple[str, str]] = {}
+    try:
+        portfolio_file = DATA_DIR / "portfolio.json"
+        if portfolio_file.exists():
+            with open(portfolio_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for h in data.get("holdings", []):
+                    name = str(h.get("name", "")).strip()
+                    code = str(h.get("code", "")).strip()
+                    curr = str(h.get("currency", "KRW")).strip().upper()
+                    if name and code:
+                        mapping[name.lower()] = (code, curr)
+                        # 특수문자 제거 버전도 매핑
+                        clean_n = re.sub(r"[\(\)\s_\-]", "", name.lower())
+                        if clean_n:
+                            mapping[clean_n] = (code, curr)
+    except Exception:
+        pass
+    return mapping
+
+
 def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 1385.0) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     
     if filename.lower().endswith(".xlsx"):
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        wb = None
+        for opts in (
+            {"read_only": True, "data_only": True},
+            {"read_only": True, "data_only": False},
+            {"data_only": True},
+            {},
+        ):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(content), **opts)
+                break
+            except Exception:
+                continue
+        if wb is None:
+            raise ValueError("엑셀 파일을 열 수 없습니다. 파일 손상 여부를 확인하세요.")
+        
         ws = wb.active
         all_rows = list(ws.iter_rows(values_only=True))
         if not all_rows:
@@ -241,7 +330,9 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
             if any(r.values()):
                 rows.append({_clean_str(k): v for k, v in r.items() if k})
 
+    name_to_code_map = _get_stock_name_to_code_map()
     imported_records = []
+
     for r in rows:
         owner = _clean_str(r.get("소유자") or r.get("owner") or "모두")
         broker = _clean_str(r.get("증권사") or r.get("broker") or "")
@@ -254,10 +345,25 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
         name = _clean_str(r.get("종목명") or r.get("name") or r.get("종목") or code)
         if not code and not name:
             continue
+
+        raw_curr = _clean_str(r.get("통화") or r.get("currency") or "").upper()
+
+        # 종목코드가 없거나 name과 같을 때 보유종목 마스터에서 자동 보정
+        if name and (not code or code == name):
+            lookup_key = name.lower()
+            clean_key = re.sub(r"[\(\)\s_\-]", "", lookup_key)
+            if lookup_key in name_to_code_map:
+                code, mapped_curr = name_to_code_map[lookup_key]
+                if not raw_curr:
+                    raw_curr = mapped_curr
+            elif clean_key in name_to_code_map:
+                code, mapped_curr = name_to_code_map[clean_key]
+                if not raw_curr:
+                    raw_curr = mapped_curr
+
         if not code:
             code = name
 
-        raw_curr = _clean_str(r.get("통화") or r.get("currency") or "").upper()
         if not raw_curr:
             raw_curr = "USD" if any(c.isalpha() for c in code) and len(code) <= 5 else "KRW"
 
@@ -273,7 +379,8 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
             if extra not in memo:
                 memo = f"{extra} {memo}".strip()
 
-        fx = fx_rate if raw_curr == "USD" else 1.0
+        # 입금일 기준 과거 환율 자동 조회
+        fx = get_historical_fx_rate(date_str, fallback=fx_rate) if raw_curr == "USD" else 1.0
         amt_krw = round(amount * fx, 0) if raw_curr == "USD" else round(amount, 0)
 
         record_payload = {
@@ -293,3 +400,30 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
         imported_records.append(rec)
 
     return imported_records
+
+
+def recalculate_dividend_historical_fx() -> int:
+    """기존 등록된 모든 배당 내역의 환율을 입금일 기준 과거 환율로 일괄 재계산합니다."""
+    records = read_dividend_records()
+    updated_count = 0
+    now_iso = datetime.now().astimezone().isoformat()
+
+    for r in records:
+        curr = str(r.get("currency", "KRW")).upper()
+        if curr == "USD":
+            dt = str(r.get("date", ""))
+            amt = float(r.get("amount", 0.0))
+            old_fx = float(r.get("fx_rate", 0.0))
+            new_fx = get_historical_fx_rate(dt, fallback=old_fx or 1385.0)
+            
+            r["fx_rate"] = new_fx
+            r["amount_krw"] = round(amt * new_fx, 0)
+            r["updated_at"] = now_iso
+            updated_count += 1
+        else:
+            r["fx_rate"] = 1.0
+            r["amount_krw"] = round(float(r.get("amount", 0.0)), 0)
+
+    if updated_count > 0:
+        write_dividend_records(records)
+    return updated_count

@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260826-holdingthemefix" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260826-sector5items" />
   </head>
   <body>
     <main class="shell">
@@ -50,7 +50,8 @@
               </div>
               <div class="summary-row-val">
                 <strong id="totalValue" class="value-highlight">₩0</strong>
-                <small id="holdingCaption">보유 종목 0개</small>
+                <small id="holdingCaption">주식 ₩0</small>
+                <small id="totalCashBadge" class="cash-badge-inline" style="display:none;margin-top:2px;">예수금 ₩0</small>
               </div>
             </div>
             <div class="summary-row">
@@ -85,11 +86,9 @@
                 <strong>원화 자산</strong>
               </div>
               <div class="summary-row-val">
-                <div class="val-line">
-                  <strong id="krwValue">₩0</strong>
-                  <span id="krwCashBadge" class="cash-badge-inline">(예수금 ₩0)</span>
-                </div>
+                <strong id="krwValue">₩0</strong>
                 <small id="krwCaption">주식 평가 ₩0</small>
+                <small id="krwCashBadge" class="cash-badge-inline">(예수금 ₩0)</small>
               </div>
             </div>
             <div class="summary-row">
@@ -98,11 +97,9 @@
                 <strong>달러 자산</strong>
               </div>
               <div class="summary-row-val">
-                <div class="val-line">
-                  <strong id="usdValue">US$0</strong>
-                  <span id="usdCashBadge" class="cash-badge-inline">(예수금 US$0)</span>
-                </div>
+                <strong id="usdValue">US$0</strong>
                 <small id="usdCaption">주식 평가 US$0</small>
+                <small id="usdCashBadge" class="cash-badge-inline">(예수금 US$0)</small>
               </div>
             </div>
             <div class="summary-row">
@@ -144,13 +141,8 @@
             </div>
             <span class="muted" style="margin-left:auto;font-size:11px;">수익률 · 비중</span>
           </div>
-          <div id="sectorDonutWrap" style="display:none;margin:10px 0 16px;"></div>
-          <div id="sectorDetailToggleWrap" style="display:none;text-align:center;margin-bottom:12px;">
-            <button id="toggleSectorDetailBtn" class="button secondary compact" type="button" style="font-size:12px;color:#c4b5fd;">
-              자세히 🔍
-            </button>
-          </div>
-          <div id="classificationList" class="classification-list"></div>
+          <div id="sectorDonutWrap" style="display:block;margin:10px 0 12px;"></div>
+          <div id="classificationList" class="classification-list sector-mode"></div>
         </article>
       </section>
 
@@ -261,6 +253,7 @@
             <button id="refreshDividendBtn" class="button secondary compact" type="button" title="배당 정보 재조회">↻ 조회</button>
             <button id="addDividendBtn" class="button secondary compact" type="button" title="실제 입금 배당금 추가" style="display:none;">➕ 배당 추가</button>
             <button id="importDividendBtn" class="button secondary compact" type="button" title="실제 배당금 엑셀 가져오기" style="display:none;">📂 가져오기</button>
+            <button id="clearAllDividendBtn" class="button secondary danger compact" type="button" title="실제 배당금 전체 일괄 삭제" style="display:none;">🗑️ 일괄삭제</button>
           </div>
         </div>
 
@@ -323,6 +316,7 @@
           <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
             <button id="addPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 추가">➕ 손익 추가</button>
             <button id="importPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 엑셀 가져오기">📂 가져오기</button>
+            <button id="clearAllPnlBtn" class="button secondary danger compact" type="button" title="매도 실현손익 전체 일괄 삭제">🗑️ 일괄삭제</button>
           </div>
         </div>
 
@@ -410,8 +404,9 @@
           </div>
           <div class="toolbar">
             <input id="searchInput" type="search" placeholder="종목명·코드·증권사 검색" />
-            <button id="addButton" class="button secondary compact" type="button">➕ 추가</button>
+            <button id="addButton" class="button secondary compact" type="button">➕ 종목추가</button>
             <button id="importButton" class="button secondary compact" type="button">📂 가져오기</button>
+            <button id="clearAllHoldingsBtn" class="button secondary danger compact" type="button" title="보유종목 전체 일괄 삭제">🗑️ 일괄삭제</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -810,9 +805,21 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260826-holdingthemefix"></script>
+    <script src="/static/wealth.js?v=20260826-sector5items"></script>
   </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

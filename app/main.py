@@ -31,12 +31,15 @@ from app.services.portfolio import (
 from app.services.asset_records import delete_asset_record, list_asset_records, upsert_asset_record
 from app.services.dividend_records import (
     create_dividend_record, delete_dividend_record, get_actual_dividend_summary,
-    read_dividend_records, update_dividend_record, import_dividend_file_data
+    read_dividend_records, update_dividend_record, import_dividend_file_data,
+    clear_dividend_records, recalculate_dividend_historical_fx
 )
 from app.services.pnl_records import (
     create_pnl_record, delete_pnl_record, get_pnl_summary,
-    read_pnl_records, update_pnl_record, import_pnl_file_data
+    read_pnl_records, update_pnl_record, import_pnl_file_data,
+    clear_pnl_records
 )
+from app.services.historical_fx import get_historical_fx_rate, sync_historical_fx
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -61,7 +64,6 @@ load_env_file()
 app = FastAPI(title="내 자산 대시보드", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.on_event("startup")
-@app.on_event("startup")
 async def ensure_data_dir():
     data_dir = ROOT_DIR / "data"
     if not data_dir.exists():
@@ -71,6 +73,8 @@ async def ensure_data_dir():
         logger.info("Data directory exists at %s", data_dir)
     # Run migration to ensure family_group field exists on accounts
     migrate_add_family_group()
+    # 5년치 과거 환율 비동기 동기화
+    asyncio.create_task(sync_historical_fx())
 
 
 
@@ -317,6 +321,30 @@ async def import_dividends_endpoint(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail=f"배당 파일 처리 실패: {e}")
 
 
+@app.post("/api/actual-dividends/clear")
+async def clear_actual_dividends_endpoint() -> dict:
+    """Clear all actual dividend records."""
+    clear_dividend_records()
+    return {"message": "모든 실제 배당금 기록이 삭제되었습니다."}
+
+
+@app.post("/api/actual-dividends/recalculate-fx")
+async def recalculate_actual_dividends_fx() -> dict:
+    """Recalculate USD dividend amounts using historical exchange rates for each deposit date."""
+    await sync_historical_fx()
+    updated = recalculate_dividend_historical_fx()
+    return {"message": f"총 {updated}건의 해외 배당금 환율이 입금일자 기준으로 재계산되었습니다.", "updated_count": updated}
+
+
+@app.get("/api/historical-fx")
+async def get_historical_fx_endpoint(date: str = "") -> dict:
+    """Get historical USD/KRW exchange rate for a given date."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    target = date.strip() or today
+    rate = get_historical_fx_rate(target)
+    return {"date": target, "rate": rate, "currency": "USD"}
+
+
 @app.get("/api/sample/dividends")
 async def download_sample_dividends():
     """Download sample Excel file for actual dividend tracking."""
@@ -382,6 +410,22 @@ async def remove_realized_pnl(record_id: str) -> dict:
     if not ok:
         raise HTTPException(status_code=404, detail="실현손익 기록을 찾을 수 없습니다.")
     return {"message": "실현손익 기록이 삭제되었습니다."}
+
+
+@app.post("/api/realized-pnl/clear")
+async def clear_realized_pnl_endpoint() -> dict:
+    """Clear all realized PnL records."""
+    clear_pnl_records()
+    return {"message": "모든 매도 실현손익 기록이 삭제되었습니다."}
+
+
+@app.post("/api/holdings/clear")
+async def clear_holdings_endpoint() -> dict:
+    """Clear all portfolio holdings."""
+    data = read_portfolio()
+    data["holdings"] = []
+    write_portfolio(data)
+    return {"message": "모든 보유종목이 삭제되었습니다."}
 
 
 @app.post("/api/import-realized-pnl")

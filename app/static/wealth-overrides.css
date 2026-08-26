@@ -124,7 +124,7 @@
 .summary-row-val .cash-badge-inline {
   font-size: 11px;
   font-weight: 600;
-  color: #8ec5fc;
+  color: #c4b5fd;
 }
 
 .summary-row-val small {
@@ -154,11 +154,11 @@
 .account-subrow-info { min-width: 0; }
 .account-subrow-info .account-name { display: block; font-weight: 600; color: #e4e9f7; font-size: 13px; }
 .account-subrow-detail { display: block; color: #8fa0c5; font-size: 11px; margin-top: 3px; }
-.account-group-cash { display: block; font-size: 12px; font-weight: 600; color: #7cb8ff; margin-top: 4px; }
+.account-group-cash { display: block; font-size: 12px; font-weight: 600; color: #c4b5fd; margin-top: 4px; }
 .account-actions { display: flex; gap: 4px; align-items: center; }
 .account-actions .icon-button { font-size: 13px; padding: 2px 4px; border-radius: 4px; transition: background 0.15s; }
 .account-actions .icon-button:hover { background: #1f2c4d; }
-.account-cash-button { color: #8ec5fc; }
+.account-cash-button { color: #c4b5fd; }
 
 /* 수치 증가: 붉은색(Red), 수치 감소: 파란색(Blue) */
 .up,
@@ -946,15 +946,15 @@
   align-items: center;
   justify-content: space-around;
   flex-wrap: wrap;
-  gap: 16px;
-  padding: 12px;
+  gap: 14px;
+  padding: 10px 14px;
   background: #090e1d;
   border: 1px solid #1a2542;
   border-radius: 10px;
 }
 .sector-donut-svg-wrap {
-  width: 140px;
-  height: 140px;
+  width: 130px;
+  height: 130px;
   flex-shrink: 0;
   position: relative;
 }
@@ -968,9 +968,10 @@
   flex-direction: column;
   gap: 5px;
   flex: 1;
-  min-width: 160px;
-  max-height: 140px;
+  min-width: 150px;
+  max-height: 130px;
   overflow-y: auto;
+  padding-right: 4px;
 }
 .sector-legend-item {
   display: flex;
@@ -984,6 +985,31 @@
   height: 8px;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+/* 섹터별/자산군별 상세 리스트 스크롤바 (5개 항목 표시 높이) */
+.classification-panel .classification-list.sector-mode {
+  max-height: 335px;
+  overflow-y: auto;
+  padding-right: 6px;
+  margin-top: 10px;
+  gap: 0;
+}
+.classification-panel .classification-list.sector-mode .classification-row {
+  padding: 9px 4px;
+}
+.classification-panel .classification-list.sector-mode::-webkit-scrollbar,
+.sector-legend-list::-webkit-scrollbar {
+  width: 5px;
+}
+.classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb,
+.sector-legend-list::-webkit-scrollbar-thumb {
+  background: rgba(142, 112, 250, 0.35);
+  border-radius: 4px;
+}
+.classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb:hover,
+.sector-legend-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 112, 250, 0.65);
 }
 
 /* 5. 자산기록 월별 막대 차트 뷰 */
@@ -1369,14 +1395,55 @@
   filter: brightness(1.2);
 }
 
-/* ── 배당/실현손익 다열 테이블 스타일 ── */
+/* ── 배당/실현손익 다열 테이블 스타일 (자산기록과 같은 5~10개 표시 스크롤 형태) ── */
 .detail-table-wrap {
   width: 100%;
+  max-height: 420px;
+  overflow-y: auto;
   overflow-x: auto;
   border-radius: 8px;
   border: 1px solid #1f2b48;
   background: #0d1527;
   margin-top: 8px;
+  position: relative;
+}
+
+.holdings-panel .table-wrap {
+  max-height: 480px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #1f2b48;
+  margin-top: 14px;
+  position: relative;
+}
+
+.div-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* 세련된 커스텀 스크롤바 */
+.detail-table-wrap::-webkit-scrollbar,
+.holdings-panel .table-wrap::-webkit-scrollbar,
+.div-detail-grid::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.detail-table-wrap::-webkit-scrollbar-thumb,
+.holdings-panel .table-wrap::-webkit-scrollbar-thumb,
+.div-detail-grid::-webkit-scrollbar-thumb {
+  background: rgba(142, 112, 250, 0.35);
+  border-radius: 4px;
+}
+.detail-table-wrap::-webkit-scrollbar-thumb:hover,
+.holdings-panel .table-wrap::-webkit-scrollbar-thumb:hover,
+.div-detail-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 112, 250, 0.65);
 }
 
 .detail-table {
@@ -1393,6 +1460,16 @@
   padding: 10px 12px;
   border-bottom: 1px solid #1f2b48;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.holdings-panel table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #111a33;
 }
 
 .detail-table td {
@@ -1891,16 +1968,28 @@ dialog.dialog .dialog-actions {
   border-bottom-color: #e2e8f0 !important;
 }
 
-[data-theme="white"] .detail-table-wrap {
+[data-theme="white"] .detail-table-wrap,
+[data-theme="white"] .holdings-panel .table-wrap {
   background: #ffffff !important;
   border-color: #e2e8f0 !important;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
 }
 
-[data-theme="white"] .detail-table th {
+[data-theme="white"] .detail-table th,
+[data-theme="white"] .holdings-panel table thead th {
   background: #f8fafc !important;
   color: #475569 !important;
   border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .button.danger {
+  color: #dc2626 !important;
+  border-color: #fecaca !important;
+  background: #fef2f2 !important;
+}
+[data-theme="white"] .button.danger:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
 }
 
 [data-theme="white"] .detail-table td {
@@ -1970,12 +2059,14 @@ dialog.dialog .dialog-actions {
   border: 1px solid rgba(124, 58, 237, 0.2) !important;
 }
 
-[data-theme="oled"] .detail-table-wrap {
+[data-theme="oled"] .detail-table-wrap,
+[data-theme="oled"] .holdings-panel .table-wrap {
   background: #070709 !important;
   border-color: #1a1a24 !important;
 }
 
-[data-theme="oled"] .detail-table th {
+[data-theme="oled"] .detail-table th,
+[data-theme="oled"] .holdings-panel table thead th {
   background: #0d0d12 !important;
   color: #808b9e !important;
   border-bottom-color: #1a1a24 !important;
@@ -2086,3 +2177,36 @@ dialog.dialog .dialog-actions {
 [data-theme="white"] .heatmap-tooltip .val {
   color: #f8fafc !important;
 }
+
+/* ── 섹터 도넛 및 상세 리스트 테마 스타일 ── */
+[data-theme="white"] .sector-donut-container {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb,
+[data-theme="white"] .sector-legend-list::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35) !important;
+}
+
+[data-theme="white"] .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb:hover,
+[data-theme="white"] .sector-legend-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65) !important;
+}
+
+[data-theme="oled"] .sector-donut-container {
+  background: #08080c !important;
+  border-color: #1a1a24 !important;
+}
+
+[data-theme="oled"] .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb,
+[data-theme="oled"] .sector-legend-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-theme="white"] .summary-row-val .cash-badge-inline,
+[data-theme="white"] .account-group-cash,
+[data-theme="white"] .account-cash-button {
+  color: #7c3aed !important;
+}
+

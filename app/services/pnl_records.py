@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 import openpyxl
 
+from app.services.historical_fx import get_historical_fx_rate
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 PNL_FILE = DATA_DIR / "realized_pnl_records.json"
@@ -52,7 +54,17 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
     
     currency = str(payload.get("currency", "KRW")).upper()
     pnl = float(payload.get("pnl", 0.0))
-    fx_rate = float(payload.get("fx_rate", 1385.0)) if currency == "USD" else 1.0
+    date_val = str(payload.get("date", datetime.now().strftime("%Y-%m-%d")))
+    
+    raw_fx = payload.get("fx_rate")
+    if currency == "USD":
+        if raw_fx is not None and float(raw_fx) > 0:
+            fx_rate = float(raw_fx)
+        else:
+            fx_rate = get_historical_fx_rate(date_val)
+    else:
+        fx_rate = 1.0
+
     pnl_krw = float(payload.get("pnl_krw", 0.0))
     if pnl_krw == 0.0 and pnl != 0.0:
         pnl_krw = round(pnl * fx_rate, 0) if currency == "USD" else round(pnl, 0)
@@ -61,7 +73,7 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
 
     record = {
         "id": str(uuid.uuid4()),
-        "date": str(payload.get("date", datetime.now().strftime("%Y-%m-%d"))),
+        "date": date_val,
         "code": str(payload.get("code", "")).strip(),
         "name": str(payload.get("name", "")).strip(),
         "currency": currency,
@@ -127,6 +139,10 @@ def delete_pnl_record(record_id: str) -> bool:
     return False
 
 
+def clear_pnl_records() -> None:
+    write_pnl_records([])
+
+
 def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_type: str = "all") -> dict[str, Any]:
     records = read_pnl_records()
     
@@ -183,6 +199,30 @@ def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_
         item["items"].sort(key=lambda x: str(x.get("date", "")), reverse=True)
         monthly_list.append(item)
 
+    # 연도별 집계 (오름차순 2022 -> 2026)
+    yearly_dict: dict[str, dict[str, Any]] = {
+        y: {"year": y, "total_krw": 0.0, "win_krw": 0.0, "loss_krw": 0.0, "items": []} for y in sorted(available_years)
+    }
+    for r in filtered:
+        y_str = str(r.get("date", ""))[:4]
+        if y_str in yearly_dict:
+            amt_krw = float(r.get("pnl_krw", 0.0))
+            yearly_dict[y_str]["total_krw"] += amt_krw
+            if amt_krw > 0:
+                yearly_dict[y_str]["win_krw"] += amt_krw
+            elif amt_krw < 0:
+                yearly_dict[y_str]["loss_krw"] += amt_krw
+            yearly_dict[y_str]["items"].append(r)
+
+    yearly_list = []
+    for y in sorted(yearly_dict.keys()):
+        item = yearly_dict[y]
+        item["total_krw"] = round(item["total_krw"], 0)
+        item["win_krw"] = round(item["win_krw"], 0)
+        item["loss_krw"] = round(item["loss_krw"], 0)
+        item["items"].sort(key=lambda x: str(x.get("date", "")), reverse=True)
+        yearly_list.append(item)
+
     filtered_sorted = sorted(filtered, key=lambda x: str(x.get("date", "")), reverse=True)
 
     return {
@@ -197,6 +237,7 @@ def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_
         "win_rate": round(win_rate, 1),
         "record_count": len(filtered),
         "monthly_schedule": monthly_list,
+        "yearly_schedule": yearly_list,
         "records": filtered_sorted,
     }
 
@@ -219,12 +260,29 @@ def _clean_num(val: Any) -> float:
         return 0.0
 
 
+from datetime import date, datetime, timedelta
+
+
 def _parse_date(val: Any) -> str:
     if val is None or val == "":
         return datetime.now().strftime("%Y-%m-%d")
-    if isinstance(val, datetime):
+    if isinstance(val, (datetime, date)):
         return val.strftime("%Y-%m-%d")
-    s = str(val).strip().replace(".", "-").replace("/", "-")
+    if isinstance(val, (int, float)):
+        # 엑셀 시리얼 날짜 지원 (e.g. 46255 -> 2026-08-21, 10000~90000 범위)
+        if 10000 <= val <= 90000:
+            d = date(1899, 12, 30) + timedelta(days=int(val))
+            return d.strftime("%Y-%m-%d")
+    s = str(val).strip()
+    # 숫자 5자리 시리얼 문자열
+    if s.isdigit() and 10000 <= int(s) <= 90000:
+        d = date(1899, 12, 30) + timedelta(days=int(s))
+        return d.strftime("%Y-%m-%d")
+    # YYYYMMDD 컴팩트 형식
+    m_compact = re.match(r"^(\d{4})(\d{2})(\d{2})$", s)
+    if m_compact:
+        return f"{m_compact.group(1)}-{m_compact.group(2)}-{m_compact.group(3)}"
+    s = s.replace(".", "-").replace("/", "-")
     m = re.search(r"(\d{4})[-_](\d{1,2})[-_](\d{1,2})", s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
@@ -235,7 +293,21 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
     rows: list[dict[str, Any]] = []
     
     if filename.lower().endswith(".xlsx"):
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        wb = None
+        for opts in (
+            {"read_only": True, "data_only": True},
+            {"read_only": True, "data_only": False},
+            {"data_only": True},
+            {},
+        ):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(content), **opts)
+                break
+            except Exception:
+                continue
+        if wb is None:
+            raise ValueError("엑셀 파일을 열 수 없습니다. 파일 손상 여부를 확인하세요.")
+        
         ws = wb.active
         all_rows = list(ws.iter_rows(values_only=True))
         if not all_rows:
@@ -296,7 +368,7 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
             if extra not in memo:
                 memo = f"{extra} {memo}".strip()
 
-        fx = fx_rate if raw_curr == "USD" else 1.0
+        fx = get_historical_fx_rate(date_str, fallback=fx_rate) if raw_curr == "USD" else 1.0
         pnl_krw = round(pnl * fx, 0) if raw_curr == "USD" else round(pnl, 0)
 
         record_payload = {

@@ -61,15 +61,52 @@ function computeFilteredSummary(accounts, holdings, fxRates) {
   };
 }
 
-const ETF_PREFIXES = ['KODEX','TIGER','ACE','SOL','PLUS','RISE','HANARO','KOSEF','ARIRANG','KOACT','WON'];
+const KR_ETF_PREFIXES = ['KODEX','TIGER','ACE','SOL','PLUS','RISE','HANARO','KOSEF','ARIRANG','KOACT','WON','1Q','KIWOOM','TIMEFOLIO','WOORI','KBSTAR'];
+const OVERSEAS_KEYWORDS = ['미국','S&P','나스닥','NASDAQ','다우','DOW','글로벌','GLOBAL','차이나','중국','CHINA','인도','INDIA','일본','JAPAN','TOPIX','NIKKEI','유로','EURO','베트남','VIETNAM','FANG','필라델피아','빅테크','BIG TECH','월드','WORLD','선진국','신흥국','MSCI','유럽','대만','해외'];
+const US_ETF_TICKERS = new Set([
+  'QQQ','QQQM','SPY','VOO','IVV','TLT','TQQQ','QLD','SOXL','SOXS','SQQQ','SCHD','JEPI','JEPQ','DIA','IWM','VNQ','GLD','SLV','SPYG',
+  'QNDX','SMH','XLK','XLE','XLF','XLV','XLY','XLP','XLI','XLU','XLRE','XLB','IEF','SHY','BND','AGG','VT','VTI','VXUS','ARKK',
+  'BIL','SHV','VGK','EEM','VWO','HYG','LQD','JNK','TMF','UPRO','SPXU','LABU','LABD','NUGT','DUST','FNGU','BULZ'
+]);
+
 function classifyHolding(h) {
-  const nameUpper = (h.name || '').toUpperCase();
-  const market = (h.market || '').toUpperCase();
-  if (h.currency === 'KRW' && ETF_PREFIXES.some(p => nameUpper.startsWith(p))) return '국내 ETF';
-  if (h.currency === 'KRW') return '국내 주식';
-  if (market.startsWith('NH_') && market !== 'NH_US') return '기타 해외자산';
-  return '미국 주식·ETF';
+  const name = h.name || '';
+  const nameUpper = name.toUpperCase();
+  const codeUpper = (h.code || '').toUpperCase().trim();
+  const currency = (h.currency || 'KRW').toUpperCase();
+
+  if (currency === 'KRW') {
+    const isKrEtf = KR_ETF_PREFIXES.some(p => nameUpper.startsWith(p)) || nameUpper.includes('ETF');
+    if (isKrEtf) {
+      if (OVERSEAS_KEYWORDS.some(k => nameUpper.includes(k))) return '국내상장해외ETF';
+      return '국내ETF';
+    }
+    return '국내주식';
+  } else {
+    if (
+      US_ETF_TICKERS.has(codeUpper) ||
+      nameUpper.includes('ETF') ||
+      nameUpper.includes('TRUST') ||
+      nameUpper.includes('FUND') ||
+      nameUpper.includes('ISHARES') ||
+      nameUpper.includes('VANGUARD') ||
+      nameUpper.includes('INVESCO') ||
+      nameUpper.includes('SPDR')
+    ) {
+      return '해외ETF';
+    }
+    return '해외주식';
+  }
 }
+
+const ASSET_CLASS_ORDER = {
+  '국내주식': 1,
+  '국내ETF': 2,
+  '국내상장해외ETF': 3,
+  '해외주식': 4,
+  '해외ETF': 5,
+  '현금·예수금': 6,
+};
 
 function computeFilteredClassifications(holdings, accounts, fxRates) {
   const usdKrw = (fxRates || {})['USD'] || 1385;
@@ -102,7 +139,7 @@ function computeFilteredClassifications(holdings, accounts, fxRates) {
     ...g,
     return_rate: g.cost_value_krw > 0 ? (g.profit_krw / g.cost_value_krw) * 100 : 0,
     weight: totalValue > 0 ? (g.market_value_krw / totalValue) * 100 : 0,
-  })).sort((a, b) => b.market_value_krw - a.market_value_krw);
+  })).sort((a, b) => (ASSET_CLASS_ORDER[a.name] || 99) - (ASSET_CLASS_ORDER[b.name] || 99));
 }
 
 function computeFilteredSectors(holdings, accounts, fxRates) {
@@ -403,8 +440,13 @@ function renderSummary(data) {
   const krw = currencies.KRW || {}, usd = currencies.USD || {};
 
   $("#totalValue").textContent = money(s.total_value_krw);
-  const cashNote = s.total_cash_krw ? `주식 ${money(s.total_stock_value_krw || (s.total_value_krw - s.total_cash_krw))} · 예수금 ${money(s.total_cash_krw)}` : `보유 종목 ${number(s.holding_count, 0)}개 · ${number(s.account_count, 0)}개 계좌`;
-  $("#holdingCaption").textContent = cashNote;
+  const totalStockVal = s.total_stock_value_krw || (Number(s.total_value_krw || 0) - Number(s.total_cash_krw || 0));
+  $("#holdingCaption").textContent = `주식 ${money(totalStockVal)}`;
+  const totalCashEl = $("#totalCashBadge");
+  if (totalCashEl) {
+    totalCashEl.textContent = `예수금 ${money(s.total_cash_krw || 0)}`;
+    totalCashEl.style.display = "block";
+  }
 
   $("#totalProfit").textContent = money(s.profit_krw);
   $("#totalProfit").className = signClass(s.profit_krw);
@@ -427,15 +469,15 @@ function renderSummary(data) {
 
   const krwStock = krw.stock_value_krw || (Number(krw.market_value_krw || 0) - Number(krw.cash || 0));
   $("#krwValue").textContent = money(krw.market_value_krw || 0);
+  $("#krwCaption").textContent = `주식 평가 ${money(krwStock)}`;
   const krwCashBadgeEl = $("#krwCashBadge");
   if (krwCashBadgeEl) krwCashBadgeEl.textContent = `(예수금 ${money(krw.cash || 0)})`;
-  $("#krwCaption").textContent = `주식 평가 ${money(krwStock)}`;
 
   const usdStock = usd.stock_value || (Number(usd.market_value || 0) - Number(usd.cash || 0));
   $("#usdValue").textContent = money(usd.market_value || 0, "USD");
+  $("#usdCaption").textContent = `주식 평가 ${money(usdStock, "USD")}`;
   const usdCashBadgeEl = $("#usdCashBadge");
   if (usdCashBadgeEl) usdCashBadgeEl.textContent = `(예수금 ${money(usd.cash || 0, "USD")})`;
-  $("#usdCaption").textContent = `주식 평가 ${money(usdStock, "USD")} (환산 ${money(usd.market_value_krw || 0)})`;
 
   $("#updatedAt") && ($("#updatedAt").textContent = data.updated_at ? `마지막 자산 반영 ${new Date(data.updated_at).toLocaleString("ko-KR")}` : "아직 보유종목이 없습니다.");
   const cashSuffix = s.total_cash_krw ? ` (예수금 ${money(s.total_cash_krw)} 포함)` : "";
@@ -449,23 +491,23 @@ const SECTOR_COLORS = [
   '#6366f1', '#14b8a6', '#84cc16', '#eab308', '#d946ef', '#64748b'
 ];
 
-function renderSectorDonut(sectors) {
+function renderAllocationDonut(items, emptyMsg = "투자자산 데이터가 없습니다.") {
   const wrap = $("#sectorDonutWrap");
   if (!wrap) return;
 
-  const validSectors = (sectors || []).filter(s => s.market_value_krw > 0);
-  if (!validSectors.length) {
-    wrap.innerHTML = '<div class="empty">섹터별 투자자산 데이터가 없습니다.</div>';
+  const validItems = (items || []).filter(s => s.market_value_krw > 0);
+  if (!validItems.length) {
+    wrap.innerHTML = `<div class="empty">${html(emptyMsg)}</div>`;
     return;
   }
 
-  const total = validSectors.reduce((sum, s) => sum + s.market_value_krw, 0);
+  const total = validItems.reduce((sum, s) => sum + s.market_value_krw, 0);
   const size = 140, r = 54, cx = 70, cy = 70, strokeWidth = 24;
   const circumference = 2 * Math.PI * r;
 
   let offset = 0;
-  const slices = validSectors.map((s, idx) => {
-    const pct = s.market_value_krw / total;
+  const slices = validItems.map((s, idx) => {
+    const pct = total > 0 ? (s.market_value_krw / total) : 0;
     const dash = pct * circumference;
     const color = SECTOR_COLORS[idx % SECTOR_COLORS.length];
     const el = `
@@ -479,8 +521,8 @@ function renderSectorDonut(sectors) {
     return el;
   }).join('');
 
-  const topSectors = validSectors.slice(0, 6);
-  const legendHtml = topSectors.map((s, idx) => {
+  const topItems = validItems.slice(0, 6);
+  const legendHtml = topItems.map((s, idx) => {
     const color = SECTOR_COLORS[idx % SECTOR_COLORS.length];
     return `
       <div class="sector-legend-item">
@@ -507,24 +549,18 @@ function renderSectorDonut(sectors) {
   `;
 }
 
-let isSectorDetailExpanded = false;
-
 function renderClassifications(items) {
   const list = $("#classificationList");
   const donutWrap = $("#sectorDonutWrap");
-  const toggleWrap = $("#sectorDetailToggleWrap");
-  const toggleBtn = $("#toggleSectorDetailBtn");
   if (!list) return;
 
+  if (donutWrap) donutWrap.style.display = 'block';
+  list.classList.add('sector-mode');
+  list.style.display = 'flex';
+
   if (currentAllocTab === 'sector') {
-    if (donutWrap) donutWrap.style.display = 'block';
-    if (toggleWrap) toggleWrap.style.display = 'block';
-    if (toggleBtn) toggleBtn.innerHTML = isSectorDetailExpanded ? '간단히 ✕' : '자세히 🔍';
-
-    list.style.display = isSectorDetailExpanded ? 'flex' : 'none';
-
     const sectors = dashboard?.sector_classifications || [];
-    renderSectorDonut(sectors);
+    renderAllocationDonut(sectors, '섹터별 투자자산 데이터가 없습니다.');
     list.innerHTML = sectors.length ? sectors.map((item) => `
       <div class="classification-row">
         <div class="classification-title">
@@ -539,11 +575,8 @@ function renderClassifications(items) {
       </div>
     `).join("") : '<div class="empty">섹터별 투자자산 데이터가 없습니다.</div>';
   } else {
-    if (donutWrap) donutWrap.style.display = 'none';
-    if (toggleWrap) toggleWrap.style.display = 'none';
-    list.style.display = 'flex';
-
     const classes = dashboard?.classifications || items || [];
+    renderAllocationDonut(classes, '자산군별 투자자산 데이터가 없습니다.');
     list.innerHTML = classes.length ? classes.map((item) => `
       <div class="classification-row">
         <div class="classification-title">
@@ -1794,14 +1827,6 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 섹터별 상세 토글 버튼 (자세히 🔍 / 간단히 ✕)
-  const sectorToggleBtn = e.target.closest('#toggleSectorDetailBtn');
-  if (sectorToggleBtn) {
-    isSectorDetailExpanded = !isSectorDetailExpanded;
-    renderClassifications(dashboard?.sector_classifications || []);
-    return;
-  }
-
   // 배당 재조회 버튼
   const divRefreshBtn = e.target.closest('#refreshDividendBtn');
   if (divRefreshBtn) {
@@ -1823,17 +1848,20 @@ document.addEventListener('click', async (e) => {
     const refreshBtn = $("#refreshDividendBtn");
     const addBtn = $("#addDividendBtn");
     const importBtn = $("#importDividendBtn");
+    const clearBtn = $("#clearAllDividendBtn");
 
     if (currentDividendMode === 'estimated') {
       if (refreshBtn) refreshBtn.style.display = 'inline-block';
       if (addBtn) addBtn.style.display = 'none';
       if (importBtn) importBtn.style.display = 'none';
+      if (clearBtn) clearBtn.style.display = 'none';
       if (dividendData) renderDividends(dividendData);
       else loadDividends(currentOwner);
     } else {
       if (refreshBtn) refreshBtn.style.display = 'none';
       if (addBtn) addBtn.style.display = 'inline-block';
       if (importBtn) importBtn.style.display = 'inline-block';
+      if (clearBtn) clearBtn.style.display = 'inline-block';
       if (actualDividendData) renderActualDividends(actualDividendData);
       else loadActualDividends(currentOwner);
     }
@@ -1871,6 +1899,20 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 🗑️ 실제 배당 전체 일괄 삭제 버튼
+  if (e.target.closest('#clearAllDividendBtn')) {
+    if (confirm("정말로 모든 실제 배당금 기록을 일괄 삭제하시겠습니까?\n삭제된 내역은 복구할 수 없습니다.")) {
+      const btn = $("#clearAllDividendBtn");
+      action(btn, async () => {
+        const res = await api("/api/actual-dividends/clear", { method: "POST" });
+        toast(res.message || "모든 실제 배당금 기록이 삭제되었습니다.");
+        await loadActualDividends(currentOwner);
+        if (dashboard) await refresh();
+      });
+    }
+    return;
+  }
+
   // 실제 배당 수정 버튼
   const editActualDivBtn = e.target.closest('.edit-actual-div-btn');
   if (editActualDivBtn) {
@@ -1897,17 +1939,28 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 배당 막대 차트 월 선택
+  // 배당 막대 차트 월/연도 선택
   const divBar = e.target.closest('.dividend-bar-group');
-  if (divBar && divBar.dataset.month) {
-    const m = Number(divBar.dataset.month);
-    selectedDividendMonth = selectedDividendMonth === m ? null : m;
-    if (currentDividendMode === 'estimated') {
-      if (dividendData) renderDividends(dividendData);
-    } else {
-      if (actualDividendData) renderActualDividends(actualDividendData);
+  if (divBar) {
+    if (divBar.dataset.year) {
+      const yr = divBar.dataset.year;
+      selectedDividendYear = yr;
+      selectedDividendMonth = null;
+      const yearSelect = $("#dividendYearSelect");
+      if (yearSelect) yearSelect.value = yr;
+      loadActualDividends(currentOwner, yr);
+      return;
     }
-    return;
+    if (divBar.dataset.month) {
+      const m = Number(divBar.dataset.month);
+      selectedDividendMonth = selectedDividendMonth === m ? null : m;
+      if (currentDividendMode === 'estimated') {
+        if (dividendData) renderDividends(dividendData);
+      } else {
+        if (actualDividendData) renderActualDividends(actualDividendData);
+      }
+      return;
+    }
   }
 
   // 배당 전체 보기 버튼
@@ -1945,6 +1998,20 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 🗑️ 매도 실현손익 전체 일괄 삭제 버튼
+  if (e.target.closest('#clearAllPnlBtn')) {
+    if (confirm("정말로 모든 매도 실현손익 기록을 일괄 삭제하시겠습니까?\n삭제된 내역은 복구할 수 없습니다.")) {
+      const btn = $("#clearAllPnlBtn");
+      action(btn, async () => {
+        const res = await api("/api/realized-pnl/clear", { method: "POST" });
+        toast(res.message || "모든 매도 실현손익 기록이 삭제되었습니다.");
+        await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+        if (dashboard) await refresh();
+      });
+    }
+    return;
+  }
+
   // 실현손익 수정 버튼
   const editPnlBtn = e.target.closest('.edit-pnl-btn');
   if (editPnlBtn) {
@@ -1971,13 +2038,24 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 실현손익 막대 차트 월 선택
+  // 실현손익 막대 차트 월/연도 선택
   const pnlBar = e.target.closest('.pnl-bar-group');
-  if (pnlBar && pnlBar.dataset.month) {
-    const m = Number(pnlBar.dataset.month);
-    selectedPnlMonth = selectedPnlMonth === m ? null : m;
-    if (pnlData) renderRealizedPnl(pnlData);
-    return;
+  if (pnlBar) {
+    if (pnlBar.dataset.year) {
+      const yr = pnlBar.dataset.year;
+      selectedPnlYear = yr;
+      selectedPnlMonth = null;
+      const yearSelect = $("#pnlYearSelect");
+      if (yearSelect) yearSelect.value = yr;
+      loadRealizedPnl(currentOwner, yr, currentPnlTradeType);
+      return;
+    }
+    if (pnlBar.dataset.month) {
+      const m = Number(pnlBar.dataset.month);
+      selectedPnlMonth = selectedPnlMonth === m ? null : m;
+      if (pnlData) renderRealizedPnl(pnlData);
+      return;
+    }
   }
 
   // 실현손익 전체 보기 버튼
@@ -1997,6 +2075,15 @@ $("#refreshMarketButton")?.addEventListener("click", (e) => action(e.currentTarg
 $("#demoButton")?.addEventListener("click", (e) => action(e.currentTarget, () => api("/api/demo", { method: "POST" })));
 $("#addButton")?.addEventListener("click", () => openHoldingDialog());
 $("#importButton")?.addEventListener("click", openImport);
+$("#clearAllHoldingsBtn")?.addEventListener("click", (e) => {
+  if (confirm("정말로 모든 보유종목을 일괄 삭제하시겠습니까?\n삭제된 내역은 복구할 수 없습니다.")) {
+    action(e.currentTarget, async () => {
+      const res = await api("/api/holdings/clear", { method: "POST" });
+      toast(res.message || "모든 보유종목이 삭제되었습니다.");
+      await refresh();
+    });
+  }
+});
 $("#addRecordButton")?.addEventListener("click", () => openAssetRecordDialog());
 
 // 2. 오늘 기록 저장
@@ -2794,18 +2881,22 @@ function renderMonthlyDividendDetail(month = null) {
 function renderActualDividends(data) {
   if (!data) return;
   const fxUsd = (dashboard?.fx_rates?.USD) || 1385.0;
+  const isAllYears = (selectedDividendYear === "all" || selectedDividendYear === "전체");
 
-  $("#divCardLabel1") && ($("#divCardLabel1").textContent = "연간 실제 수령 배당금");
+  $("#divCardLabel1") && ($("#divCardLabel1").textContent = isAllYears ? "누적 실제 수령 배당금" : "연간 실제 수령 배당금");
   $("#divCardLabel2") && ($("#divCardLabel2").textContent = "실제 수령 배당수익률");
-  $("#divCardLabel3") && ($("#divCardLabel3").textContent = "월평균 실제 수령액");
+  $("#divCardLabel3") && ($("#divCardLabel3").textContent = isAllYears ? "연평균 실제 수령액" : "월평균 실제 수령액");
   $("#divCardLabel4") && ($("#divCardLabel4").textContent = "실제 수령 종목 / 건수");
-  $("#dividendChartTitle") && ($("#dividendChartTitle").textContent = "📊 1월 ~ 12월 월별 실제 배당금 입금 추이");
+  $("#dividendChartTitle") && ($("#dividendChartTitle").textContent = isAllYears ? "📊 전체 기간 연도별 실제 배당금 입금 추이" : `📊 ${selectedDividendYear}년 1월 ~ 12월 월별 실제 배당금 입금 추이`);
 
   const totalActual = Number(data.total_actual_dividend_krw || 0);
   const totalActualUsd = fxUsd > 0 ? (totalActual / fxUsd) : 0;
   const totalVal = Number(dashboard?.summary?.total_value_krw || 0);
   const actualYield = totalVal > 0 ? (totalActual / totalVal * 100) : 0;
-  const monthlyAvg = Number(data.monthly_avg_dividend_krw || 0);
+  
+  // 전체 기간일 때는 가용 연도 수로 나눈 연평균, 단일 연도일 때는 12로 나눈 월평균
+  const availYearsCount = (data.available_years || []).length || 1;
+  const avgAmt = isAllYears ? (totalActual / availYearsCount) : Number(data.monthly_avg_dividend_krw || 0);
   const payingStockCount = Number(data.paying_stock_count || 0);
   const recordCount = Number(data.record_count || 0);
 
@@ -2813,47 +2904,84 @@ function renderActualDividends(data) {
   $("#divTotalAnnualUsd") && ($("#divTotalAnnualUsd").textContent = `$${number(totalActualUsd, 2)} 환산 포함`);
   $("#divYield") && ($("#divYield").textContent = `${number(actualYield, 2)}%`);
   $("#divYieldSub") && ($("#divYieldSub").textContent = "총 투자자산 대비");
-  $("#divMonthlyAvg") && ($("#divMonthlyAvg").textContent = money(monthlyAvg));
+  $("#divMonthlyAvg") && ($("#divMonthlyAvg").textContent = money(avgAmt));
   $("#divPayingCount") && ($("#divPayingCount").textContent = `${payingStockCount}종목`);
   $("#divTotalHoldings") && ($("#divTotalHoldings").textContent = `총 ${recordCount}건 입금`);
 
-  // 1월~12월 실제 배당금 막대 차트 (에메랄드/그린 그라데이션)
-  const schedule = data.monthly_schedule || [];
-  const maxMonthly = Math.max(...schedule.map(s => Number(s.total_krw || 0)), 1);
-
   const w = 900, h = 240, pad = 30;
   const hBarArea = 170;
-  const barWidth = 44;
 
-  const bars = schedule.map((item, idx) => {
-    const m = item.month;
-    const val = Number(item.total_krw || 0);
-    const x = pad + ((w - pad * 2) * (idx + 0.5)) / 12 - barWidth / 2;
-    const barH = val > 0 ? Math.max(8, (val / maxMonthly) * (hBarArea - 25)) : 2;
-    const y = hBarArea - barH;
-    const isSelected = selectedDividendMonth === m;
+  let bars = "";
 
-    const itemCount = (item.items || []).length;
-    const topText = val > 0 ? money(val) : "-";
-    const barFill = isSelected ? "url(#actualDivBarGradActive)" : (val > 0 ? "url(#actualDivBarGrad)" : "#1c263d");
+  if (isAllYears) {
+    // ── 전체 기간: 연도별 막대그래프 ──
+    const yearlySchedule = data.yearly_schedule || [];
+    const maxYearly = Math.max(...yearlySchedule.map(s => Number(s.total_krw || 0)), 1);
+    const numYears = Math.max(yearlySchedule.length, 1);
+    const barWidth = Math.min(64, Math.max(36, (w - pad * 2) / numYears - 28));
 
-    return `
-      <g class="dividend-bar-group" data-month="${m}">
-        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barFill}" rx="4" opacity="0.95">
-          <title>${m}월 실제 입금액: ${money(val)} (${itemCount}건)</title>
-        </rect>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="${val > 0 ? '#f43f5e' : '#64748b'}" font-size="9.5" font-weight="700" text-anchor="middle">
-          ${topText}
-        </text>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 16).toFixed(1)}" fill="${isSelected ? '#f43f5e' : '#94a3b8'}" font-size="11" font-weight="${isSelected ? '700' : '600'}" text-anchor="middle">
-          ${m}월
-        </text>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 28).toFixed(1)}" fill="${itemCount > 0 ? '#fb7185' : '#475569'}" font-size="9" font-weight="600" text-anchor="middle">
-          ${itemCount > 0 ? itemCount + '건' : '-'}
-        </text>
-      </g>
-    `;
-  }).join('');
+    bars = yearlySchedule.map((item, idx) => {
+      const yr = String(item.year);
+      const val = Number(item.total_krw || 0);
+      const x = pad + ((w - pad * 2) * (idx + 0.5)) / numYears - barWidth / 2;
+      const barH = val > 0 ? Math.max(8, (val / maxYearly) * (hBarArea - 25)) : 2;
+      const y = hBarArea - barH;
+      const itemCount = (item.items || []).length;
+      const topText = val > 0 ? money(val) : "-";
+
+      return `
+        <g class="dividend-bar-group" data-year="${yr}" style="cursor:pointer;">
+          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="url(#actualDivBarGrad)" rx="5" opacity="0.95">
+            <title>${yr}년 실제 배당금: ${money(val)} (${itemCount}건) - 클릭시 해당 연도 보기</title>
+          </rect>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="${val > 0 ? '#f43f5e' : '#64748b'}" font-size="10" font-weight="700" text-anchor="middle">
+            ${topText}
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 16).toFixed(1)}" fill="#cbd5e1" font-size="11.5" font-weight="700" text-anchor="middle">
+            ${yr}년
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 29).toFixed(1)}" fill="${itemCount > 0 ? '#fb7185' : '#475569'}" font-size="9" font-weight="600" text-anchor="middle">
+            ${itemCount > 0 ? itemCount + '건' : '-'}
+          </text>
+        </g>
+      `;
+    }).join("");
+  } else {
+    // ── 단일 연도: 1월 ~ 12월 월별 막대그래프 ──
+    const schedule = data.monthly_schedule || [];
+    const maxMonthly = Math.max(...schedule.map(s => Number(s.total_krw || 0)), 1);
+    const barWidth = 44;
+
+    bars = schedule.map((item, idx) => {
+      const m = item.month;
+      const val = Number(item.total_krw || 0);
+      const x = pad + ((w - pad * 2) * (idx + 0.5)) / 12 - barWidth / 2;
+      const barH = val > 0 ? Math.max(8, (val / maxMonthly) * (hBarArea - 25)) : 2;
+      const y = hBarArea - barH;
+      const isSelected = selectedDividendMonth === m;
+
+      const itemCount = (item.items || []).length;
+      const topText = val > 0 ? money(val) : "-";
+      const barFill = isSelected ? "url(#actualDivBarGradActive)" : (val > 0 ? "url(#actualDivBarGrad)" : "#1c263d");
+
+      return `
+        <g class="dividend-bar-group" data-month="${m}" style="cursor:pointer;">
+          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barFill}" rx="4" opacity="0.95">
+            <title>${m}월 실제 입금액: ${money(val)} (${itemCount}건)</title>
+          </rect>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="${val > 0 ? '#f43f5e' : '#64748b'}" font-size="9.5" font-weight="700" text-anchor="middle">
+            ${topText}
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 16).toFixed(1)}" fill="${isSelected ? '#f43f5e' : '#94a3b8'}" font-size="11" font-weight="${isSelected ? '700' : '600'}" text-anchor="middle">
+            ${m}월
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${(hBarArea + 28).toFixed(1)}" fill="${itemCount > 0 ? '#fb7185' : '#475569'}" font-size="9" font-weight="600" text-anchor="middle">
+            ${itemCount > 0 ? itemCount + '건' : '-'}
+          </text>
+        </g>
+      `;
+    }).join("");
+  }
 
   const chartWrap = $("#dividendBarChartWrap");
   if (chartWrap) {
@@ -2964,7 +3092,17 @@ function renderActualDividendDetail(month = null) {
   `;
 }
 
-function openDividendRecordDialog(record = null) {
+async function fetchHistoricalFxRate(dateStr) {
+  if (!dateStr) return (dashboard?.fx_rates?.USD) || 1385.0;
+  try {
+    const res = await api(`/api/historical-fx?date=${encodeURIComponent(dateStr)}`);
+    return Number(res.rate || (dashboard?.fx_rates?.USD) || 1385.0);
+  } catch (e) {
+    return (dashboard?.fx_rates?.USD) || 1385.0;
+  }
+}
+
+async function openDividendRecordDialog(record = null) {
   const dlg = document.getElementById("dividendRecordDialog");
   const form = document.getElementById("dividendRecordForm");
   if (!dlg || !form) return;
@@ -2977,7 +3115,7 @@ function openDividendRecordDialog(record = null) {
   attachStockAutoFill("dividendRecordForm", updateDivFormFields);
 
   const today = new Date().toISOString().slice(0, 10);
-  const fxUsd = (dashboard?.fx_rates?.USD) || 1385.0;
+  const targetDate = record ? record.date : today;
 
   const dateEl = form.querySelector("[name='date']");
   const ownerEl = form.querySelector("[name='owner']");
@@ -2989,15 +3127,33 @@ function openDividendRecordDialog(record = null) {
   const amtKrwEl = form.querySelector("[name='amount_krw']");
   const memoEl = form.querySelector("[name='memo']");
 
-  if (dateEl) dateEl.value = record ? record.date : today;
+  if (dateEl) dateEl.value = targetDate;
   if (ownerEl) ownerEl.value = record ? (record.owner || "모두") : (currentOwner !== "모두" ? currentOwner : "모두");
   if (codeEl) codeEl.value = record ? record.code : "";
   if (nameEl) nameEl.value = record ? record.name : "";
   if (currEl) currEl.value = record ? record.currency : "KRW";
   if (amtEl) amtEl.value = record ? record.amount : "";
-  if (fxEl) fxEl.value = record ? record.fx_rate : fxUsd;
   if (amtKrwEl) amtKrwEl.value = record ? record.amount_krw : "";
   if (memoEl) memoEl.value = record ? (record.memo || "") : "";
+
+  if (record && record.fx_rate) {
+    if (fxEl) fxEl.value = record.fx_rate;
+  } else {
+    const historicalFx = await fetchHistoricalFxRate(targetDate);
+    if (fxEl) fxEl.value = historicalFx;
+  }
+
+  // 날짜 변경 시 해당 일자의 과거 환율 자동 조회
+  if (dateEl && !dateEl.dataset.fxBound) {
+    dateEl.dataset.fxBound = "true";
+    dateEl.addEventListener("change", async () => {
+      if (form.currency.value === "USD") {
+        const rate = await fetchHistoricalFxRate(dateEl.value);
+        if (form.fx_rate) form.fx_rate.value = rate;
+        updateDivFormFields();
+      }
+    });
+  }
 
   updateDivFormFields();
   dlg.showModal();
@@ -3091,61 +3247,117 @@ function renderRealizedPnl(data) {
   }
   $("#summaryRealizedPnlSub") && ($("#summaryRealizedPnlSub").textContent = `승률 ${number(winRate, 1)}% · 총 ${recordCount}건 실현`);
 
-  // 2. 1월~12월 양방향 막대그래프 (SVG Bar Chart)
-  const schedule = data.monthly_schedule || [];
-  const maxAbsPnl = Math.max(
-    ...schedule.map(s => Math.abs(Number(s.total_krw || 0))),
-    100000
-  );
-
+  // 2. 양방향 막대그래프 (SVG Bar Chart)
+  const isAllYears = (selectedPnlYear === "all" || selectedPnlYear === "전체");
   const w = 900, h = 240, pad = 30;
   const zeroY = 120; // 0원 기준선 중앙
   const maxBarH = 80;
-  const barWidth = 44;
 
-  const bars = schedule.map((item, idx) => {
-    const m = item.month;
-    const val = Number(item.total_krw || 0);
-    const x = pad + ((w - pad * 2) * (idx + 0.5)) / 12 - barWidth / 2;
-    const isSelected = selectedPnlMonth === m;
-    const itemCount = (item.items || []).length;
+  let bars = "";
 
-    let barH = 2, y = zeroY - 1;
-    let barFill = "#1c263d";
-    let textY = zeroY - 8;
+  if (isAllYears) {
+    const yearlySchedule = data.yearly_schedule || [];
+    const maxAbsPnl = Math.max(
+      ...yearlySchedule.map(s => Math.abs(Number(s.total_krw || 0))),
+      100000
+    );
+    const numYears = Math.max(yearlySchedule.length, 1);
+    const barWidth = Math.min(64, Math.max(36, (w - pad * 2) / numYears - 28));
 
-    if (val > 0) {
-      barH = Math.max(6, (val / maxAbsPnl) * maxBarH);
-      y = zeroY - barH;
-      barFill = isSelected ? "url(#pnlGainBarGradActive)" : "url(#pnlGainBarGrad)";
-      textY = y - 6;
-    } else if (val < 0) {
-      barH = Math.max(6, (Math.abs(val) / maxAbsPnl) * maxBarH);
-      y = zeroY;
-      barFill = isSelected ? "url(#pnlLossBarGradActive)" : "url(#pnlLossBarGrad)";
-      textY = y + barH + 12;
-    }
+    bars = yearlySchedule.map((item, idx) => {
+      const yr = String(item.year);
+      const val = Number(item.total_krw || 0);
+      const x = pad + ((w - pad * 2) * (idx + 0.5)) / numYears - barWidth / 2;
+      const itemCount = (item.items || []).length;
 
-    const topText = val !== 0 ? `${val > 0 ? '+' : ''}${money(val)}` : '-';
-    const textColor = val > 0 ? '#f43f5e' : (val < 0 ? '#38bdf8' : '#64748b');
+      let barH = 2, y = zeroY - 1;
+      let barFill = "#1c263d";
+      let textY = zeroY - 8;
 
-    return `
-      <g class="pnl-bar-group" data-month="${m}">
-        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barFill}" rx="4" opacity="0.95">
-          <title>${m}월 실현손익: ${money(val)} (${itemCount}건)</title>
-        </rect>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="${textY.toFixed(1)}" fill="${textColor}" font-size="9.5" font-weight="700" text-anchor="middle">
-          ${topText}
-        </text>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="215" fill="${isSelected ? '#f59e0b' : '#94a3b8'}" font-size="11" font-weight="${isSelected ? '700' : '600'}" text-anchor="middle">
-          ${m}월
-        </text>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="228" fill="${itemCount > 0 ? '#fbbf24' : '#475569'}" font-size="9" font-weight="600" text-anchor="middle">
-          ${itemCount > 0 ? itemCount + '건' : '-'}
-        </text>
-      </g>
-    `;
-  }).join('');
+      if (val > 0) {
+        barH = Math.max(6, (val / maxAbsPnl) * maxBarH);
+        y = zeroY - barH;
+        barFill = "url(#pnlGainBarGrad)";
+        textY = y - 6;
+      } else if (val < 0) {
+        barH = Math.max(6, (Math.abs(val) / maxAbsPnl) * maxBarH);
+        y = zeroY;
+        barFill = "url(#pnlLossBarGrad)";
+        textY = y + barH + 12;
+      }
+
+      const topText = val !== 0 ? `${val > 0 ? '+' : ''}${money(val)}` : '-';
+      const textColor = val > 0 ? '#f43f5e' : (val < 0 ? '#38bdf8' : '#64748b');
+
+      return `
+        <g class="pnl-bar-group" data-year="${yr}" style="cursor:pointer;">
+          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barFill}" rx="4" opacity="0.95">
+            <title>${yr}년 실현손익: ${money(val)} (${itemCount}건) - 클릭시 해당 연도 보기</title>
+          </rect>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${textY.toFixed(1)}" fill="${textColor}" font-size="10" font-weight="700" text-anchor="middle">
+            ${topText}
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="215" fill="#cbd5e1" font-size="11.5" font-weight="700" text-anchor="middle">
+            ${yr}년
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="228" fill="${itemCount > 0 ? '#fbbf24' : '#475569'}" font-size="9" font-weight="600" text-anchor="middle">
+            ${itemCount > 0 ? itemCount + '건' : '-'}
+          </text>
+        </g>
+      `;
+    }).join('');
+  } else {
+    const schedule = data.monthly_schedule || [];
+    const maxAbsPnl = Math.max(
+      ...schedule.map(s => Math.abs(Number(s.total_krw || 0))),
+      100000
+    );
+    const barWidth = 44;
+
+    bars = schedule.map((item, idx) => {
+      const m = item.month;
+      const val = Number(item.total_krw || 0);
+      const x = pad + ((w - pad * 2) * (idx + 0.5)) / 12 - barWidth / 2;
+      const isSelected = selectedPnlMonth === m;
+      const itemCount = (item.items || []).length;
+
+      let barH = 2, y = zeroY - 1;
+      let barFill = "#1c263d";
+      let textY = zeroY - 8;
+
+      if (val > 0) {
+        barH = Math.max(6, (val / maxAbsPnl) * maxBarH);
+        y = zeroY - barH;
+        barFill = isSelected ? "url(#pnlGainBarGradActive)" : "url(#pnlGainBarGrad)";
+        textY = y - 6;
+      } else if (val < 0) {
+        barH = Math.max(6, (Math.abs(val) / maxAbsPnl) * maxBarH);
+        y = zeroY;
+        barFill = isSelected ? "url(#pnlLossBarGradActive)" : "url(#pnlLossBarGrad)";
+        textY = y + barH + 12;
+      }
+
+      const topText = val !== 0 ? `${val > 0 ? '+' : ''}${money(val)}` : '-';
+      const textColor = val > 0 ? '#f43f5e' : (val < 0 ? '#38bdf8' : '#64748b');
+
+      return `
+        <g class="pnl-bar-group" data-month="${m}" style="cursor:pointer;">
+          <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="${barFill}" rx="4" opacity="0.95">
+            <title>${m}월 실현손익: ${money(val)} (${itemCount}건)</title>
+          </rect>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="${textY.toFixed(1)}" fill="${textColor}" font-size="9.5" font-weight="700" text-anchor="middle">
+            ${topText}
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="215" fill="${isSelected ? '#f59e0b' : '#94a3b8'}" font-size="11" font-weight="${isSelected ? '700' : '600'}" text-anchor="middle">
+            ${m}월
+          </text>
+          <text x="${(x + barWidth / 2).toFixed(1)}" y="228" fill="${itemCount > 0 ? '#fbbf24' : '#475569'}" font-size="9" font-weight="600" text-anchor="middle">
+            ${itemCount > 0 ? itemCount + '건' : '-'}
+          </text>
+        </g>
+      `;
+    }).join('');
+  }
 
   const chartWrap = $("#pnlBarChartWrap");
   if (chartWrap) {
@@ -3273,7 +3485,7 @@ function renderPnlMonthlyDetail(month = null) {
   `;
 }
 
-function openPnlRecordDialog(record = null) {
+async function openPnlRecordDialog(record = null) {
   const dlg = document.getElementById("pnlRecordDialog");
   const form = document.getElementById("pnlRecordForm");
   if (!dlg || !form) return;
@@ -3286,7 +3498,7 @@ function openPnlRecordDialog(record = null) {
   attachStockAutoFill("pnlRecordForm", updatePnlFormFields);
 
   const today = new Date().toISOString().slice(0, 10);
-  const fxUsd = (dashboard?.fx_rates?.USD) || 1385.0;
+  const targetDate = record ? record.date : today;
 
   const dateEl = form.querySelector("[name='date']");
   const ownerEl = form.querySelector("[name='owner']");
@@ -3301,7 +3513,7 @@ function openPnlRecordDialog(record = null) {
   const isIpoEl = form.querySelector("[name='is_ipo']");
   const memoEl = form.querySelector("[name='memo']");
 
-  if (dateEl) dateEl.value = record ? record.date : today;
+  if (dateEl) dateEl.value = targetDate;
   if (ownerEl) ownerEl.value = record ? (record.owner || "모두") : (currentOwner !== "모두" ? currentOwner : "모두");
   if (brokerEl) brokerEl.value = record ? (record.broker || "") : "";
   if (accEl) accEl.value = record ? (record.account_name || "") : "";
@@ -3309,10 +3521,28 @@ function openPnlRecordDialog(record = null) {
   if (nameEl) nameEl.value = record ? record.name : "";
   if (currEl) currEl.value = record ? record.currency : "KRW";
   if (pnlEl) pnlEl.value = record ? record.pnl : "";
-  if (fxEl) fxEl.value = record ? record.fx_rate : fxUsd;
   if (pnlKrwEl) pnlKrwEl.value = record ? record.pnl_krw : "";
   if (isIpoEl) isIpoEl.value = (record && record.is_ipo) ? "true" : "false";
   if (memoEl) memoEl.value = record ? (record.memo || "") : "";
+
+  if (record && record.fx_rate) {
+    if (fxEl) fxEl.value = record.fx_rate;
+  } else {
+    const historicalFx = await fetchHistoricalFxRate(targetDate);
+    if (fxEl) fxEl.value = historicalFx;
+  }
+
+  // 날짜 변경 시 해당 일자의 과거 환율 자동 조회
+  if (dateEl && !dateEl.dataset.fxBound) {
+    dateEl.dataset.fxBound = "true";
+    dateEl.addEventListener("change", async () => {
+      if (form.currency.value === "USD") {
+        const rate = await fetchHistoricalFxRate(dateEl.value);
+        if (form.fx_rate) form.fx_rate.value = rate;
+        updatePnlFormFields();
+      }
+    });
+  }
 
   updatePnlFormFields();
   dlg.showModal();

@@ -423,7 +423,17 @@ def get_dashboard() -> dict[str, Any]:
     }
 
     classifications: dict[str, dict[str, Any]] = {}
-    etf_prefixes = ("KODEX", "TIGER", "ACE", "SOL", "PLUS", "RISE", "HANARO", "KOSEF", "ARIRANG", "KOACT", "WON")
+    kr_etf_prefixes = ("KODEX", "TIGER", "ACE", "SOL", "PLUS", "RISE", "HANARO", "KOSEF", "ARIRANG", "KOACT", "WON", "1Q", "KIWOOM", "TIMEFOLIO", "WOORI", "KBSTAR")
+    overseas_keywords = ("미국", "S&P", "나스닥", "NASDAQ", "다우", "DOW", "글로벌", "GLOBAL", "차이나", "중국", "CHINA", "인도", "INDIA", "일본", "JAPAN", "TOPIX", "NIKKEI", "유로", "EURO", "베트남", "VIETNAM", "FANG", "필라델피아", "빅테크", "BIG TECH", "월드", "WORLD", "선진국", "신흥국", "MSCI", "유럽", "대만", "해외")
+    us_etf_tickers = {
+        "QQQ", "QQQM", "SPY", "VOO", "IVV", "TLT", "TQQQ", "QLD", "SOXL", "SOXS",
+        "SQQQ", "SCHD", "JEPI", "JEPQ", "DIA", "IWM", "VNQ", "GLD", "SLV", "SPYG",
+        "QNDX", "SMH", "XLK", "XLE", "XLF", "XLV", "XLY", "XLP", "XLI", "XLU",
+        "XLRE", "XLB", "IEF", "SHY", "BND", "AGG", "VT", "VTI", "VXUS", "ARKK",
+        "BIL", "SHV", "VGK", "EEM", "VWO", "HYG", "LQD", "JNK", "TMF", "UPRO",
+        "SPXU", "LABU", "LABD", "NUGT", "DUST", "FNGU", "BULZ"
+    }
+
     for item in enriched:
         currency = item["currency"]
         bucket = currency_summary.setdefault(currency, {
@@ -438,15 +448,32 @@ def get_dashboard() -> dict[str, Any]:
 
         name = item["name"].strip()
         name_upper = name.upper()
-        market = str(item.get("market", ""))
-        if item["currency"] == "KRW" and any(name_upper.startswith(p) for p in etf_prefixes):
-            group = "국내 ETF"
-        elif item["currency"] == "KRW":
-            group = "국내 주식"
-        elif market.startswith("NH_") and market != "NH_US":
-            group = "기타 해외자산"
+        code_upper = str(item.get("code", "")).strip().upper()
+
+        if item["currency"] == "KRW":
+            is_kr_etf = any(name_upper.startswith(p) for p in kr_etf_prefixes) or "ETF" in name_upper
+            if is_kr_etf:
+                if any(k.upper() in name_upper for k in overseas_keywords):
+                    group = "국내상장해외ETF"
+                else:
+                    group = "국내ETF"
+            else:
+                group = "국내주식"
         else:
-            group = "미국 주식·ETF"
+            if (
+                code_upper in us_etf_tickers
+                or "ETF" in name_upper
+                or "TRUST" in name_upper
+                or "FUND" in name_upper
+                or "ISHARES" in name_upper
+                or "VANGUARD" in name_upper
+                or "INVESCO" in name_upper
+                or "SPDR" in name_upper
+            ):
+                group = "해외ETF"
+            else:
+                group = "해외주식"
+
         classification = classifications.setdefault(group, {"name": group, "market_value_krw": 0.0, "cost_value_krw": 0.0, "holding_count": 0})
         classification["market_value_krw"] += item["market_value_krw"]
         classification["cost_value_krw"] += item["cost_value_krw"]
@@ -469,7 +496,16 @@ def get_dashboard() -> dict[str, Any]:
         classification.setdefault("return_rate", classification["profit_krw"] / classification["cost_value_krw"] * 100 if classification["cost_value_krw"] else 0.0)
         classification["weight"] = classification["market_value_krw"] / total_value * 100 if total_value else 0.0
         classification_list.append(classification)
-    classification_list.sort(key=lambda item: item["market_value_krw"], reverse=True)
+
+    order_map = {
+        "국내주식": 1,
+        "국내ETF": 2,
+        "국내상장해외ETF": 3,
+        "해외주식": 4,
+        "해외ETF": 5,
+        "현금·예수금": 6,
+    }
+    classification_list.sort(key=lambda item: order_map.get(item["name"], 99))
 
     # 섹터별 포트폴리오 집계
     sectors: dict[str, dict[str, Any]] = {}
