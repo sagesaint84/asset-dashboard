@@ -1,86 +1,227 @@
-# 내 자산 대시보드
+# 📊 내 자산 대시보드 (My Asset Dashboard)
 
-KB증권 계좌와 토스증권·나무증권 등 다른 증권사의 보유종목을 한 화면에서 합산하는 로컬 전용 FastAPI 대시보드입니다.
+<div align="center">
 
-## 할 수 있는 일
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-Supported-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-- KB증권 OpenAPI로 국내 보유주식(SSQM1801), 국내 잔고(SSQM2932), 해외주식 잔고평가(SPQM2226)를 동기화합니다.
-- 토스증권 OpenAPI로 계좌 목록과 국내·미국 보유주식을 읽어 동기화하고, USD/KRW 환율을 실시간으로 반영합니다. 주문 API는 사용하지 않습니다.
-- 나무증권(NH투자증권) NHPLUG Open API로 계좌 목록과 국내·해외 보유주식을 읽어 동기화합니다.
-- 토스증권 시장지표 API의 코스피와 SPY·QQQ 추종 ETF의 일중 캔들로 상단 미니 그래프를 표시합니다. 미국 지수 심볼은 토스 API에서 직접 제공되지 않아 SPY·QQQ를 기준으로 표시합니다.
-- KB OpenAPI의 국내 현재가(IVU10140)와 해외 현재가(GSS10030)로 가져온 보유종목의 시세를 갱신합니다.
-- 다른 증권사의 내보내기 파일(CSV/XLSX)을 가져와 계좌별로 통합합니다.
-- 종목을 직접 추가·삭제하고, 계좌별 비중·평가금액·평가손익을 확인합니다.
-- 원화·달러 자산과 투자자산 분류별 수익률, 전일 저장 기준 대비 평가자산 변동을 확인합니다.
+**가족 통합 포트폴리오 · 주요 증권사 OpenAPI 연동 · 실시간 국내/해외 시세 · 배당금 및 실현손익 정밀 관리 로컬 자산 관리 플랫폼**
 
-이 프로그램은 주문을 내거나 계좌 비밀번호를 보관하지 않습니다. 모든 보유내역은 이 폴더의 `data/portfolio.json`에만 저장됩니다.
+</div>
 
-## 시작하기 (Windows)
+---
 
-1. 이 폴더에서 PowerShell을 엽니다.
-2. 아래 명령을 한 번 실행합니다.
+## 📑 목차
+- [✨ 주요 기능](#-주요-기능)
+- [🔑 환경변수(.env) 설정 및 OpenAPI 연동](#-환경변수env-설정-및-openapi-연동)
+- [📂 엑셀 / CSV 파일 일괄 가져오기](#-엑셀--csv-파일-일괄-가져오기)
+- [🖥️ Windows 설치 및 사용 방법](#️-windows-설치-및-사용-방법)
+- [🐧 Linux / Docker 설치, 실행 및 업데이트 방법](#-linux--docker-설치-실행-및-업데이트-방법)
+- [🛡️ 보안 및 개인정보 보호 안내](#️-보안-및-개인정보-보호-안내)
 
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
+---
+
+## ✨ 주요 기능
+
+### 1. 👨‍👩‍👧 가족 구성원 통합 및 소유자별 필터링
+- 가족 구성원(예: `아빠`, `엄마`, `자녀`)을 자유롭게 등록/관리할 수 있습니다.
+- 상단 소유자 탭 클릭 한 번으로 **전체 통합 요약**, **보유종목**, **배당금**, **매도 실현손익**, **자산 스냅샷**을 개별 또는 전체 단위로 즉시 필터링합니다.
+
+### 2. 📈 실시간 시장 지표 & 실시간 환율
+- 네이버 증권 및 야후 파이낸스 연동으로 **코스피, 코스닥, S&P 500, 나스닥 지수**의 실시간 시세와 1개월 추이 미니 차트를 제공합니다.
+- **실시간 USD/KRW 환율**을 자동으로 수신하여 원화 및 달러 자산을 실시간 원화 환산 가치로 정확하게 집계합니다.
+
+### 3. 💼 통합 포트폴리오 & 기간별(1D/1W/1M/YTD/1Y) 수익률
+- 증권사별 계좌(토스증권, KB증권, 한국투자, 미래에셋, 키움증권 등)의 주식 평가액과 예수금을 한 화면에 통합합니다.
+- 각 종목별 **1일(1D), 1주일(1W), 1개월(1M), 연초 대비(YTD), 1년(1Y)** 수익률을 자동 계산하여 인터랙티브 SVG 차트로 시각화합니다.
+
+### 4. 🍩 6대 세부 자산군 & 섹터별 투자자산 분류
+- 자산군을 **🇰🇷 국내주식**, **📈 국내ETF**, **🌐 국내상장해외ETF**, **🗽 해외주식**, **🇺🇸 해외ETF**, **💵 현금·예수금**의 6대 핵심 자산군으로 정밀 분류합니다.
+- 반도체, 대표지수·ETF, 2차전지, 금융·지주, 전력·인프라 등 섹터별 비중 및 도넛 차트를 지원합니다.
+
+### 5. 📅 배당금 관리 (월별 캘린더 & 과거 실제 환율 자동 계산)
+- **월별 배당금 캘린더** 및 **연도별 배당금 막대 차트**를 제공합니다.
+- 달러(USD) 배당금은 **입금일 당시의 과거 실제 환율**을 자동 매칭하여 정확한 원화 배당 수령액을 계산합니다.
+
+### 6. 💰 매도 실현손익 관리 (환차손익 보정 정밀 엔진)
+- 연도별/월별 누적 실현손익, 승률, 총 거래 건수 및 일반/공모주 필터링을 지원합니다.
+- **달러(USD) 종목 매매 시 매수/매도 시점 환율 차이로 발생하는 원화 환차손익(FX PnL)을 정밀 보정**하여 원화 기준 최종 실현손익을 산출합니다:
+  $$\text{최종 원화 실현손익} = (\text{USD 실현손익} \times \text{매도일 실제 환율}) + \text{환차손익(KRW)}$$
+
+### 7. 🔍 종목명 ↔ 종목코드 양방향 자동 매칭 엔진 (`StockMaster`)
+- 엑셀/CSV 파일 가져오기 시 **종목명만 있어도 종목코드를 자동 매칭**하고, **종목코드만 있어도 종목명을 자동 완성**합니다.
+- 국내 상장 ETF(1,164개) + 한국거래소(KRX) 상장사(2,804개) + 미국 주요 주식/ETF 사전이 탑재되어 있습니다.
+
+### 8. 🌙 테마 지원 & PWA & 데이터 백업
+- **다크 모드**, **화이트 모드**, **OLED 블랙 모드** 3가지 테마를 지원합니다.
+- **PWA(Progressive Web App)** 지원으로 모바일 기기(아이폰/안드로이드)에서 '홈 화면에 추가'하여 앱처럼 사용할 수 있습니다.
+- 최하단 **[💾 데이터 저장하기]** 버튼 클릭 시 전체 데이터가 `asset-dashboard_YYYY-MM-DD.json` 파일로 안전하게 통합 백업됩니다.
+
+---
+
+## 🔑 환경변수(.env) 설정 및 OpenAPI 연동
+
+프로젝트 루트의 `.env.example` 파일을 복사하여 `.env` 파일을 생성한 뒤 필요한 값을 설정합니다:
+
+```bash
+cp .env.example .env
+```
+
+### 1. 토스증권 OpenAPI 연동 (선택)
+토스증권 계좌의 보유종목과 실시간 예수금을 자동으로 불러옵니다.
+1. [토스증권 WTS](https://wts.tossinvest.com) > 설정 > **Open API**에서 `Client ID`와 `Client Secret`을 발급받습니다.
+2. 허용 IP 관리에 대시보드를 실행할 PC/서버의 **공인 IP**를 등록합니다.
+3. `.env` 파일에 입력:
+   ```env
+   TOSSINVEST_OPENAPI_BASE_URL=https://openapi.tossinvest.com
+   TOSSINVEST_CLIENT_ID=your_client_id_here
+   TOSSINVEST_CLIENT_SECRET=your_client_secret_here
    ```
 
-3. `.env.example` 파일을 복사해 이름을 `.env`로 바꿉니다.
-4. KB OpenAPI 포털에서 발급받은 `appKey`, `appSecret`을 `.env`에 입력합니다.
-5. 실행합니다.
-
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
-   uvicorn app.main:app --host 127.0.0.1 --port 8000
+### 2. KB증권 OpenAPI 연동 (선택)
+1. [KB증권 개발자 포털](https://developer.kbsec.com)에서 App Key와 App Secret을 발급받습니다.
+2. `.env` 파일에 입력:
+   ```env
+   KB_OPENAPI_BASE_URL=https://developer.kbsec.com:32484
+   KB_OPENAPI_APP_KEY=your_kb_app_key_here
+   KB_OPENAPI_APP_SECRET=your_kb_app_secret_here
    ```
 
-6. 브라우저에서 `http://127.0.0.1:8000`을 엽니다. 처음 만든 `index.html`은 이 주소의 시작 페이지로 연결되며, 실제 대시보드는 `/dashboard`에서 열립니다.
+### 3. NH투자증권(나무) NHPLUG OpenAPI 연동 (선택)
+1. NHPLUG 포털에서 App Key와 App Secret을 발급받습니다.
+2. `.env` 파일에 입력:
+   ```env
+   NHPLUG_BASE_URL=https://api.nhplug.com:8443
+   NHPLUG_AUTH_URL=https://api.nhplug.com:8443
+   NHPLUG_APP_KEY=your_nh_app_key_here
+   NHPLUG_APP_SECRET=your_nh_app_secret_here
+   ```
 
-이후에는 `대시보드_실행.cmd` 파일을 더블클릭하면 됩니다. 창을 닫으면 대시보드 서버도 종료됩니다.
+### 4. 대시보드 로그인 보안 설정 (선택)
+외부 네트워크나 모바일에서 접속 시 비밀번호 보호를 설정할 수 있습니다.
+```env
+DASHBOARD_USERNAME=admin
+DASHBOARD_PASSWORD=your_secure_password
+DASHBOARD_SECRET_KEY=generate_a_long_random_secret_key_here
+```
+> ※ 값을 비워두면 로그인 절차 없이 바로 대시보드가 열립니다.
 
-## 다른 증권사 파일 가져오기
+---
 
-직접 OpenAPI를 제공하지 않는 증권사에서 내려받은 CSV/XLSX를 화면의 **파일 가져오기**에서 선택하세요. 첫 번째 행에는 아래 중 가능한 열 이름을 넣어 주세요.
+## 📂 엑셀 / CSV 파일 일괄 가져오기
 
-| 항목 | 인식하는 열 이름 예시 |
-| --- | --- |
-| 증권사 | `증권사`, `broker` |
-| 계좌 | `계좌명`, `계좌번호`, `account` |
-| 종목코드 | `종목코드`, `종목번호`, `code`, `symbol` |
-| 종목명 | `종목명`, `종목`, `name` |
-| 수량 | `보유수량`, `수량`, `quantity` |
-| 평균매입가 | `평균매입가`, `매입단가`, `buy_price` |
-| 현재가 | `현재가`, `price`, `current_price` |
-| 통화 | `통화`, `currency` |
-| 거래소 | `거래소`, `market`, `exchange` |
+OpenAPI를 지원하지 않는 증권사나 과거 거래 내역은 화면의 **[📂 가져오기]** 버튼을 통해 엑셀(.xlsx) 또는 CSV로 한 번에 등록할 수 있습니다. 팝업에서 통일된 표준 샘플 파일을 다운로드할 수 있습니다.
 
-가져온 종목은 계좌명과 종목코드가 같으면 최신 파일의 값으로 갱신됩니다. 시세가 비어 있거나 오래된 경우 **시세 갱신**을 누르면 KB 시세 API로 조회를 시도합니다. 해외 종목은 거래소 코드(NAS, NYS, AMX 등)가 있어야 갱신할 수 있습니다.
+### 📋 지원 샘플 파일 목록
+1. **`샘플_타증권사_보유종목.xlsx`** (보유종목 가져오기)
+   * `[소유자 | 증권사 | 계좌명 | 종목코드 | 종목명 | 보유수량 | 평균매입가 | 현재가 | 통화]`
+2. **`샘플_배당.xlsx`** (배당내역 가져오기)
+   * `[소유자 | 증권사 | 계좌명 | 입금일 (Date) | 종목코드 | 종목명 | 통화 | 실제 배당금 (입금액) | 메모]`
+3. **`샘플_매도실현손익.xlsx`** (매도 실현손익 가져오기)
+   * `[소유자 | 증권사 | 계좌명 | 매도일 (Date) | 종목코드 | 종목명 | 통화 | 실현손익 | 환차손익 | 공모주 여부 | 메모]`
 
-## KB OpenAPI 연결
+> 💡 **스마트 자동 완성**: 종목코드나 종목명 중 하나만 적혀있어도 자동으로 상호 매칭되며, 날짜에 맞는 과거 환율이 자동 계산됩니다.
 
-KB 제공 Python 예제와 같은 B2C 요청 형식을 따릅니다.
+---
 
-- 토큰: `POST /oauth2/token`, `grantType=client_credentials`
-- 요청: `POST /api/v1/*` + `dataHeader`/`dataBody`
-- 헤더: `appKey`, `Authorization: bearer <access_token>`
+## 🖥️ Windows 설치 및 사용 방법
 
-KB OpenAPI는 운영 서버를 호출합니다. 호출 제한을 고려해 화면의 버튼을 눌렀을 때만 동기화·시세 갱신을 수행합니다. 실제 응답 구조가 계정별로 다를 수 있으므로, 첫 연결 후 화면의 결과와 KB 앱을 대조해 주세요.
+### 1. 사전 요구사항
+- [Python 3.11 이상](https://www.python.org/downloads/) 설치 (설치 시 `Add Python to PATH` 체크)
 
-## 토스증권 OpenAPI 연결
+### 2. 설치 및 환경 구성
+프로젝트 폴더에서 PowerShell 또는 명령 프롬프트를 엽니다:
 
-1. 토스증권 WTS의 Open API 설정에서 Client ID와 Client Secret을 발급받고, 허용 IP에 이 컴퓨터의 공인 IP를 등록합니다.
-2. `.env.example`을 복사한 `.env`에 `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`을 입력합니다.
-3. 대시보드를 다시 시작한 뒤 **토스 계좌 동기화**를 누릅니다.
+```powershell
+# 1. 가상환경 생성
+py -m venv .venv
 
-토스증권 계좌 목록(`GET /api/v1/accounts`)을 조회한 뒤 각 계좌의 보유주식(`GET /api/v1/holdings`)을 가져옵니다. 토스증권 API의 현재가 다건 조회도 시세 갱신에 사용합니다. 계좌번호는 마지막 네 자리만 대시보드에 표시합니다.
+# 2. 가상환경 활성화
+.\.venv\Scripts\Activate.ps1
 
-화면의 **환율 갱신**은 토스증권의 `GET /api/v1/exchange-rate`를 이용해 보유 중인 외화(USD·JPY·HKD·CNY 등)의 원화 환율과 유효 시각을 반영합니다. `.env`에 고정 환율을 적지 않습니다.
+# 3. 필수 패키지 설치
+pip install -r requirements.txt
 
-## 나무증권(NHPLUG) 연결
+# 4. 환경변수 파일 생성
+copy .env.example .env
+```
 
-1. NHPLUG에서 App Key와 App Secret을 발급합니다.
-2. `.env`의 `NHPLUG_APP_KEY`, `NHPLUG_APP_SECRET`에 입력합니다. 실계좌는 기본 주소를 그대로 사용하고, 모의계좌는 `NHPLUG_BASE_URL=https://moapi.nhplug.com:8443`으로 바꿉니다.
-3. 대시보드를 다시 시작한 뒤 **나무 계좌 동기화**를 누릅니다.
+### 3. 실행 방법
+- **방법 1 (간편 실행)**: 프로젝트 폴더의 **`대시보드_실행.cmd`** 파일을 더블클릭하면 서버 시작과 함께 브라우저(`http://127.0.0.1:4829`)가 자동으로 열립니다.
+- **방법 2 (터미널 실행)**:
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  python -m uvicorn app.main:app --host 127.0.0.1 --port 4829 --reload
+  ```
 
-동기화는 NHPLUG의 계좌 조회와 국내·해외 잔고 조회만 사용하며, 주문 기능은 호출하지 않습니다. 계좌번호는 마지막 네 자리만 대시보드에 표시합니다.
+---
+
+## 🐧 Linux / Docker 설치, 실행 및 업데이트 방법
+
+서버(Ubuntu, Debian, Synology NAS 등)에서 Docker와 Docker Compose를 사용하여 손쉽게 구동하고 관리할 수 있습니다.
+
+### 1. Docker로 최초 설치 및 실행
+
+```bash
+# 1. 저장소 복제
+git clone https://github.com/your-username/asset-dashboard.git
+cd asset-dashboard
+
+# 2. 환경변수 파일 설정
+cp .env.example .env
+# nano .env 또는 vi .env 로 필요한 설정(로그인 계정 등) 수정
+
+# 3. 데이터 디렉터리 권한 확인
+mkdir -p data
+
+# 4. Docker Compose 빌드 및 백그라운드 실행
+docker compose up -d --build
+```
+
+실행 후 웹 브라우저에서 `http://서버IP:4829`로 접속합니다.
+
+### 2. Docker 컨테이너 상태 및 로그 확인
+
+```bash
+# 실행 상태 확인
+docker compose ps
+
+# 실시간 로그 확인
+docker compose logs -f
+```
+
+### 3. 최신 버전 업데이트 방법
+
+새로운 기능이나 패치가 릴리즈되었을 때 기존 데이터(`data/` 폴더)를 그대로 유지하면서 업데이트하는 방법입니다:
+
+```bash
+# 1. 대시보드 디렉터리로 이동
+cd asset-dashboard
+
+# 2. 최신 소스코드 pull
+git pull origin main
+
+# 3. 컨테이너 무중단 재빌드 및 재시작
+docker compose up -d --build
+```
+> 💾 **데이터 안전 보장**: 모든 보유종목, 배당내역, 실현손익 데이터는 호스트의 `./data` 디렉터리에 볼륨 마운트되어 있으므로 컨테이너를 재빌드하거나 삭제해도 데이터가 안전하게 보존됩니다.
+
+---
+
+## 🛡️ 보안 및 개인정보 보호 안내
+
+1. **100% 로컬 저장 원칙**:
+   - 모든 자산 데이터, 배당 기록, 실현손익 데이터는 사용자의 로컬 `data/` 폴더 내 JSON 파일로만 저장되며, 외부 중앙 서버로 일체 전송되지 않습니다.
+2. **조회 전용 (안전한 자산 관리)**:
+   - 본 프로그램에는 매매 주문, 출금, 이체 등 자산을 이동시키는 기능이 일체 포함되어 있지 않으며 오직 조회(Read-Only) 기능만 수행합니다.
+3. **GitHub 보안 클린**:
+   - `.env` 및 `data/` 폴더, 개인 엑셀 파일은 `.gitignore`에 등록되어 있어 GitHub에 코드를 push해도 개인 금융 데이터나 API 키가 유출되지 않습니다.
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ for personal wealth management.</sub>
+</div>

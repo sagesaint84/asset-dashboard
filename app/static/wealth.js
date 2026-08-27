@@ -33,6 +33,44 @@ function selectOwner(owner) {
   loadDividends(currentOwner);
   loadActualDividends(currentOwner, selectedDividendYear);
   loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+  updateOverviewCardsAllTime(currentOwner);
+}
+
+// ── 핵심 요약 패널의 실현손익 및 실제 배당금 전체 기간(All-Time) 갱신 ─────────
+async function updateOverviewCardsAllTime(owner = currentOwner) {
+  try {
+    const pnlRes = await api(`/api/realized-pnl?owner=${encodeURIComponent(owner)}&year=all&trade_type=all`);
+    if (pnlRes) {
+      const totalPnl = Number(pnlRes.total_pnl_krw || 0);
+      const winRate = Number(pnlRes.win_rate || 0);
+      const recordCount = Number(pnlRes.record_count || 0);
+
+      const summaryPnlEl = $("#summaryRealizedPnl");
+      if (summaryPnlEl) {
+        summaryPnlEl.textContent = `${totalPnl > 0 ? '+' : ''}${money(totalPnl)}`;
+        summaryPnlEl.className = `${totalPnl > 0 ? 'gain up' : (totalPnl < 0 ? 'loss down' : '')}`;
+      }
+      const subEl = $("#summaryRealizedPnlSub");
+      if (subEl) {
+        subEl.textContent = `승률 ${number(winRate, 1)}% · 총 ${recordCount}건 실현`;
+      }
+    }
+  } catch (err) {
+    console.error("핵심 요약 실현손익 갱신 실패:", err);
+  }
+
+  try {
+    const divRes = await api(`/api/actual-dividends?owner=${encodeURIComponent(owner)}&year=all`);
+    if (divRes) {
+      const totalActual = Number(divRes.total_actual_dividend_krw || 0);
+      const actualEl = $("#summaryActualDividend");
+      if (actualEl) {
+        actualEl.textContent = money(totalActual);
+      }
+    }
+  } catch (err) {
+    console.error("핵심 요약 실제 배당금 갱신 실패:", err);
+  }
 }
 
 // ── 필터링된 데이터로 핵심 요약 재계산 ──────────────────────────────────────
@@ -1933,6 +1971,7 @@ document.addEventListener('click', async (e) => {
       const res = await api(`/api/actual-dividends/${rId}`, { method: 'DELETE' });
       toast(res.message || '삭제되었습니다.');
       await loadActualDividends(currentOwner);
+      await updateOverviewCardsAllTime(currentOwner);
     } catch (err) {
       toast(err.message, true);
     }
@@ -2006,6 +2045,7 @@ document.addEventListener('click', async (e) => {
         const res = await api("/api/realized-pnl/clear", { method: "POST" });
         toast(res.message || "모든 매도 실현손익 기록이 삭제되었습니다.");
         await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+        await updateOverviewCardsAllTime(currentOwner);
         if (dashboard) await refresh();
       });
     }
@@ -2032,6 +2072,7 @@ document.addEventListener('click', async (e) => {
       const res = await api(`/api/realized-pnl/${rId}`, { method: 'DELETE' });
       toast(res.message || '삭제되었습니다.');
       await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+      await updateOverviewCardsAllTime(currentOwner);
     } catch (err) {
       toast(err.message, true);
     }
@@ -2581,6 +2622,7 @@ async function saveActualDividendRecord() {
     document.getElementById("dividendRecordDialog")?.close();
     toast(res.message || "배당금이 저장되었습니다.");
     await loadActualDividends(currentOwner, selectedDividendYear);
+    await updateOverviewCardsAllTime(currentOwner);
     if (typeof loadDividends === 'function') await loadDividends(currentOwner);
     if (typeof loadDashboard === 'function') await loadDashboard();
   } catch (err) {
@@ -2612,6 +2654,7 @@ if (divImportForm) {
       fileInput.value = "";
       toast(res.message || "배당금 내역을 성공적으로 가져왔습니다.");
       await loadActualDividends(currentOwner);
+      await updateOverviewCardsAllTime(currentOwner);
     } catch (err) {
       toast(err.message || "배당 파일 처리 실패", true);
     }
@@ -2701,10 +2744,6 @@ async function loadActualDividends(owner = currentOwner, year = selectedDividend
       renderActualDividends(res);
     }
     updateDividendYearOptions(res?.available_years || []);
-    if (res) {
-      const totalActual = Number(res.total_actual_dividend_krw || 0);
-      $("#summaryActualDividend") && ($("#summaryActualDividend").textContent = money(totalActual));
-    }
   } catch (err) {
     console.error("실제 배당 정보를 불러오지 못했습니다.", err);
   }
@@ -3239,14 +3278,6 @@ function renderRealizedPnl(data) {
     winRateEl.className = `div-card-val ${winRate >= 50 ? 'gain' : ''}`;
   }
 
-  // 핵심 요약 패널의 전체 실현손익 갱신
-  const summaryPnlEl = $("#summaryRealizedPnl");
-  if (summaryPnlEl) {
-    summaryPnlEl.textContent = `${totalPnl > 0 ? '+' : ''}${money(totalPnl)}`;
-    summaryPnlEl.className = `${totalPnl > 0 ? 'gain up' : (totalPnl < 0 ? 'loss down' : '')}`;
-  }
-  $("#summaryRealizedPnlSub") && ($("#summaryRealizedPnlSub").textContent = `승률 ${number(winRate, 1)}% · 총 ${recordCount}건 실현`);
-
   // 2. 양방향 막대그래프 (SVG Bar Chart)
   const isAllYears = (selectedPnlYear === "all" || selectedPnlYear === "전체");
   const w = 900, h = 240, pad = 30;
@@ -3632,6 +3663,7 @@ async function saveRealizedPnlRecord() {
     document.getElementById("pnlRecordDialog")?.close();
     toast(res.message || "매도 실현손익이 저장되었습니다.");
     await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+    await updateOverviewCardsAllTime(currentOwner);
     if (typeof loadDashboard === 'function') await loadDashboard();
   } catch (err) {
     toast(err.message, true);
@@ -3686,6 +3718,7 @@ if (pnlImportForm) {
       fileInput.value = "";
       toast(res.message || "실현손익 내역을 성공적으로 가져왔습니다.");
       await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+      await updateOverviewCardsAllTime(currentOwner);
     } catch (err) {
       toast(err.message || "실현손익 파일 처리 실패", true);
     }
@@ -3809,6 +3842,7 @@ async function bootstrap() {
   try { await loadDividends('모두'); } catch (e) {}
   try { await loadActualDividends('모두', selectedDividendYear); } catch (e) {}
   try { await loadRealizedPnl('모두', selectedPnlYear, currentPnlTradeType); } catch (e) {}
+  try { await updateOverviewCardsAllTime('모두'); } catch (e) {}
 }
 
 if (document.readyState === 'loading') {

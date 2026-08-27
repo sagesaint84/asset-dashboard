@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260827-height5" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260827-alltime" />
   </head>
   <body>
     <main class="shell">
@@ -105,7 +105,7 @@
             <div class="summary-row">
               <div class="summary-row-label">
                 <span class="card-icon mini">📈</span>
-                <strong>전체 실현손익</strong>
+                <strong>실현손익</strong>
               </div>
               <div class="summary-row-val">
                 <div class="val-line">
@@ -117,7 +117,7 @@
             <div class="summary-row">
               <div class="summary-row-label">
                 <span class="card-icon mini">💰</span>
-                <strong>총 배당금</strong>
+                <strong>배당금</strong>
               </div>
               <div class="summary-row-val">
                 <div class="val-line">
@@ -232,12 +232,12 @@
         </div>
       </section>
 
-      <!-- 3.5 배당금 & 월별 캘린더 -->
+      <!-- 3.5 배당금 -->
       <section id="dividendPanel" class="panel dividend-panel">
         <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
           <div class="dividend-title-wrap">
-            <p class="eyebrow">DIVIDEND CALENDAR</p>
-            <h2>배당금 & 월별 캘린더 <button type="button" class="section-collapse-btn" data-section="dividend" title="접기/펼치기" aria-label="배당금 & 월별 캘린더 접기/펼치기">▼</button></h2>
+            <p class="eyebrow">DIVIDEND</p>
+            <h2>배당금 <button type="button" class="section-collapse-btn" data-section="dividend" title="접기/펼치기" aria-label="배당금 접기/펼치기">▼</button></h2>
           </div>
           <div class="heatmap-period-tabs" id="dividendModeTabs" style="margin-left:8px;">
             <button type="button" class="heatmap-tab active" data-div-mode="estimated">🔮 예상</button>
@@ -296,12 +296,12 @@
         </div>
       </section>
 
-      <!-- 3.7 매도 실현손익 -->
+      <!-- 3.7 실현손익 -->
       <section id="realizedPnlPanel" class="panel dividend-panel pnl-panel">
         <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
           <div class="dividend-title-wrap">
-            <p class="eyebrow">REALIZED PROFIT & LOSS</p>
-            <h2>매도 실현손익 <button type="button" class="section-collapse-btn" data-section="pnl" title="접기/펼치기" aria-label="매도 실현손익 접기/펼치기">▼</button></h2>
+            <p class="eyebrow">PROFIT & LOSS</p>
+            <h2>실현손익 <button type="button" class="section-collapse-btn" data-section="pnl" title="접기/펼치기" aria-label="실현손익 접기/펼치기">▼</button></h2>
           </div>
           <div class="heatmap-period-tabs" id="pnlTradeTypeTabs" style="margin-left:8px;">
             <button type="button" class="heatmap-tab active" data-trade-type="all">🏢 전체</button>
@@ -374,13 +374,13 @@
         <div id="marketGrid" class="market-grid" aria-label="주요 시장 지수" style="margin-top:16px;"></div>
       </section>
 
-      <!-- 5. 계좌 통합 현황 -->
+      <!-- 5. 계좌 -->
       <section id="accountsPanel" class="panel">
         <div class="account-panel-head-row">
           <div class="panel-head" style="flex-wrap:wrap;gap:0.5rem;display:flex;align-items:center;">
             <div>
               <p class="eyebrow">ACCOUNTS</p>
-              <h2>계좌 통합 현황 <button type="button" class="section-collapse-btn" data-section="accounts" title="접기/펼치기" aria-label="계좌 통합 현황 접기/펼치기">▼</button></h2>
+              <h2>계좌 <button type="button" class="section-collapse-btn" data-section="accounts" title="접기/펼치기" aria-label="계좌 접기/펼치기">▼</button></h2>
             </div>
             <div class="family-tabs" id="familyTabs" style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;">
               <button type="button" class="family-tab active" data-owner="모두">모두</button>
@@ -395,12 +395,12 @@
         </div>
       </section>
 
-      <!-- 7. 전체 보유 종목 -->
+      <!-- 7. 보유 종목 -->
       <section id="holdingsPanel" class="panel holdings-panel">
         <div class="panel-head holdings-head">
           <div>
-            <p class="eyebrow">ALL HOLDINGS</p>
-            <h2>전체 보유 종목 <button type="button" class="section-collapse-btn" data-section="holdings" title="접기/펼치기" aria-label="전체 보유 종목 접기/펼치기">▼</button></h2>
+            <p class="eyebrow">HOLDINGS</p>
+            <h2>보유 종목 <button type="button" class="section-collapse-btn" data-section="holdings" title="접기/펼치기" aria-label="보유 종목 접기/펼치기">▼</button></h2>
           </div>
           <div class="toolbar">
             <input id="searchInput" type="search" placeholder="종목명·코드·증권사 검색" />
@@ -805,9 +805,12 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260827-height5"></script>
+    <script src="/static/wealth.js?v=20260827-alltime"></script>
   </body>
 </html>
+
+
+
 
 
 

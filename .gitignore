@@ -3,28 +3,41 @@
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 
-# 민감 정보 - 절대 커밋 금지
+# 임시 및 스크래치 파일
+scratch_*.py
+~$*
+*.tmp
+*.temp
+
+# 민감 정보 및 개인 데이터 - 절대 커밋 금지
 .env
+.env.local
+.env.*.local
 data/
+!data/샘플_*.xlsx
+
+# 개인 엑셀/CSV 데이터 파일
+내_*.xlsx
+내_*.xls
+내_*.csv
+통합 문서*.xlsx
+통합문서*.xlsx
+*.xlsx
+*.xls
+*.csv
+!샘플_타증권사_보유종목.xlsx
+!샘플_매도실현손익.xlsx
+!샘플_배당.xlsx
 
 # 로그
 *.log
 
-# 에디터
+# 에디터 및 OS
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
-
-# 데이터
-*.xls
-*.xlsx
-!샘플_타증권사_보유종목.xlsx
-!샘플_매도실현손익.xlsx
-!샘플_배당.xlsx
-*.csv
 
 node_modules/
