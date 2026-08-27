@@ -2978,12 +2978,43 @@ document.getElementById('importBackupFile')?.addEventListener('change', async (e
   }
 });
 
-// PWA 서비스 워커 등록
+// PWA 서비스 워커 등록 및 설치 지원
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  console.log("[PWA] beforeinstallprompt event fired! PWA is installable.");
+  const btn = document.getElementById("pwaInstallButton");
+  if (btn) btn.style.display = "inline-flex";
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  console.log("[PWA] PWA was installed successfully.");
+  const btn = document.getElementById("pwaInstallButton");
+  if (btn) btn.style.display = "none";
+});
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {});
   });
 }
+
+function triggerPwaInstall() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === "accepted") {
+        console.log("[PWA] User accepted install prompt");
+      }
+      deferredInstallPrompt = null;
+    });
+  } else {
+    alert("현재 브라우저 환경에서는 [메뉴 ⋮] -> [앱 설치] 또는 [홈 화면에 추가]를 이용해 주세요.");
+  }
+}
+window.triggerPwaInstall = triggerPwaInstall;
 
 // ── 15. 배당(분배금) 현황 및 1월~12월 캘린더 ─────────────────────────────────────
 // ── 15. 배당(분배금) 현황 및 1월~12월 캘린더 (예상 / 실제 모드 지원) ───────────

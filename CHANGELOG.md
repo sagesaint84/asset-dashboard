@@ -1,3 +1,9 @@
+v3.3.8
+
+(fix) 삼성인터넷 PWA WebAPK 독립 앱 설치 호환성을 위해 v2.2.0 검증 설정으로 완벽 복원
+(fix) 매니페스트(/static/manifest.json) 및 서비스 워커(/static/sw.js) 경로 원형 동기화
+(feat) 안드로이드 자동회전 시스템 설정 연동 유지 (세로 고정 시 강제 회전 방지)
+
 v3.3.7
 
 (fix) PWA 매니페스트 시작 경로(/dashboard) 및 Standalone 설정 안정화 원복
