@@ -1,3 +1,10 @@
+v3.3.9
+
+(feat) MDN 공식 PWA 표준 규격 완벽 준수 및 오프라인 캐시 서비스 워커 전면 개편
+(feat) W3C 표준 Web App Manifest (/manifest.json) 루트 스코프 및 192/512px any/maskable 아이콘 4종 완비
+(feat) 서비스 워커 (/sw.js) 루트 스코프 등록 및 사전 리소스 프리캐싱(Pre-caching) 탑재
+(design) 브라우저 PWA 설치 감지 엔진(beforeinstallprompt) 및 상단 앱 설치 버튼 연동
+
 v3.3.8
 
 (fix) 삼성인터넷 PWA WebAPK 독립 앱 설치 호환성을 위해 v2.2.0 검증 설정으로 완벽 복원
