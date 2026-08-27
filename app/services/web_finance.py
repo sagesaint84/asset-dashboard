@@ -23,32 +23,64 @@ def _to_float(val: Any) -> float:
         return 0.0
 
 
+import calendar
+
+def _get_target_dates() -> tuple[str, str, str, str]:
+    """
+    (target_1w, target_1m, target_1y, target_ytd)를 'YYYYMMDD' 문자열로 반환합니다.
+    """
+    now = datetime.now()
+    # 1W: 정확히 7일 전 날짜
+    d_1w = now - timedelta(days=7)
+    target_1w = d_1w.strftime("%Y%m%d")
+
+    # 1M: 정확히 1개월 전 날짜 (월말 일자 보정)
+    m_year = now.year
+    m_month = now.month - 1
+    if m_month == 0:
+        m_month = 12
+        m_year -= 1
+    max_day_1m = calendar.monthrange(m_year, m_month)[1]
+    day_1m = min(now.day, max_day_1m)
+    target_1m = f"{m_year:04d}{m_month:02d}{day_1m:02d}"
+
+    # 1Y: 정확히 1년 전 날짜 (윤년 2월 29일 보정)
+    y_year = now.year - 1
+    max_day_1y = calendar.monthrange(y_year, now.month)[1]
+    day_1y = min(now.day, max_day_1y)
+    target_1y = f"{y_year:04d}{now.month:02d}{day_1y:02d}"
+
+    # YTD: 작년 12월 31일
+    target_ytd = f"{now.year - 1}1231"
+
+    return target_1w, target_1m, target_1y, target_ytd
+
+
 def calculate_period_changes(candles: list[dict[str, Any]], current_price: float) -> dict[str, float]:
     """
-    일별 캔들 종가 리스트[{'date': 'YYYYMMDD', 'close': float}, ...]를 바탕으로
-    1D, 1W, 1M, YTD, 1Y 수익률(%)을 계산합니다.
+    일별 캔들 종가 리스트[{'date': 'YYYY-MM-DD' or 'YYYYMMDD', 'close': float}, ...]를 바탕으로
+    1D(전일 종가), 1W(7일 전 날짜), 1M(1개월 전 날짜), YTD(연초), 1Y(1년 전 날짜) 수익률(%)을
+    실제 캘린더 날짜(휴일이면 직전 최근 거래일 종가) 기준으로 계산합니다.
     """
     if not candles or current_price <= 0:
         return {"1D": 0.0, "1W": 0.0, "1M": 0.0, "YTD": 0.0, "1Y": 0.0}
 
-    now_year = datetime.now().year
-    ytd_target = f"{now_year - 1}1231"
+    target_1w, target_1m, target_1y, target_ytd = _get_target_dates()
 
-    def find_close_at_index(offset: int) -> float:
-        if len(candles) > offset:
-            return float(candles[-(offset + 1)]["close"])
+    # 1D: 직전 거래일 종가
+    close_1d = float(candles[-2]["close"]) if len(candles) >= 2 else float(candles[-1]["close"])
+
+    def find_close_on_or_before(target_ymd: str) -> float:
+        for c in reversed(candles):
+            c_date = str(c.get("date", "")).replace("-", "")[:8]
+            if c_date <= target_ymd:
+                return float(c["close"])
         return float(candles[0]["close"])
 
-    close_1d = find_close_at_index(1) if len(candles) >= 2 else float(candles[-1]["close"])
-    close_1w = find_close_at_index(5)
-    close_1m = find_close_at_index(20)
-    close_1y = find_close_at_index(240)
-
-    close_ytd = float(candles[0]["close"])
-    for c in reversed(candles):
-        if c.get("date", "") <= ytd_target:
-            close_ytd = float(c["close"])
-            break
+    close_1w = find_close_on_or_before(target_1w)
+    close_1m = find_close_on_or_before(target_1m)
+    close_ytd = find_close_on_or_before(target_ytd)
+    close_1y = find_close_on_or_before(target_1y)
 
     def calc_rate(base_price: float) -> float:
         if base_price > 0:
@@ -302,8 +334,9 @@ async def get_web_market_overview() -> dict[str, Any]:
     indices = [
         {"symbol": "^KS11", "label": "코스피", "market": "KRX", "currency": "KRW"},
         {"symbol": "^KQ11", "label": "코스닥", "market": "KRX", "currency": "KRW"},
-        {"symbol": "^GSPC", "label": "S&P 500", "market": "US", "currency": "USD"},
+        {"symbol": "^GSPC", "label": "S&P", "market": "US", "currency": "USD"},
         {"symbol": "^IXIC", "label": "나스닥", "market": "US", "currency": "USD"},
+        {"symbol": "^SOX", "label": "반도체", "market": "US", "currency": "USD"},
     ]
     symbols = [idx["symbol"] for idx in indices] + ["KRW=X"]
 

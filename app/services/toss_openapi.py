@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -359,26 +360,40 @@ class TossOpenAPI:
                                         p_1d = as_float(candles[1].get("closePrice")) if len(candles) >= 2 else last
                                         r_1d = round((last - p_1d) / p_1d * 100, 2) if p_1d > 0 else 0.0
 
-                                    idx_1w = min(5, len(candles) - 1)
-                                    p_1w = as_float(candles[idx_1w].get("closePrice"))
+                                    # 날짜 기준: 7일 전, 1달 전, 1년 전, YTD
+                                    now = datetime.now()
+                                    d_1w = (now - timedelta(days=7)).strftime("%Y%m%d")
+
+                                    m_year = now.year
+                                    m_month = now.month - 1
+                                    if m_month == 0:
+                                        m_month = 12
+                                        m_year -= 1
+                                    max_day_1m = calendar.monthrange(m_year, m_month)[1]
+                                    d_1m = f"{m_year:04d}{m_month:02d}{min(now.day, max_day_1m):02d}"
+
+                                    y_year = now.year - 1
+                                    max_day_1y = calendar.monthrange(y_year, now.month)[1]
+                                    d_1y = f"{y_year:04d}{now.month:02d}{min(now.day, max_day_1y):02d}"
+                                    d_ytd = f"{now.year - 1}1231"
+
+                                    def find_toss_close(target_ymd: str) -> float:
+                                        for c in candles:
+                                            ts_str = str(c.get("timestamp", "")).replace("-", "")[:8]
+                                            if ts_str and ts_str <= target_ymd:
+                                                return as_float(c.get("closePrice"))
+                                        return as_float(candles[-1].get("closePrice"))
+
+                                    p_1w = find_toss_close(d_1w)
                                     r_1w = round((last - p_1w) / p_1w * 100, 2) if p_1w > 0 else 0.0
 
-                                    idx_1m = min(20, len(candles) - 1)
-                                    p_1m = as_float(candles[idx_1m].get("closePrice"))
+                                    p_1m = find_toss_close(d_1m)
                                     r_1m = round((last - p_1m) / p_1m * 100, 2) if p_1m > 0 else 0.0
 
-                                    ytd_c = None
-                                    for c in candles:
-                                        ts = c.get("timestamp", "")
-                                        if ts.startswith(str(current_year)):
-                                            ytd_c = c
-                                        else:
-                                            ytd_c = c
-                                            break
-                                    p_ytd = as_float(ytd_c.get("closePrice")) if ytd_c else p_1m
+                                    p_ytd = find_toss_close(d_ytd)
                                     r_ytd = round((last - p_ytd) / p_ytd * 100, 2) if p_ytd > 0 else 0.0
 
-                                    p_1y = as_float(candles[-1].get("closePrice"))
+                                    p_1y = find_toss_close(d_1y)
                                     r_1y = round((last - p_1y) / p_1y * 100, 2) if p_1y > 0 else 0.0
 
                                     results[sym] = {

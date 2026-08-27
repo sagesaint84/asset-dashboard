@@ -7,7 +7,7 @@ let currentStockChartCode = '';
 let currentStockChartName = '';
 let currentStockChartPrice = 0;
 let currentStockChartCurrency = 'KRW';
-let currentStockChartPeriod = '3M'; // '1W' | '1M' | '3M' | 'YTD' | '1Y'
+let currentStockChartPeriod = '1M'; // '1D' | '1W' | '1M' | '1Y'
 let holdingSortField = 'market_value_krw';
 let holdingSortOrder = 'desc'; // 'asc' | 'desc'
 let heatmapViewMode = localStorage.getItem("heatmap_view_mode") || "treemap"; // 'treemap' | 'cards'
@@ -386,15 +386,31 @@ async function action(button, request, after = loadDashboard) {
 // ── 기간별 자산기록 필터링 ──────────────────────────────────────────────────
 function filterRecordsByPeriod(records, period) {
   if (!records || !records.length || period === 'ALL') return records || [];
-  const now = new Date();
-  let days = 30;
-  if (period === '1M') days = 30;
-  else if (period === '3M') days = 90;
-  else if (period === '6M') days = 180;
-  else if (period === '1Y') days = 365;
+  const sorted = [...records].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 
-  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  return records.filter(r => r.date && r.date >= cutoff);
+  if (period === '1D') {
+    // 일간: 전날과 당일 2일만 비교
+    return sorted.slice(-2);
+  }
+  if (period === '1W') {
+    // 주간: 5일간 비교
+    return sorted.slice(-5);
+  }
+  if (period === '1M') {
+    // 월간: 1달간 비교 (최근 30일)
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const mList = sorted.filter(r => r.date && r.date >= cutoff);
+    return mList.length >= 2 ? mList : sorted.slice(-30);
+  }
+  if (period === '1Y') {
+    // 연간: 1년간 비교 (최근 365일)
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const yList = sorted.filter(r => r.date && r.date >= cutoff);
+    return yList.length >= 2 ? yList : sorted.slice(-365);
+  }
+  return sorted;
 }
 
 // ── 1. 주요 지수 렌더링 ──────────────────────────────────────────────────────
@@ -409,15 +425,18 @@ function renderMarkets(result) {
   const fx = marketOverviewData.exchange_rate || {};
   const period = currentMarketPeriod || '1D';
 
-  const rows = [
+  const allCards = [
     ...mkts.map(m => {
       const pStat = (m.periods && m.periods[period]) || {};
       const change = pStat.change != null ? pStat.change : (m.change != null ? m.change : m.change_price);
       const changeRate = pStat.change_rate != null ? pStat.change_rate : m.change_rate;
       const series = (pStat.series && pStat.series.length) ? pStat.series : (m.series || [m.price || 0]);
+      let lbl = m.label || m.name;
+      if (lbl === "S&P 500") lbl = "S&P";
+      if (lbl === "달러 환율") lbl = "달러";
       return {
         symbol: m.symbol,
-        label: m.label || m.name,
+        label: lbl,
         price: m.price != null ? m.price : m.current_price,
         currency: m.currency || 'KRW',
         change: change,
@@ -432,7 +451,7 @@ function renderMarkets(result) {
       const fxSeries = (fxPStat.series && fxPStat.series.length) ? fxPStat.series : (fx.series || [fx.rate || 1385]);
       return {
         symbol: "USD/KRW",
-        label: "달러 환율",
+        label: "달러",
         price: fx.rate,
         currency: "KRW",
         change: fxChange,
@@ -441,6 +460,13 @@ function renderMarkets(result) {
       };
     })()
   ];
+
+  // 순서: 코스피 -> 코스닥 -> 달러 -> S&P -> 나스닥 -> 반도체
+  const ORDER = ["코스피", "코스닥", "달러", "S&P", "나스닥", "반도체"];
+  const rows = ORDER.map(name => allCards.find(c => c.label === name)).filter(Boolean);
+  allCards.forEach(c => {
+    if (!rows.includes(c)) rows.push(c);
+  });
 
   const grid = $("#marketGrid");
   if (!grid) return;
@@ -690,12 +716,11 @@ function renderAccounts(items) {
 
 // ── 5. 자산 히트맵 (정통 Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────
 const PERIOD_LABELS = {
-  "1D": "일간",
-  "1W": "주간 (5영업일)",
-  "1M": "월간 (20영업일)",
-  "YTD": "연초부터 (YTD)",
-  "1Y": "연간 (240영업일)",
-  "TOTAL": "진입가 (매입단가 대비)",
+  "1D": "일간 (전일 대비)",
+  "1W": "주간 (7일 전 대비)",
+  "1M": "월간 (1개월 전 대비)",
+  "1Y": "연간 (1년 전 대비)",
+  "TOTAL": "진입 (매입단가 대비)",
 };
 
 const PERIOD_CAPS = {
@@ -1264,6 +1289,9 @@ async function openStockChart(code, name, price, currency = 'KRW') {
   $("#stockChartCode").textContent = `${currentStockChartCode} · ${currentStockChartCurrency}`;
   $("#stockChartPrice").textContent = money(currentStockChartPrice, currentStockChartCurrency);
   $("#stockChartChange").textContent = "데이터 조회 중…";
+  if (!['1D', '1W', '1M', '1Y'].includes(currentStockChartPeriod)) {
+    currentStockChartPeriod = '1M';
+  }
 
   document.querySelectorAll('#stockChartPeriodTabs .heatmap-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.period === currentStockChartPeriod);
@@ -1459,21 +1487,27 @@ function renderAssetRecords(records) {
     const w = 900, h = 280, pad = 24;
     const hLineArea = 160;
 
+    // 막대 차트와 동일하게 그리드 컬럼 중앙에 데이터 포인트와 막대 배치
+    const getX = (i) => pad + ((w - pad * 2) * (i + 0.5)) / Math.max(filtered.length, 1);
+
     const linePoints = filtered.map((pt, i) => {
-      const x = pad + ((w - pad * 2) * i) / Math.max(filtered.length - 1, 1);
+      const x = getX(i);
       const y = pad + (hLineArea - pad) * (1 - (Number(pt.total_value_krw || 0) - minVal) / spanVal);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+      return { x, y, pt };
     });
-    const linePath = linePoints.join(" ");
-    const lineAreaPath = `${linePath} ${(w - pad)},${hLineArea} ${pad},${hLineArea}`;
+    const linePath = linePoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+
+    const firstX = linePoints[0].x;
+    const lastX = linePoints[linePoints.length - 1].x;
+    const lineAreaPath = `${linePath} ${lastX.toFixed(1)},${hLineArea} ${firstX.toFixed(1)},${hLineArea}`;
 
     const hBarAreaTop = hLineArea + 25;
     const hBarAreaHeight = h - hBarAreaTop - pad;
     const zeroY = hBarAreaTop + (hBarAreaHeight / 2);
 
-    const barWidth = Math.max(3, Math.min(18, (w - pad * 2) / filtered.length - 3));
+    const barWidth = Math.max(3, Math.min(32, (w - pad * 2) / filtered.length - 6));
     const bars = filtered.map((pt, i) => {
-      const x = pad + ((w - pad * 2) * i) / Math.max(filtered.length - 1, 1) - barWidth / 2;
+      const x = getX(i) - barWidth / 2;
       const p = Number(pt.day_profit_krw || 0);
       const isGain = p >= 0;
       const barH = Math.max(2, (Math.abs(p) / maxAbsProfit) * (hBarAreaHeight / 2 - 4));
@@ -1485,6 +1519,22 @@ function renderAssetRecords(records) {
         </rect>
       `;
     }).join('');
+
+    // 데이터가 10개 이하일 때 (일간 2개, 주간 5개 등) 각 지점에 원형 포인트와 수치 라벨 표시
+    const pointCircles = filtered.length <= 10 ? linePoints.map(p => {
+      const shortDate = p.pt.date ? p.pt.date.slice(5) : '';
+      return `
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#8e70fa" stroke="#0e162b" stroke-width="2">
+          <title>${p.pt.date}: ${money(p.pt.total_value_krw)}</title>
+        </circle>
+        <text x="${p.x.toFixed(1)}" y="${(p.y - 7).toFixed(1)}" fill="#f3f5ff" font-size="10" font-weight="700" text-anchor="middle">
+          ${money(p.pt.total_value_krw)}
+        </text>
+        <text x="${p.x.toFixed(1)}" y="${(hLineArea - 5).toFixed(1)}" fill="#8e9bb5" font-size="9" font-weight="600" text-anchor="middle">
+          ${shortDate}
+        </text>
+      `;
+    }).join('') : '';
 
     const first = filtered[0];
     const last = filtered.at(-1);
@@ -1506,6 +1556,7 @@ function renderAssetRecords(records) {
           <line x1="${pad}" y1="${hLineArea}" x2="${w - pad}" y2="${hLineArea}" stroke="#1f2c4d" stroke-dasharray="3,3" />
           <polygon points="${lineAreaPath}" fill="url(#recordComboGrad)" />
           <polyline points="${linePath}" fill="none" stroke="#8e70fa" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+          ${pointCircles}
           <line x1="${pad}" y1="${zeroY}" x2="${w - pad}" y2="${zeroY}" stroke="#334673" stroke-width="1.2" />
           <text x="${pad}" y="${hLineArea + 18}" fill="#7182a6" font-size="10" font-weight="700">일간 손익 (PROFIT / LOSS)</text>
           <text x="${w - pad}" y="${zeroY - 4}" fill="#7182a6" font-size="9" text-anchor="end">0원</text>
@@ -1893,7 +1944,7 @@ document.addEventListener('click', async (e) => {
   if (chartTab) {
     document.querySelectorAll('#stockChartPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
     chartTab.classList.add('active');
-    currentStockChartPeriod = chartTab.dataset.period || '3M';
+    currentStockChartPeriod = chartTab.dataset.period || '1M';
     await loadStockChartData();
     return;
   }
@@ -4121,6 +4172,10 @@ function applySectionCollapsedState(sectionKey, isCollapsed) {
   if (panel) {
     panel.classList.toggle('is-collapsed', isCollapsed);
     panel.querySelectorAll('.panel-head select, .panel-head button:not(.section-collapse-btn)').forEach(el => {
+      if (el.id === 'syncAccountsButton' || el.id === 'refreshButton') {
+        el.disabled = false;
+        return;
+      }
       el.disabled = isCollapsed;
     });
 

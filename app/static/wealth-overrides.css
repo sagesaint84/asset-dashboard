@@ -402,15 +402,14 @@
    ========================================================================= */
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
   margin-top: 10px;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1300px) {
   .market-grid {
-    grid-template-columns: repeat(5, 1fr);
-    overflow-x: auto;
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -423,7 +422,49 @@
 @media (max-width: 600px) {
   .market-grid {
     grid-template-columns: 1fr 1fr;
+    gap: 8px;
   }
+  .toss-market-card {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+  .market-chart-col {
+    width: 68px !important;
+    height: 40px !important;
+  }
+  .market-title {
+    font-size: 13px !important;
+  }
+  .market-price {
+    font-size: 14px !important;
+  }
+  .market-change {
+    font-size: 11px !important;
+  }
+}
+
+/* 주요지수, 자산기록, 히트맵, 종목차트 기간 탭 축소 스타일 */
+.compact-market-tabs,
+.compact-record-tabs,
+.compact-heatmap-tabs,
+.compact-chart-tabs {
+  display: inline-flex !important;
+  gap: 3px !important;
+  padding: 2px 3px !important;
+  background: rgba(14, 22, 45, 0.75) !important;
+  border-radius: 8px !important;
+}
+
+.compact-market-tabs .heatmap-tab,
+.compact-record-tabs .heatmap-tab,
+.compact-heatmap-tabs .heatmap-tab,
+.compact-chart-tabs .heatmap-tab {
+  padding: 3px 8px !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  min-height: 24px !important;
+  border-radius: 6px !important;
+  letter-spacing: -0.2px !important;
 }
 
 .toss-market-card {
@@ -1666,6 +1707,16 @@ dialog.dialog .dialog-actions {
 .panel.is-collapsed select {
   pointer-events: none !important;
   user-select: none !important;
+}
+
+/* 주요지수 섹션 접힘 상태에서도 계좌 연결 및 조회 버튼은 항상 클릭 가능 */
+.panel.is-collapsed #syncAccountsButton,
+.panel.is-collapsed #refreshButton,
+.panel.is-collapsed .market-head .toolbar {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  filter: none !important;
 }
 
 /* ── 화면 테마 설정 (Theme Switcher) ── */
