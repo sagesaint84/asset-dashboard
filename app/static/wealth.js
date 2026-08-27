@@ -398,28 +398,48 @@ function filterRecordsByPeriod(records, period) {
 }
 
 // ── 1. 주요 지수 렌더링 ──────────────────────────────────────────────────────
+let currentMarketPeriod = '1D';
+let marketOverviewData = null;
+
 function renderMarkets(result) {
-  const mkts = result?.markets || [];
-  const fx = result?.exchange_rate || {};
+  if (result) marketOverviewData = result;
+  if (!marketOverviewData) return;
+
+  const mkts = marketOverviewData.markets || [];
+  const fx = marketOverviewData.exchange_rate || {};
+  const period = currentMarketPeriod || '1D';
+
   const rows = [
-    ...mkts.map(m => ({
-      symbol: m.symbol,
-      label: m.label || m.name,
-      price: m.price != null ? m.price : m.current_price,
-      currency: m.currency || 'KRW',
-      change: m.change != null ? m.change : m.change_price,
-      change_rate: m.change_rate,
-      series: m.series || [m.price || 0],
-    })),
-    {
-      symbol: "USD/KRW",
-      label: "달러 환율",
-      price: fx.rate,
-      currency: "KRW",
-      change: fx.change != null ? fx.change : fx.change_price,
-      change_rate: fx.change_rate,
-      series: fx.series || [fx.rate || 1385],
-    },
+    ...mkts.map(m => {
+      const pStat = (m.periods && m.periods[period]) || {};
+      const change = pStat.change != null ? pStat.change : (m.change != null ? m.change : m.change_price);
+      const changeRate = pStat.change_rate != null ? pStat.change_rate : m.change_rate;
+      const series = (pStat.series && pStat.series.length) ? pStat.series : (m.series || [m.price || 0]);
+      return {
+        symbol: m.symbol,
+        label: m.label || m.name,
+        price: m.price != null ? m.price : m.current_price,
+        currency: m.currency || 'KRW',
+        change: change,
+        change_rate: changeRate,
+        series: series,
+      };
+    }),
+    (() => {
+      const fxPStat = (fx.periods && fx.periods[period]) || {};
+      const fxChange = fxPStat.change != null ? fxPStat.change : (fx.change != null ? fx.change : fx.change_price);
+      const fxChangeRate = fxPStat.change_rate != null ? fxPStat.change_rate : fx.change_rate;
+      const fxSeries = (fxPStat.series && fxPStat.series.length) ? fxPStat.series : (fx.series || [fx.rate || 1385]);
+      return {
+        symbol: "USD/KRW",
+        label: "달러 환율",
+        price: fx.rate,
+        currency: "KRW",
+        change: fxChange,
+        change_rate: fxChangeRate,
+        series: fxSeries,
+      };
+    })()
   ];
 
   const grid = $("#marketGrid");
@@ -463,6 +483,20 @@ function renderMarkets(result) {
     `;
   }).join("");
 }
+
+// 주요지수 기간 선택 탭 이벤트 등록
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("#marketPeriodTabs .heatmap-tab");
+  if (!btn) return;
+  const period = btn.dataset.period;
+  if (!period) return;
+
+  document.querySelectorAll("#marketPeriodTabs .heatmap-tab").forEach(t => t.classList.toggle("active", t === btn));
+  currentMarketPeriod = period;
+  if (marketOverviewData) {
+    renderMarkets(marketOverviewData);
+  }
+});
 
 async function loadMarkets() {
   try { renderMarkets(await api("/api/market-overview")); }
@@ -518,8 +552,7 @@ function renderSummary(data) {
   if (usdCashBadgeEl) usdCashBadgeEl.textContent = `(예수금 ${money(usd.cash || 0, "USD")})`;
 
   $("#updatedAt") && ($("#updatedAt").textContent = data.updated_at ? `마지막 자산 반영 ${new Date(data.updated_at).toLocaleString("ko-KR")}` : "아직 보유종목이 없습니다.");
-  const cashSuffix = s.total_cash_krw ? ` (예수금 ${money(s.total_cash_krw)} 포함)` : "";
-  $("#accountCaption") && ($("#accountCaption").textContent = `전체 ${number(s.account_count, 0)}개 계좌 통합${cashSuffix}`);
+  $("#accountCaption") && ($("#accountCaption").textContent = `전체 ${number(s.account_count, 0)}개 계좌`);
 }
 
 // ── 3. 투자자산 분류 & 섹터별 도넛 원그래프 ──────────────────────────────────
@@ -862,6 +895,8 @@ function squarify(items, x, y, width, height) {
   return rects;
 }
 
+let lastValidHeatmapWidth = 0;
+
 function renderTreemapContainer(container, items, period = "1D", theme = "kr", capSetting = "auto") {
   if (!container) return;
   if (!items.length) {
@@ -875,7 +910,21 @@ function renderTreemapContainer(container, items, period = "1D", theme = "kr", c
     it.weight = totalVal > 0 ? (it.value / totalVal) * 100 : 0;
   });
 
-  const width = container.clientWidth || 920;
+  if (container.clientWidth > 200) {
+    lastValidHeatmapWidth = container.clientWidth;
+  }
+
+  let width = container.clientWidth;
+  if (!width || width < 200) {
+    if (lastValidHeatmapWidth > 200) {
+      width = lastValidHeatmapWidth;
+    } else {
+      const shell = document.querySelector(".shell");
+      const shellW = shell ? shell.clientWidth : window.innerWidth;
+      width = Math.max(320, shellW - 48);
+    }
+  }
+
   const height = Math.max(380, Math.min(540, Math.round(width * 0.46)));
   container.style.position = "relative";
   container.style.height = `${height}px`;
@@ -1257,7 +1306,7 @@ async function loadStockChartData() {
     const pricePath = pricePoints.join(" ");
     const priceAreaPath = `${pricePath} ${(w - pad)},${hPriceArea} ${pad},${hPriceArea}`;
 
-    const barWidth = Math.max(2, Math.min(14, (w - pad * 2) / candles.length - 2));
+    const barWidth = Math.max(1.5, Math.min(14, (w - pad * 2) / candles.length - 1.5));
     const volBars = candles.map((c, idx) => {
       const x = pad + ((w - pad * 2) * idx) / Math.max(candles.length - 1, 1) - barWidth / 2;
       const volH = Math.max(2, (c.volume / maxVol) * hVolArea);
@@ -1276,6 +1325,10 @@ async function loadStockChartData() {
     $("#stockChartPrice").textContent = money(last.close, currentStockChartCurrency);
     $("#stockChartChange").textContent = `${isGain ? "+" : ""}${money(diff, currentStockChartCurrency)} (${isGain ? "+" : ""}${number(diffRate, 2)}%)`;
     $("#stockChartChange").className = `sub-rate ${signClass(diff)}`;
+
+    let countLabel = `${candles.length}개 거래일`;
+    if (currentStockChartPeriod === "1D") countLabel = `${candles.length}개 5분봉 (장중)`;
+    else if (currentStockChartPeriod === "1W") countLabel = `${candles.length}개 60분봉 (1주)`;
 
     container.innerHTML = `
       <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:260px;overflow:visible;">
@@ -1296,7 +1349,7 @@ async function loadStockChartData() {
       </svg>
       <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#7182a6;">
         <span>${first.date}</span>
-        <span>${candles.length}개 거래일</span>
+        <span>${countLabel}</span>
         <span>${last.date}</span>
       </div>
     `;
@@ -1542,6 +1595,35 @@ function openHoldingDialog(record = null) {
   if (!form) return;
   form.reset();
   form.dataset.recordId = record ? String(record.id) : "";
+
+  $("#holdingDialogTitle") && ($("#holdingDialogTitle").textContent = record ? "보유종목 수정" : "보유종목 직접 추가");
+
+  // ACCOUNTS 섹션의 등록된 계좌 목록 드롭다운 및 데이터리스트 채우기
+  const accounts = dashboard?.accounts || [];
+  const acctSel = $("#holdingAccountSelect");
+  if (acctSel) {
+    acctSel.innerHTML = '<option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>' +
+      accounts.map(a => `
+        <option value="${html(a.id)}" data-broker="${html(a.broker)}" data-name="${html(a.name)}" data-owner="${html(a.owner || '모두')}">
+          [${html(a.broker)}] ${html(a.name)} (${html(a.owner || '모두')})
+        </option>
+      `).join('');
+
+    // 현재 수정 중인 레코드의 계좌 매칭
+    const matchedAcct = accounts.find(a => a.id === record?.account_id || (a.broker === record?.broker && a.name === record?.account_name));
+    if (matchedAcct) {
+      acctSel.value = matchedAcct.id;
+    } else {
+      acctSel.value = "";
+    }
+  }
+
+  const acctDatalist = $("#holdingAccountDatalist");
+  if (acctDatalist) {
+    const uniqueNames = [...new Set(accounts.map(a => a.name).filter(Boolean))];
+    acctDatalist.innerHTML = uniqueNames.map(name => `<option value="${html(name)}"></option>`).join('');
+  }
+
   form.broker.value = record?.broker || "기타 증권사";
   form.account_name.value = record?.account_name || "내 주식 계좌";
   form.code.value = record?.code || "";
@@ -1967,11 +2049,20 @@ document.addEventListener('click', async (e) => {
     const rec = (actualDividendData?.records || []).find(r => r.id === rId);
     const label = rec ? `${rec.date} ${rec.name} (${money(rec.amount_krw)})` : '배당 기록';
     if (!confirm(`'${label}' 배당 내역을 삭제할까요?`)) return;
+    const savedScrollY = window.scrollY || window.pageYOffset || 0;
+    const divDetailWrap = document.querySelector("#dividendMonthlyDetail .div-detail-grid, #dividendMonthlyDetail .detail-table-wrap");
+    const savedTableScroll = divDetailWrap ? divDetailWrap.scrollTop : 0;
     try {
       const res = await api(`/api/actual-dividends/${rId}`, { method: 'DELETE' });
       toast(res.message || '삭제되었습니다.');
       await loadActualDividends(currentOwner);
       await updateOverviewCardsAllTime(currentOwner);
+      window.scrollTo({ top: savedScrollY, behavior: "instant" });
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: savedScrollY, behavior: "instant" });
+        const newWrap = document.querySelector("#dividendMonthlyDetail .div-detail-grid, #dividendMonthlyDetail .detail-table-wrap");
+        if (newWrap && savedTableScroll > 0) newWrap.scrollTop = savedTableScroll;
+      });
     } catch (err) {
       toast(err.message, true);
     }
@@ -2068,11 +2159,20 @@ document.addEventListener('click', async (e) => {
     const rec = (pnlData?.records || []).find(r => r.id === rId);
     const label = rec ? `${rec.date} ${rec.name} (${money(rec.pnl_krw)})` : '손익 기록';
     if (!confirm(`'${label}' 매도 실현손익 내역을 삭제할까요?`)) return;
+    const savedScrollY = window.scrollY || window.pageYOffset || 0;
+    const pnlDetailWrap = document.querySelector("#pnlMonthlyDetail .detail-table-wrap");
+    const savedTableScroll = pnlDetailWrap ? pnlDetailWrap.scrollTop : 0;
     try {
       const res = await api(`/api/realized-pnl/${rId}`, { method: 'DELETE' });
       toast(res.message || '삭제되었습니다.');
       await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
       await updateOverviewCardsAllTime(currentOwner);
+      window.scrollTo({ top: savedScrollY, behavior: "instant" });
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: savedScrollY, behavior: "instant" });
+        const newWrap = document.querySelector("#pnlMonthlyDetail .detail-table-wrap");
+        if (newWrap && savedTableScroll > 0) newWrap.scrollTop = savedTableScroll;
+      });
     } catch (err) {
       toast(err.message, true);
     }
@@ -2281,6 +2381,19 @@ $("#assetRecordList")?.addEventListener("click", async (e) => {
   }
   if (deleteButton && confirm("이 자산기록을 삭제할까요?")) {
     await action(deleteButton, () => api(`/api/asset-records/${deleteButton.dataset.recordDelete}`, { method: "DELETE" }), () => loadAssetRecords(currentOwner));
+  }
+});
+
+// 보유종목 추가/수정 팝업 내 등록된 계좌 선택 시 자동 채움
+$("#holdingAccountSelect")?.addEventListener("change", (e) => {
+  const sel = e.target;
+  const form = $("#holdingForm");
+  if (!form || !sel) return;
+  const opt = sel.selectedOptions[0];
+  if (opt && opt.value) {
+    if (opt.dataset.broker) form.broker.value = opt.dataset.broker;
+    if (opt.dataset.name) form.account_name.value = opt.dataset.name;
+    if (opt.dataset.owner && form.owner) form.owner.value = opt.dataset.owner;
   }
 });
 
@@ -2610,6 +2723,11 @@ async function saveActualDividendRecord() {
     memo: memoVal,
   };
 
+  // 현재 스크롤 위치 저장
+  const savedScrollY = window.scrollY || window.pageYOffset || 0;
+  const divDetailWrap = document.querySelector("#dividendMonthlyDetail .div-detail-grid, #dividendMonthlyDetail .detail-table-wrap");
+  const savedTableScroll = divDetailWrap ? divDetailWrap.scrollTop : 0;
+
   isSubmittingDividend = true;
   try {
     const url = rId ? `/api/actual-dividends/${rId}` : "/api/actual-dividends";
@@ -2624,7 +2742,14 @@ async function saveActualDividendRecord() {
     await loadActualDividends(currentOwner, selectedDividendYear);
     await updateOverviewCardsAllTime(currentOwner);
     if (typeof loadDividends === 'function') await loadDividends(currentOwner);
-    if (typeof loadDashboard === 'function') await loadDashboard();
+
+    // 스크롤 위치 복원
+    window.scrollTo({ top: savedScrollY, behavior: "instant" });
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: savedScrollY, behavior: "instant" });
+      const newWrap = document.querySelector("#dividendMonthlyDetail .div-detail-grid, #dividendMonthlyDetail .detail-table-wrap");
+      if (newWrap && savedTableScroll > 0) newWrap.scrollTop = savedTableScroll;
+    });
   } catch (err) {
     toast(err.message, true);
   } finally {
@@ -2779,7 +2904,10 @@ function renderDividends(data) {
   const yieldRate = Number(data.portfolio_yield || 0);
   const monthlyAvg = Number(data.monthly_avg_dividend_krw || 0);
   const payingCount = Number(data.dividend_paying_count || 0);
-  const totalHoldings = (dashboard?.holdings || []).length;
+  let totalHoldings = (dashboard?.holdings || []).length;
+  if (currentOwner !== '모두') {
+    totalHoldings = (dashboard?.holdings || []).filter(h => (h.owner || '모두') === currentOwner).length;
+  }
 
   $("#divTotalAnnual") && ($("#divTotalAnnual").textContent = money(totalAnnual));
   $("#divTotalAnnualUsd") && ($("#divTotalAnnualUsd").textContent = `$${number(totalAnnualUsd, 2)} 환산 포함`);
@@ -2880,9 +3008,10 @@ function renderMonthlyDividendDetail(month = null) {
   }
 
   if (!items.length) {
+    const emptyMsg = month ? `${month}월에 지급 예정인 배당금 내역이 없습니다.` : `배당(분배금)을 지급하는 보유 종목이 없습니다. (무배당/성장형 종목)`;
     container.innerHTML = `
       <div class="div-detail-header">${title}</div>
-      <div class="empty" style="padding:16px;">해당 월에 지급 예정인 배당금 내역이 없습니다.</div>
+      <div class="empty" style="padding:16px;">${emptyMsg}</div>
     `;
     return;
   }
@@ -3555,7 +3684,13 @@ async function openPnlRecordDialog(record = null) {
   if (currEl) currEl.value = record ? record.currency : "KRW";
   if (pnlEl) pnlEl.value = record ? record.pnl : "";
   if (pnlKrwEl) pnlKrwEl.value = record ? record.pnl_krw : "";
-  if (isIpoEl) isIpoEl.value = (record && record.is_ipo) ? "true" : "false";
+  if (isIpoEl) {
+    if (record) {
+      isIpoEl.value = record.is_ipo ? "true" : "false";
+    } else {
+      isIpoEl.value = (currentPnlTradeType === "ipo") ? "true" : "false";
+    }
+  }
   if (memoEl) memoEl.value = record ? (record.memo || "") : "";
 
   if (record && record.fx_rate) {
@@ -3651,6 +3786,11 @@ async function saveRealizedPnlRecord() {
     memo: memoVal,
   };
 
+  // 현재 스크롤 위치 저장 (윈도우 스크롤 및 세부 테이블 스크롤)
+  const savedScrollY = window.scrollY || window.pageYOffset || 0;
+  const pnlDetailWrap = document.querySelector("#pnlMonthlyDetail .detail-table-wrap");
+  const savedTableScroll = pnlDetailWrap ? pnlDetailWrap.scrollTop : 0;
+
   isSubmittingPnl = true;
   try {
     const url = rId ? `/api/realized-pnl/${rId}` : "/api/realized-pnl";
@@ -3664,7 +3804,14 @@ async function saveRealizedPnlRecord() {
     toast(res.message || "매도 실현손익이 저장되었습니다.");
     await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
     await updateOverviewCardsAllTime(currentOwner);
-    if (typeof loadDashboard === 'function') await loadDashboard();
+
+    // 스크롤 위치 완벽 복원
+    window.scrollTo({ top: savedScrollY, behavior: "instant" });
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: savedScrollY, behavior: "instant" });
+      const newWrap = document.querySelector("#pnlMonthlyDetail .detail-table-wrap");
+      if (newWrap && savedTableScroll > 0) newWrap.scrollTop = savedTableScroll;
+    });
   } catch (err) {
     toast(err.message, true);
   } finally {
@@ -3821,6 +3968,16 @@ function applySectionCollapsedState(sectionKey, isCollapsed) {
 
   if (panel) {
     panel.classList.toggle('is-collapsed', isCollapsed);
+    panel.querySelectorAll('.panel-head select, .panel-head button:not(.section-collapse-btn)').forEach(el => {
+      el.disabled = isCollapsed;
+    });
+
+    // 섹션이 다시 펼쳐질 때 히트맵 리렌더링 (정확한 너비 반영)
+    if (!isCollapsed && sectionKey === 'heatmap' && dashboard) {
+      requestAnimationFrame(() => {
+        renderHeatmaps(dashboard);
+      });
+    }
   }
 }
 
@@ -3830,6 +3987,18 @@ function initCollapsedSections() {
     applySectionCollapsedState(key, true);
   });
 }
+
+// 창 크기 변경 시 활성화된 히트맵 재계산
+let heatmapResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(heatmapResizeTimer);
+  heatmapResizeTimer = setTimeout(() => {
+    const p = document.querySelector('#heatmapPanel');
+    if (p && !p.classList.contains('is-collapsed') && dashboard) {
+      renderHeatmaps(dashboard);
+    }
+  }, 200);
+});
 
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
 async function bootstrap() {

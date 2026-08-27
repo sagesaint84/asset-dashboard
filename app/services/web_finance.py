@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 import xml.etree.ElementTree as ET
 
@@ -201,10 +201,103 @@ async def fetch_fx_rate_usd_krw(client: httpx.AsyncClient | None = None) -> floa
 # 4. 주요 시장 지수 (시장 스냅샷 및 스파크라인 차트)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def get_web_market_overview() -> list[dict[str, Any]]:
+def _extract_quotes(resp: Any) -> list[float]:
+    if isinstance(resp, Exception) or getattr(resp, "status_code", None) != 200:
+        return []
+    try:
+        raw = resp.json().get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        return [float(v) for v in raw if v is not None and float(v) > 0]
+    except Exception:
+        return []
+
+
+def _calculate_market_periods(
+    valid_quotes_1y: list[tuple[float, float]],
+    prev_close: float,
+    current_price: float,
+    quotes_5m: list[float] | None = None,
+    quotes_60m: list[float] | None = None,
+) -> dict[str, Any]:
     """
-    코스피, 코스닥, S&P 500, 나스닥 종합 4개 지수 스냅샷을 조회합니다.
-    wealth.js의 renderMarkets 호환용 label, price, change, change_rate, series 제공
+    valid_quotes_1y: [(timestamp, close_price), ...]
+    quotes_5m: 당일 5분봉 종가 리스트
+    quotes_60m: 1주 60분봉 종가 리스트
+    """
+    p = current_price or (valid_quotes_1y[-1][1] if valid_quotes_1y else (quotes_5m[-1] if quotes_5m else 0.0))
+    if not valid_quotes_1y and not quotes_5m:
+        empty_stat = {"change": 0.0, "change_rate": 0.0, "series": [p, p] if p else []}
+        return {k: empty_stat for k in ["1D", "1W", "1M", "3M", "YTD", "1Y"]}
+
+    now = datetime.now()
+    cur_year = now.year
+    last_price = p
+
+    # 1D: 직전 거래일 대비 (5분봉 시리즈 적용)
+    prev_1d = prev_close or (valid_quotes_1y[-2][1] if len(valid_quotes_1y) >= 2 else (quotes_5m[0] if quotes_5m else last_price))
+    diff_1d = last_price - prev_1d
+    rate_1d = (diff_1d / prev_1d * 100) if prev_1d else 0.0
+    series_1d = quotes_5m if (quotes_5m and len(quotes_5m) >= 2) else [prev_1d, last_price]
+
+    def _get_slice(days: int) -> list[float]:
+        cutoff = (now - timedelta(days=days)).timestamp()
+        sub = [v[1] for v in valid_quotes_1y if v[0] >= cutoff]
+        if len(sub) < 2:
+            sub = [v[1] for v in valid_quotes_1y[-min(len(valid_quotes_1y), max(2, days // 2)):]]
+        return sub
+
+    # 1W: 1주일 전 대비 (60분봉 시리즈 적용)
+    if quotes_60m and len(quotes_60m) >= 2:
+        base_1w = quotes_60m[0]
+        diff_1w = last_price - base_1w
+        rate_1w = (diff_1w / base_1w * 100) if base_1w else 0.0
+        series_1w = quotes_60m
+    else:
+        sub_1w = _get_slice(7)
+        base_1w = sub_1w[0] if sub_1w else last_price
+        diff_1w = last_price - base_1w
+        rate_1w = (diff_1w / base_1w * 100) if base_1w else 0.0
+        series_1w = sub_1w
+
+    # 1M (30일)
+    sub_1m = _get_slice(30)
+    base_1m = sub_1m[0] if sub_1m else last_price
+    diff_1m = last_price - base_1m
+    rate_1m = (diff_1m / base_1m * 100) if base_1m else 0.0
+
+    # 3M (90일)
+    sub_3m = _get_slice(90)
+    base_3m = sub_3m[0] if sub_3m else last_price
+    diff_3m = last_price - base_3m
+    rate_3m = (diff_3m / base_3m * 100) if base_3m else 0.0
+
+    # YTD (연초부터)
+    sub_ytd = [v[1] for v in valid_quotes_1y if datetime.fromtimestamp(v[0]).year == cur_year]
+    if len(sub_ytd) < 2:
+        sub_ytd = _get_slice(60)
+    base_ytd = sub_ytd[0] if sub_ytd else last_price
+    diff_ytd = last_price - base_ytd
+    rate_ytd = (diff_ytd / base_ytd * 100) if base_ytd else 0.0
+
+    # 1Y (365일)
+    sub_1y = [v[1] for v in valid_quotes_1y]
+    base_1y = sub_1y[0] if sub_1y else last_price
+    diff_1y = last_price - base_1y
+    rate_1y = (diff_1y / base_1y * 100) if base_1y else 0.0
+
+    return {
+        "1D": {"change": round(diff_1d, 2), "change_rate": round(rate_1d, 2), "series": series_1d},
+        "1W": {"change": round(diff_1w, 2), "change_rate": round(rate_1w, 2), "series": series_1w},
+        "1M": {"change": round(diff_1m, 2), "change_rate": round(rate_1m, 2), "series": sub_1m},
+        "3M": {"change": round(diff_3m, 2), "change_rate": round(rate_3m, 2), "series": sub_3m},
+        "YTD": {"change": round(diff_ytd, 2), "change_rate": round(rate_ytd, 2), "series": sub_ytd},
+        "1Y": {"change": round(diff_1y, 2), "change_rate": round(rate_1y, 2), "series": sub_1y},
+    }
+
+
+async def get_web_market_overview() -> dict[str, Any]:
+    """
+    코스피, 코스닥, S&P 500, 나스닥 종합 4개 지수 및 USD/KRW 환율에 대해
+    1D(5분봉), 1W(60분봉), 1M/3M/YTD/1Y(일봉)를 비동기 병렬 조회하여 제공합니다.
     """
     indices = [
         {"symbol": "^KS11", "label": "코스피", "market": "KRX", "currency": "KRW"},
@@ -212,40 +305,50 @@ async def get_web_market_overview() -> list[dict[str, Any]]:
         {"symbol": "^GSPC", "label": "S&P 500", "market": "US", "currency": "USD"},
         {"symbol": "^IXIC", "label": "나스닥", "market": "US", "currency": "USD"},
     ]
+    symbols = [idx["symbol"] for idx in indices] + ["KRW=X"]
 
     async with httpx.AsyncClient() as client:
         tasks = []
-        for idx in indices:
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{idx['symbol']}?interval=1d&range=1mo"
-            tasks.append(client.get(url, headers=HEADERS, timeout=6.0))
+        for sym in symbols:
+            # 1) 당일 5분봉
+            tasks.append(client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=5m&range=1d", headers=HEADERS, timeout=6.0))
+            # 2) 1주 60분봉
+            tasks.append(client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=60m&range=5d", headers=HEADERS, timeout=6.0))
+            # 3) 1년 일봉
+            tasks.append(client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=1y", headers=HEADERS, timeout=6.0))
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
     overview = []
-    for idx, resp in zip(indices, responses):
+    for i, idx in enumerate(indices):
+        r_5m = responses[i * 3]
+        r_60m = responses[i * 3 + 1]
+        r_1y = responses[i * 3 + 2]
+
+        q_5m = _extract_quotes(r_5m)
+        q_60m = _extract_quotes(r_60m)
+
         price = 0.0
-        rate = 0.0
-        diff = 0.0
-        series: list[float] = []
-        if not isinstance(resp, Exception) and resp.status_code == 200:
+        prev_close = 0.0
+        valid_quotes_1y: list[tuple[float, float]] = []
+        if not isinstance(r_1y, Exception) and getattr(r_1y, "status_code", None) == 200:
             try:
-                res_data = resp.json().get("chart", {}).get("result", [{}])[0]
+                res_data = r_1y.json().get("chart", {}).get("result", [{}])[0]
                 meta = res_data.get("meta", {})
+                timestamps = res_data.get("timestamp", [])
                 raw_quotes = res_data.get("indicators", {}).get("quote", [{}])[0].get("close", [])
-                valid_quotes = [float(v) for v in raw_quotes if v is not None and float(v) > 0]
-                price = float(meta.get("regularMarketPrice") or (valid_quotes[-1] if valid_quotes else 0.0))
-
-                # 직전 거래일 종가 (previousClose 또는 최근 캔들[-2])
-                prev = float(meta.get("previousClose") or (valid_quotes[-2] if len(valid_quotes) >= 2 else price))
-                diff = price - prev
-                rate = ((diff) / prev * 100) if prev > 0 else 0.0
-
-                if valid_quotes:
-                    series = valid_quotes[-15:]  # 최근 15개 캔들
+                for t, q in zip(timestamps, raw_quotes):
+                    if q is not None and float(q) > 0:
+                        valid_quotes_1y.append((float(t), float(q)))
+                price = float(meta.get("regularMarketPrice") or (valid_quotes_1y[-1][1] if valid_quotes_1y else 0.0))
+                prev_close = float(meta.get("previousClose") or (valid_quotes_1y[-2][1] if len(valid_quotes_1y) >= 2 else price))
             except Exception:
                 pass
 
-        if not series and price > 0:
-            series = [price * 0.995, price]
+        if not price and q_5m:
+            price = q_5m[-1]
+
+        periods = _calculate_market_periods(valid_quotes_1y, prev_close, price, quotes_5m=q_5m, quotes_60m=q_60m)
+        stat_1d = periods.get("1D", {})
 
         overview.append({
             "symbol": idx["symbol"],
@@ -255,40 +358,53 @@ async def get_web_market_overview() -> list[dict[str, Any]]:
             "currency": idx["currency"],
             "price": price,
             "current_price": price,
-            "change": round(diff, 2),
-            "change_price": round(diff, 2),
-            "change_rate": round(rate, 2),
-            "series": series,
+            "change": stat_1d.get("change", 0.0),
+            "change_price": stat_1d.get("change", 0.0),
+            "change_rate": stat_1d.get("change_rate", 0.0),
+            "series": stat_1d.get("series", [price, price]),
+            "periods": periods,
         })
 
-    fx_rate = 1385.0
-    fx_change = 0.0
-    fx_rate_pct = 0.0
-    fx_series = [1385.0, 1385.0]
-    try:
-        async with httpx.AsyncClient() as client:
-            resp_fx = await client.get("https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?interval=1d&range=1mo", headers=HEADERS, timeout=6.0)
-            if resp_fx.status_code == 200:
-                res_data = resp_fx.json().get("chart", {}).get("result", [{}])[0]
-                meta = res_data.get("meta", {})
-                raw_quotes = res_data.get("indicators", {}).get("quote", [{}])[0].get("close", [])
-                valid_quotes = [float(v) for v in raw_quotes if v is not None and float(v) > 0]
-                fx_rate = float(meta.get("regularMarketPrice") or (valid_quotes[-1] if valid_quotes else 1385.0))
-                prev = float(meta.get("previousClose") or (valid_quotes[-2] if len(valid_quotes) >= 2 else fx_rate))
-                fx_change = fx_rate - prev
-                fx_rate_pct = ((fx_change) / prev * 100) if prev > 0 else 0.0
-                if valid_quotes:
-                    fx_series = valid_quotes[-15:]
-    except Exception:
-        pass
+    # USD/KRW 환율 처리 (마지막 심볼)
+    fx_idx = len(indices)
+    fx_5m = responses[fx_idx * 3]
+    fx_60m = responses[fx_idx * 3 + 1]
+    fx_1y = responses[fx_idx * 3 + 2]
+
+    fx_q_5m = _extract_quotes(fx_5m)
+    fx_q_60m = _extract_quotes(fx_60m)
+
+    fx_price = 1385.0
+    fx_prev = 1385.0
+    fx_valid_quotes_1y: list[tuple[float, float]] = []
+    if not isinstance(fx_1y, Exception) and getattr(fx_1y, "status_code", None) == 200:
+        try:
+            res_data = fx_1y.json().get("chart", {}).get("result", [{}])[0]
+            meta = res_data.get("meta", {})
+            timestamps = res_data.get("timestamp", [])
+            raw_quotes = res_data.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            for t, q in zip(timestamps, raw_quotes):
+                if q is not None and float(q) > 0:
+                    fx_valid_quotes_1y.append((float(t), float(q)))
+            fx_price = float(meta.get("regularMarketPrice") or (fx_valid_quotes_1y[-1][1] if fx_valid_quotes_1y else 1385.0))
+            fx_prev = float(meta.get("previousClose") or (fx_valid_quotes_1y[-2][1] if len(fx_valid_quotes_1y) >= 2 else fx_price))
+        except Exception:
+            pass
+
+    if not fx_price and fx_q_5m:
+        fx_price = fx_q_5m[-1]
+
+    fx_periods = _calculate_market_periods(fx_valid_quotes_1y, fx_prev, fx_price, quotes_5m=fx_q_5m, quotes_60m=fx_q_60m)
+    fx_stat_1d = fx_periods.get("1D", {})
 
     return {
         "markets": overview,
         "exchange_rate": {
-            "rate": fx_rate,
-            "change": round(fx_change, 2),
-            "change_rate": round(fx_rate_pct, 2),
-            "series": fx_series,
+            "rate": fx_price,
+            "change": fx_stat_1d.get("change", 0.0),
+            "change_rate": fx_stat_1d.get("change_rate", 0.0),
+            "series": fx_stat_1d.get("series", [fx_price, fx_price]),
+            "periods": fx_periods,
         }
     }
 
@@ -297,10 +413,10 @@ async def get_web_market_overview() -> list[dict[str, Any]]:
 # 5. 종목별 가격 & 거래량 인터랙티브 차트 데이터 조회
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def fetch_stock_chart_data(code: str, period: str = "1M") -> dict[str, Any]:
+async def fetch_stock_chart_data(code: str, period: str = "3M") -> dict[str, Any]:
     """
-    종목 코드와 기간(1W, 1M, 3M, YTD, 1Y)을 받아
-    일자별 가격(시/고/저/종가)과 거래량(volume) 리스트를 정확한 기간 크기로 반환합니다.
+    종목 코드와 기간(1D, 1W, 1M, 3M, YTD, 1Y)을 받아
+    1D(5분봉), 1W(60분봉), 1M/3M/YTD/1Y(일봉) 데이터를 정확한 기간 크기로 반환합니다.
     """
     clean_code = str(code).strip().upper()
     is_kr = len(clean_code) == 6 and any(ch.isdigit() for ch in clean_code)
@@ -311,55 +427,72 @@ async def fetch_stock_chart_data(code: str, period: str = "1M") -> dict[str, Any
     current_price = 0.0
 
     async with httpx.AsyncClient() as client:
-        if is_kr:
-            url = f"https://fchart.stock.naver.com/sise.nhn?symbol={clean_code}&timeframe=day&count=300&requestType=0"
+        # 1) 국내 주식 1D(5분봉) 또는 1W(60분봉)
+        if is_kr and period in ("1D", "1W"):
+            interval = "5m" if period == "1D" else "60m"
+            range_param = "1d" if period == "1D" else "5d"
+            tasks = [
+                client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_code}.KS?interval={interval}&range={range_param}", headers=HEADERS, timeout=5.0),
+                client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_code}.KQ?interval={interval}&range={range_param}", headers=HEADERS, timeout=5.0)
+            ]
+            resps = await asyncio.gather(*tasks, return_exceptions=True)
+            for r in resps:
+                if not isinstance(r, Exception) and getattr(r, "status_code", None) == 200:
+                    try:
+                        res = r.json().get("chart", {}).get("result", [{}])[0]
+                        meta = res.get("meta", {})
+                        stock_name = meta.get("shortName") or clean_code
+                        ts_list = res.get("timestamp", [])
+                        q = res.get("indicators", {}).get("quote", [{}])[0]
+                        opens = q.get("open", [])
+                        highs = q.get("high", [])
+                        lows = q.get("low", [])
+                        closes = q.get("close", [])
+                        volumes = q.get("volume", [])
+                        valid = []
+                        for i, ts in enumerate(ts_list):
+                            c_val = closes[i] if i < len(closes) else None
+                            if c_val is not None and float(c_val) > 0:
+                                dt = datetime.fromtimestamp(ts, timezone(timedelta(hours=9)))
+                                d_str = dt.strftime("%H:%M" if period == "1D" else "%m-%d %H:%M")
+                                valid.append({
+                                    "date": d_str,
+                                    "open": float(opens[i]) if i < len(opens) and opens[i] is not None else float(c_val),
+                                    "high": float(highs[i]) if i < len(highs) and highs[i] is not None else float(c_val),
+                                    "low": float(lows[i]) if i < len(lows) and lows[i] is not None else float(c_val),
+                                    "close": round(float(c_val), 2),
+                                    "volume": int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
+                                })
+                        if valid:
+                            candles = valid
+                            current_price = candles[-1]["close"]
+                            break
+                    except Exception:
+                        pass
+
+        # 2) 해외 주식 1D(5분봉) 또는 1W(60분봉)
+        elif not is_kr and period in ("1D", "1W"):
+            interval = "5m" if period == "1D" else "60m"
+            range_param = "1d" if period == "1D" else "5d"
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_code}?interval={interval}&range={range_param}"
             try:
-                resp = await client.get(url, headers=HEADERS, timeout=6.0)
-                if resp.status_code == 200:
-                    root = ET.fromstring(resp.text)
-                    items = root.findall(".//item")
-                    for it in items:
-                        raw = it.attrib.get("data", "")
-                        parts = raw.split("|")
-                        if len(parts) >= 6:
-                            d_str = parts[0]
-                            if len(d_str) == 8:
-                                d_str = f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"
-                            candles.append({
-                                "date": d_str,
-                                "open": float(parts[1]),
-                                "high": float(parts[2]),
-                                "low": float(parts[3]),
-                                "close": float(parts[4]),
-                                "volume": int(parts[5]),
-                            })
-                    if candles:
-                        current_price = candles[-1]["close"]
-            except Exception:
-                pass
-        else:
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_code}?interval=1d&range=1y"
-            try:
-                resp = await client.get(url, headers=HEADERS, timeout=7.0)
-                if resp.status_code == 200:
-                    res_json = resp.json()
-                    result = res_json.get("chart", {}).get("result", [{}])[0]
-                    meta = result.get("meta", {})
+                r = await client.get(url, headers=HEADERS, timeout=6.0)
+                if r.status_code == 200:
+                    res = r.json().get("chart", {}).get("result", [{}])[0]
+                    meta = res.get("meta", {})
                     stock_name = meta.get("shortName") or clean_code
-                    current_price = float(meta.get("regularMarketPrice") or 0.0)
-
-                    timestamps = result.get("timestamp", [])
-                    quote = result.get("indicators", {}).get("quote", [{}])[0]
-                    opens = quote.get("open", [])
-                    highs = quote.get("high", [])
-                    lows = quote.get("low", [])
-                    closes = quote.get("close", [])
-                    volumes = quote.get("volume", [])
-
-                    for i, ts in enumerate(timestamps):
+                    ts_list = res.get("timestamp", [])
+                    q = res.get("indicators", {}).get("quote", [{}])[0]
+                    opens = q.get("open", [])
+                    highs = q.get("high", [])
+                    lows = q.get("low", [])
+                    closes = q.get("close", [])
+                    volumes = q.get("volume", [])
+                    for i, ts in enumerate(ts_list):
                         c_val = closes[i] if i < len(closes) else None
                         if c_val is not None and float(c_val) > 0:
-                            d_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                            dt = datetime.fromtimestamp(ts, timezone(timedelta(hours=9)))
+                            d_str = dt.strftime("%H:%M" if period == "1D" else "%m-%d %H:%M")
                             candles.append({
                                 "date": d_str,
                                 "open": float(opens[i]) if i < len(opens) and opens[i] is not None else float(c_val),
@@ -368,25 +501,88 @@ async def fetch_stock_chart_data(code: str, period: str = "1M") -> dict[str, Any
                                 "close": round(float(c_val), 2),
                                 "volume": int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
                             })
+                    if candles:
+                        current_price = candles[-1]["close"]
             except Exception:
                 pass
 
-    # ── 기간(Period)별 정확한 캔들 슬라이싱 ──
-    sliced_candles = candles
-    if candles:
-        if period == "1W":
-            sliced_candles = candles[-5:] if len(candles) >= 5 else candles
-        elif period == "1M":
-            sliced_candles = candles[-22:] if len(candles) >= 22 else candles
-        elif period == "3M":
-            sliced_candles = candles[-65:] if len(candles) >= 65 else candles
-        elif period == "YTD":
-            now_year = datetime.now().year
-            ytd_str = f"{now_year}-01-01"
-            ytd_list = [c for c in candles if c.get("date", "") >= ytd_str]
-            sliced_candles = ytd_list if ytd_list else candles[-60:]
-        elif period == "1Y":
-            sliced_candles = candles[-250:] if len(candles) >= 250 else candles
+        # 3) 1M, 3M, YTD, 1Y 또는 1D/1W fallback (일봉 데이터)
+        if not candles:
+            if is_kr:
+                url = f"https://fchart.stock.naver.com/sise.nhn?symbol={clean_code}&timeframe=day&count=300&requestType=0"
+                try:
+                    resp = await client.get(url, headers=HEADERS, timeout=6.0)
+                    if resp.status_code == 200:
+                        root = ET.fromstring(resp.text)
+                        items = root.findall(".//item")
+                        for it in items:
+                            raw = it.attrib.get("data", "")
+                            parts = raw.split("|")
+                            if len(parts) >= 6:
+                                d_str = parts[0]
+                                if len(d_str) == 8:
+                                    d_str = f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"
+                                candles.append({
+                                    "date": d_str,
+                                    "open": float(parts[1]),
+                                    "high": float(parts[2]),
+                                    "low": float(parts[3]),
+                                    "close": float(parts[4]),
+                                    "volume": int(parts[5]),
+                                })
+                        if candles:
+                            current_price = candles[-1]["close"]
+                except Exception:
+                    pass
+            else:
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_code}?interval=1d&range=1y"
+                try:
+                    resp = await client.get(url, headers=HEADERS, timeout=7.0)
+                    if resp.status_code == 200:
+                        res_json = resp.json()
+                        result = res_json.get("chart", {}).get("result", [{}])[0]
+                        meta = result.get("meta", {})
+                        stock_name = meta.get("shortName") or clean_code
+                        current_price = float(meta.get("regularMarketPrice") or 0.0)
+
+                        timestamps = result.get("timestamp", [])
+                        quote = result.get("indicators", {}).get("quote", [{}])[0]
+                        opens = quote.get("open", [])
+                        highs = quote.get("high", [])
+                        lows = quote.get("low", [])
+                        closes = quote.get("close", [])
+                        volumes = quote.get("volume", [])
+
+                        for i, ts in enumerate(timestamps):
+                            c_val = closes[i] if i < len(closes) else None
+                            if c_val is not None and float(c_val) > 0:
+                                d_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                                candles.append({
+                                    "date": d_str,
+                                    "open": float(opens[i]) if i < len(opens) and opens[i] is not None else float(c_val),
+                                    "high": float(highs[i]) if i < len(highs) and highs[i] is not None else float(c_val),
+                                    "low": float(lows[i]) if i < len(lows) and lows[i] is not None else float(c_val),
+                                    "close": round(float(c_val), 2),
+                                    "volume": int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
+                                })
+                except Exception:
+                    pass
+
+            # 일봉 캔들인 경우 기간별 슬라이싱
+            if candles and period not in ("1D", "1W"):
+                if period == "1M":
+                    candles = candles[-22:] if len(candles) >= 22 else candles
+                elif period == "3M":
+                    candles = candles[-65:] if len(candles) >= 65 else candles
+                elif period == "YTD":
+                    now_year = datetime.now().year
+                    ytd_str = f"{now_year}-01-01"
+                    ytd_list = [c for c in candles if c.get("date", "") >= ytd_str]
+                    candles = ytd_list if ytd_list else candles[-60:]
+                elif period == "1Y":
+                    candles = candles[-250:] if len(candles) >= 250 else candles
+            elif candles and period in ("1D", "1W"):
+                candles = candles[-5:] if period == "1W" else candles[-2:]
 
     return {
         "code": clean_code,
@@ -394,7 +590,7 @@ async def fetch_stock_chart_data(code: str, period: str = "1M") -> dict[str, Any
         "currency": currency,
         "period": period,
         "current_price": current_price,
-        "candles": sliced_candles,
+        "candles": candles,
     }
 
 
@@ -517,41 +713,71 @@ async def fetch_us_dividend(client: httpx.AsyncClient, symbol: str) -> dict[str,
 
 
 async def fetch_kr_dividend(client: httpx.AsyncClient, code: str, current_price: float) -> dict[str, Any]:
-    """국내 주식/ETF의 배당수익률 및 배당월 수집"""
+    """국내 주식/ETF의 배당수익률 및 배당월 수집 (일반 주식 + 국내 상장 ETF TTM 배당수익률 지원)"""
     clean_code = str(code).strip().zfill(6)
-    url = f"https://finance.naver.com/item/main.naver?code={clean_code}"
+    dvd_yield = 0.0
+    dvd_amt = 0.0
+    is_etf = False
+    stock_name = ""
+
+    # 1. 네이버 모바일 증권 API (ETF 배당수익률 TTM 수집)
     try:
-        resp = await client.get(url, headers=HEADERS, timeout=6.0)
-        if resp.status_code != 200:
-            return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
-        import re
-        html = resp.text
-        dvd_yield_match = re.findall(r"배당수익률.*?<em[^>]*>([^<]+)</em>", html, re.DOTALL)
-        dvd_yield = _to_float(dvd_yield_match[0]) if dvd_yield_match else 0.0
-
-        dvd_amt_match = re.findall(r"주당배당금.*?<td[^>]*>([^<]+)</td>", html, re.DOTALL)
-        dvd_amt = _to_float(dvd_amt_match[0]) if dvd_amt_match else 0.0
-
-        if dvd_amt == 0.0 and dvd_yield > 0.0 and current_price > 0:
-            dvd_amt = round(current_price * (dvd_yield / 100), 0)
-
-        # 주요 분기배당 및 월배당 ETF 판별
-        quarterly_codes = {"005930", "005935", "005380", "005385", "005387", "005490", "055550", "105560", "086790"}
-        if clean_code in quarterly_codes:
-            payout_months = [4, 5, 8, 11] # 국내 분기배당 실제 지급월 (4월, 5월, 8월, 11월)
-        elif dvd_yield > 0:
-            payout_months = [4] # 12월 결산법인 일반 배당 지급월 (4월)
-        else:
-            payout_months = []
-
-        return {
-            "annual_div": dvd_amt,
-            "payout_months": payout_months,
-            "div_yield": dvd_yield,
-            "div_count": len(payout_months),
-        }
+        m_url = f"https://m.stock.naver.com/api/stock/{clean_code}/integration"
+        m_resp = await client.get(m_url, headers=HEADERS, timeout=5.0)
+        if m_resp.status_code == 200:
+            m_data = m_resp.json()
+            stock_name = m_data.get("stockName", "")
+            if m_data.get("stockEndType") == "etf":
+                is_etf = True
+                etf_info = m_data.get("etfKeyIndicator") or {}
+                etf_yield_raw = etf_info.get("dividendYieldTtm")
+                if etf_yield_raw is not None:
+                    dvd_yield = _to_float(etf_yield_raw)
     except Exception:
-        return {"annual_div": 0.0, "payout_months": [], "div_yield": 0.0, "div_count": 0}
+        pass
+
+    # 2. 일반 주식이거나 ETF에서 배당수익률을 못 찾은 경우 PC 웹(main.naver) 파싱
+    if dvd_yield == 0.0:
+        url = f"https://finance.naver.com/item/main.naver?code={clean_code}"
+        try:
+            resp = await client.get(url, headers=HEADERS, timeout=6.0)
+            if resp.status_code == 200:
+                import re
+                html = resp.text
+                dvd_yield_match = re.findall(r"배당수익률.*?<em[^>]*>([^<]+)</em>", html, re.DOTALL)
+                dvd_yield = _to_float(dvd_yield_match[0]) if dvd_yield_match else 0.0
+
+                dvd_amt_match = re.findall(r"주당배당금.*?<td[^>]*>([^<]+)</td>", html, re.DOTALL)
+                dvd_amt = _to_float(dvd_amt_match[0]) if dvd_amt_match else 0.0
+        except Exception:
+            pass
+
+    if dvd_amt == 0.0 and dvd_yield > 0.0 and current_price > 0:
+        dvd_amt = round(current_price * (dvd_yield / 100), 0)
+
+    # 주요 분기배당 및 ETF 분배금 지급월 판별
+    quarterly_codes = {"005930", "005935", "005380", "005385", "005387", "005490", "055550", "105560", "086790"}
+    if clean_code in quarterly_codes:
+        payout_months = [4, 5, 8, 11]  # 국내 분기배당 실제 지급월 (4월, 5월, 8월, 11월)
+    elif is_etf and dvd_yield > 0:
+        # 하나자산운용 1Q ETF (3, 6, 9, 12월 분기분배 추구)
+        if "1q" in stock_name.lower():
+            payout_months = [3, 6, 9, 12]
+        elif any(w in stock_name for w in ["월배당", "커버드콜", "7%"]):
+            payout_months = list(range(1, 13))
+        else:
+            payout_months = [1, 4, 7, 10]  # 국내 ETF 일반 분기분배월 (1, 4, 7, 10월)
+    elif dvd_yield > 0:
+        payout_months = [4]  # 12월 결산법인 일반 배당 지급월 (4월)
+    else:
+        payout_months = []
+
+    return {
+        "annual_div": dvd_amt,
+        "payout_months": payout_months,
+        "div_yield": dvd_yield,
+        "div_count": len(payout_months),
+    }
 
 
 async def get_web_dividend_summary(holdings: list[dict[str, Any]], fx_rate: float = 1385.0) -> dict[str, Any]:
@@ -581,10 +807,12 @@ async def get_web_dividend_summary(holdings: list[dict[str, Any]], fx_rate: floa
 
         div_tasks = {}
         for code, (currency, curr_p) in unique_stocks.items():
-            if currency == "USD" or not code.isdigit():
-                div_tasks[code] = fetch_us_dividend(client, code)
-            else:
+            # 국내 종목 판별: 통화가 KRW이거나 6자리 단축코드(국내 신규 ETF 코드 0069M0, 0015B0, 0026S0 등 포함)
+            is_kr = (currency == "KRW") or (len(code) == 6 and not code.isalpha())
+            if is_kr:
                 div_tasks[code] = fetch_kr_dividend(client, code, curr_p)
+            else:
+                div_tasks[code] = fetch_us_dividend(client, code)
 
         results = await asyncio.gather(*div_tasks.values(), return_exceptions=True)
         div_map = {}

@@ -264,8 +264,13 @@ async def get_dividends(owner: str = "모두") -> dict:
     """Return dividend summary and 12-month schedule for holdings."""
     full = get_dashboard()
     holdings = full.get("holdings", [])
+    accounts = full.get("accounts", [])
     if owner != "모두":
-        holdings = [h for h in holdings if h.get("owner", "모두") == owner]
+        acct_map = {a["id"]: a.get("owner", "모두") for a in accounts}
+        holdings = [
+            h for h in holdings 
+            if (h.get("owner") == owner) or (acct_map.get(h.get("account_id")) == owner)
+        ]
     fx_rate = full.get("fx_rates", {}).get("USD", 1385.0)
     summary = await get_web_dividend_summary(holdings, fx_rate=fx_rate)
     return summary
@@ -875,9 +880,32 @@ async def sync_kb() -> dict:
     except KBOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
     data = read_portfolio()
-    existing = next((a for a in data["accounts"] if a.get("broker") == "KB증권" and a.get("source") == "kb_api"), None)
-    account_id = existing["id"] if existing else get_or_add_account(data, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api")
-    holdings = [normalize_holding(record, account_id, "KB증권", "KB OpenAPI 동기화 계좌", "kb_api") for record in records]
+
+    # 1. 고유 키(kb_primary) 또는 기존 KB 동기화 계좌 찾기
+    existing = next((a for a in data["accounts"] if a.get("broker") == "KB증권" and (a.get("account_key") == "kb_primary" or a.get("source") == "kb_api")), None)
+    if not existing:
+        existing = next((a for a in data["accounts"] if a.get("broker") == "KB증권" and ("KB" in a.get("name", "") or a.get("name") == "KB OpenAPI 동기화 계좌")), None)
+
+    if existing:
+        account_id = existing["id"]
+        account_name = existing["name"]  # 사용자가 변경한 이름을 100% 보존!
+        existing["source"] = "kb_api"
+        existing["account_key"] = "kb_primary"
+    else:
+        # 삭제되었거나 신규일 때 자동 복구 생성
+        account_id = str(uuid.uuid4())
+        account_name = "KB OpenAPI 동기화 계좌"
+        data["accounts"].append({
+            "id": account_id,
+            "broker": "KB증권",
+            "name": account_name,
+            "family_group": "All",
+            "source": "kb_api",
+            "account_key": "kb_primary",
+            "owner": "아빠",
+        })
+
+    holdings = [normalize_holding(record, account_id, "KB증권", account_name, "kb_api") for record in records]
     prices, warnings = await client.refresh_prices(holdings)
     for holding in holdings:
         price = prices.get(holding["id"])
@@ -901,13 +929,60 @@ async def sync_toss() -> dict:
     data = read_portfolio()
     cash = data["settings"].setdefault("toss_cash", {})
     cash_balances = data["settings"].setdefault("cash_balances", {})
+
+    def resolve_toss_account(data_accounts, seq, acct_no, default_name):
+        seq_str = str(seq) if seq is not None else ""
+        suffix = str(acct_no)[-4:] if acct_no else ""
+        # 1) account_key 또는 seq_str 일치
+        for a in data_accounts:
+            if a.get("broker") == "토스증권" and (
+                (seq_str and a.get("account_key") == seq_str) or 
+                (suffix and a.get("account_no") == suffix)
+            ):
+                return a
+        # 2) 이름에 suffix나 토스증권이 매칭되는 계좌
+        for a in data_accounts:
+            if a.get("broker") == "토스증권" and (
+                (suffix and suffix in a.get("name", "")) or 
+                a.get("name") == default_name or
+                (a.get("source") == "toss_api")
+            ):
+                return a
+        return None
+
+    toss_map = {}
     for account in toss_accounts:
         seq = account.get("accountSeq")
+        seq_str = str(seq) if seq is not None else ""
         account_no = str(account.get("accountNo", ""))
-        account_name = f"토스증권 계좌 {account_no[-4:]}" if account_no else f"토스증권 계좌 {seq}"
-        existing = next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api" and a.get("name") == account_name), None)
-        existing = existing or next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api"), None)
-        account_id = existing["id"] if existing else get_or_add_account(data, "토스증권", account_name, "toss_api")
+        suffix = account_no[-4:] if account_no else ""
+        account_name_default = f"토스증권 계좌 {suffix}" if suffix else (f"토스증권 계좌 {seq}" if seq is not None else "토스증권")
+        
+        existing = resolve_toss_account(data["accounts"], seq, account_no, account_name_default)
+        if existing:
+            account_id = existing["id"]
+            account_name = existing["name"]  # 사용자가 변경한 이름을 100% 보존!
+            existing["source"] = "toss_api"
+            if seq_str:
+                existing["account_key"] = seq_str
+            if suffix:
+                existing["account_no"] = suffix
+        else:
+            # 삭제되었거나 신규일 때 자동 복구 생성
+            account_id = str(uuid.uuid4())
+            account_name = account_name_default
+            data["accounts"].append({
+                "id": account_id,
+                "broker": "토스증권",
+                "name": account_name,
+                "family_group": "All",
+                "source": "toss_api",
+                "account_key": seq_str,
+                "account_no": suffix,
+                "owner": "아빠",
+            })
+
+        toss_map[seq_str] = (account_id, account_name)
         if seq is not None:
             try:
                 bp = await client.get_buying_power(int(seq))
@@ -915,14 +990,24 @@ async def sync_toss() -> dict:
                 cash_balances[account_id] = bp
             except TossOpenAPIError:
                 pass
+
     data["settings"]["toss_cash"] = cash
     data["settings"]["cash_balances"] = cash_balances
     holdings = []
     for record in records:
-        existing = next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api" and a.get("name") == record["account_name"]), None)
-        existing = existing or next((a for a in data["accounts"] if a.get("broker") == "토스증권" and a.get("source") == "toss_api"), None)
-        account_id = existing["id"] if existing else get_or_add_account(data, "토스증권", record["account_name"], "toss_api")
-        holdings.append(normalize_holding(record, account_id, "토스증권", record["account_name"], "toss_api"))
+        acct_key = str(record.get("account_key", ""))
+        if acct_key in toss_map:
+            account_id, account_name = toss_map[acct_key]
+        else:
+            existing = resolve_toss_account(data["accounts"], None, None, record.get("account_name", "토스증권"))
+            if existing:
+                account_id = existing["id"]
+                account_name = existing["name"]
+            else:
+                account_id = get_or_add_account(data, "토스증권", record["account_name"], "toss_api")
+                account_name = record["account_name"]
+        holdings.append(normalize_holding(record, account_id, "토스증권", account_name, "toss_api"))
+
     upsert_holdings(data, holdings, replace_source="toss_api")
     write_portfolio(data)
     return {"message": f"토스증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
@@ -940,21 +1025,66 @@ async def sync_namoo() -> dict:
         raise HTTPException(429 if "IGW42903" in str(exc) else 400, detail) from exc
     data = read_portfolio()
     cash_balances = data["settings"].setdefault("cash_balances", {})
+
+    def resolve_namoo_account(data_accounts, acct_no, default_name):
+        suffix = str(acct_no)[-4:] if acct_no else ""
+        # 1) account_key 또는 account_no 고유 식별자 우선 일치
+        for a in data_accounts:
+            if a.get("broker") == "NH투자증권(나무)" and (a.get("account_key") == suffix or a.get("account_no") == str(acct_no)):
+                return a
+        # 2) 계좌 이름에 suffix(예: 3861)가 포함되어 있거나 기존 기본 이름과 일치하는 계좌
+        if suffix:
+            for a in data_accounts:
+                if a.get("broker") == "NH투자증권(나무)" and (suffix in a.get("name", "") or a.get("name") == default_name):
+                    return a
+        return None
+
+    account_map = {}  # acct_no -> (account_id, account_name)
     for account in client.last_accounts:
         account_no = str(account.get("acct_no", ""))
-        account_name = client._account_name(account)
+        default_name = client._account_name(account)
+        suffix = account_no[-4:] if account_no else ""
         if account_no:
-            existing = next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == account_name), None)
-            existing = existing or next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api"), None)
-            account_id = existing["id"] if existing else get_or_add_account(data, "NH투자증권(나무)", account_name, "nhplug_api")
+            existing = resolve_namoo_account(data["accounts"], account_no, default_name)
+            if existing:
+                account_id = existing["id"]
+                account_name = existing["name"]  # 사용자가 변경한 이름을 100% 보존!
+                existing["source"] = "nhplug_api"
+                existing["account_key"] = suffix
+                existing["account_no"] = account_no
+            else:
+                # 삭제되었거나 신규일 때 자동 복구 생성
+                account_id = str(uuid.uuid4())
+                account_name = default_name
+                data["accounts"].append({
+                    "id": account_id,
+                    "broker": "NH투자증권(나무)",
+                    "name": account_name,
+                    "family_group": "All",
+                    "source": "nhplug_api",
+                    "account_key": suffix,
+                    "account_no": account_no,
+                    "owner": "모두",
+                })
+            account_map[account_no] = (account_id, account_name)
             if account_no in client.account_cash:
                 cash_balances[account_id] = client.account_cash[account_no]
+
     holdings = []
     for record in records:
-        existing = next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api" and a.get("name") == record["account_name"]), None)
-        existing = existing or next((a for a in data["accounts"] if a.get("broker") == "NH투자증권(나무)" and a.get("source") == "nhplug_api"), None)
-        account_id = existing["id"] if existing else get_or_add_account(data, "NH투자증권(나무)", record["account_name"], "nhplug_api")
-        holdings.append(normalize_holding(record, account_id, "NH투자증권(나무)", record["account_name"], "nhplug_api"))
+        acct_key = str(record.get("account_key", ""))
+        if acct_key in account_map:
+            account_id, account_name = account_map[acct_key]
+        else:
+            existing = resolve_namoo_account(data["accounts"], acct_key, record.get("account_name", "나무증권 계좌"))
+            if existing:
+                account_id = existing["id"]
+                account_name = existing["name"]
+            else:
+                account_id = get_or_add_account(data, "NH투자증권(나무)", record.get("account_name", "나무증권 계좌"), "nhplug_api")
+                account_name = record.get("account_name", "나무증권 계좌")
+        holdings.append(normalize_holding(record, account_id, "NH투자증권(나무)", account_name, "nhplug_api"))
+
     upsert_holdings(data, holdings, replace_source="nhplug_api")
     data["settings"]["cash_balances"] = cash_balances
     write_portfolio(data)

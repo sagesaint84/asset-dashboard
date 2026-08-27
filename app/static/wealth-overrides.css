@@ -787,69 +787,56 @@
   outline: none;
 }
 
-/* ── 탑바 가족 탭 반응형 레이아웃 ───────────────────────────────────────── */
-.topbar-brand-wrap {
+/* ── 주요지수 & 핵심요약 가족 탭 / 기간 탭 레이아웃 ──────────────────────── */
+.market-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
-  flex: 1 1 auto;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.topbar-family-tabs {
-  display: flex;
-  gap: 6px;
+.market-head #marketPeriodTabs,
+.summary-panel .topbar-family-tabs {
+  display: inline-flex;
+  gap: 5px;
   align-items: center;
-  margin-left: auto; /* 기본: 우측 정렬 */
+  margin-left: 6px;
 }
 
 .topbar-family-tabs .family-tab {
-  padding: 6px 14px;
-  font-size: 13px;
+  padding: 5px 12px;
+  font-size: 12px;
   font-weight: 600;
   border-radius: 7px;
   text-align: center;
 }
 
-/* 태블릿 및 넓은 모바일 (가로 화면, 601px ~ 1080px) */
-@media (min-width: 601px) and (max-width: 1080px) {
-  .topbar-brand-wrap {
-    width: 100%;
-    justify-content: space-between;
-  }
-  .topbar-family-tabs {
-    margin-left: auto;
-    justify-content: flex-end;
-  }
-  .topbar-family-tabs .family-tab {
-    padding: 6px 14px;
-    font-size: 13px;
-  }
-}
-
-/* 모바일 좁은 화면 (세로 화면, 600px 이하) */
+/* 모바일 좁은 화면 (600px 이하) 대응 */
 @media (max-width: 600px) {
-  .topbar-brand-wrap {
-    width: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
+  .market-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
-  .topbar-family-tabs {
-    width: 100%;
+  .market-head #marketPeriodTabs,
+  .summary-panel .topbar-family-tabs {
     margin-left: 0;
-    margin-top: 4px;
+    width: 100%;
     display: flex;
-    gap: 6px;
     justify-content: stretch;
   }
-  .topbar-family-tabs .family-tab {
+  .summary-panel .topbar-family-tabs .family-tab {
     flex: 1 1 0;
     min-width: 0;
-    padding: 8px 4px;
-    font-size: 13px;
+    padding: 7px 4px;
+    font-size: 12px;
     text-align: center;
+  }
+  .market-head .toolbar {
+    margin-left: 0 !important;
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
@@ -862,6 +849,19 @@
   background: var(--color-danger, #e53e3e);
   color: #fff;
   border-color: var(--color-danger, #e53e3e);
+}
+
+/* ── 컴팩트 액션 버튼 – 글자 크기 축소 및 단정한 패딩 (11px 통일) ───────────── */
+.button.compact,
+.toolbar .button,
+.panel-head .button.compact,
+.top-actions .button.compact {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 5px 10px !important;
+  border-radius: 7px !important;
+  line-height: 1.4 !important;
+  white-space: nowrap;
 }
 
 /* =========================================================================
@@ -1111,7 +1111,32 @@
   filter: brightness(1.25) drop-shadow(0 4px 12px rgba(142, 112, 250, 0.5));
 }
 
-/* 9. 계좌 통합 현황 (증권사 그룹 간격 & 세부계좌 들여쓰기) */
+/* 9. 계좌 통합 현황 (스크롤 & 증권사 그룹 간격 & 세부계좌 들여쓰기) */
+#accountList.account-list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 6px;
+  margin-top: 14px;
+}
+
+#accountList.account-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+#accountList.account-list::-webkit-scrollbar-thumb {
+  background: rgba(142, 112, 250, 0.35);
+  border-radius: 4px;
+}
+
+#accountList.account-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 112, 250, 0.65);
+}
+
+#accountList.account-list::-webkit-scrollbar-track {
+  background: rgba(13, 21, 39, 0.5);
+  border-radius: 4px;
+}
+
 .broker-group {
   margin-bottom: 20px;
   padding: 14px 16px;
@@ -1612,9 +1637,22 @@ dialog.dialog .dialog-actions {
 .panel.is-collapsed .heatmap-period-tabs,
 .panel.is-collapsed .heatmap-selects-wrap,
 .panel.is-collapsed .toolbar,
-.panel.is-collapsed .family-tabs {
-  opacity: 0.35;
-  pointer-events: none;
+.panel.is-collapsed .family-tabs,
+.panel.is-collapsed .dividend-head select,
+.panel.is-collapsed #dividendYearSelect,
+.panel.is-collapsed #pnlYearSelect,
+.panel.is-collapsed #dividendModeTabs,
+.panel.is-collapsed #pnlTradeTypeTabs,
+.panel.is-collapsed .dividend-head > div:not(.dividend-title-wrap) {
+  opacity: 0.28 !important;
+  pointer-events: none !important;
+  filter: grayscale(0.9) !important;
+  cursor: not-allowed !important;
+}
+
+.panel.is-collapsed select {
+  pointer-events: none !important;
+  user-select: none !important;
 }
 
 /* ── 화면 테마 설정 (Theme Switcher) ── */
@@ -2100,6 +2138,23 @@ dialog.dialog .dialog-actions {
 
 [data-theme="white"] .empty strong {
   color: #334155 !important;
+}
+
+[data-theme="white"] #accountList.account-list::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.3) !important;
+}
+[data-theme="white"] #accountList.account-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.6) !important;
+}
+[data-theme="white"] #accountList.account-list::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, 0.5) !important;
+}
+
+[data-theme="oled"] #accountList.account-list::-webkit-scrollbar-thumb {
+  background: rgba(142, 112, 250, 0.35) !important;
+}
+[data-theme="oled"] #accountList.account-list::-webkit-scrollbar-track {
+  background: #070709 !important;
 }
 
 [data-theme="white"] .empty p {
