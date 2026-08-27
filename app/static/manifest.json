@@ -1,12 +1,10 @@
 {
-  "id": "/",
   "name": "Wealth 자산 대시보드",
   "short_name": "Wealth",
   "description": "모든 증권사의 투자자산을 통합해 보는 개인 대시보드",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0b1120",
   "theme_color": "#0b1120",
   "icons": [

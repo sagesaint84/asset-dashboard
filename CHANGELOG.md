@@ -1,3 +1,8 @@
+v3.3.7
+
+(fix) PWA 매니페스트 시작 경로(/dashboard) 및 Standalone 설정 안정화 원복
+(fix) 오라클/사설 환경에서 WebAPK 민팅 오류 방지 및 전체화면(Standalone) 바로가기 호환성 최적화
+
 v3.3.6
 
 (fix) PWA WebAPK 독립 앱 설치 시 전체화면(Standalone) 미적용 및 브라우저 탭 실행 오류 수정
