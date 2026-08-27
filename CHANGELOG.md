@@ -1,3 +1,10 @@
+v3.3.6
+
+(fix) PWA WebAPK 독립 앱 설치 시 전체화면(Standalone) 미적용 및 브라우저 탭 실행 오류 수정
+(feat) 백엔드 인증 미들웨어 내 /manifest.json 및 /sw.js 루트 공개 경로(PUBLIC_PATHS) 등록
+(feat) /sw.js 루트 스코프 서빙 및 Service-Worker-Allowed 헤더 지원
+(design) 안드로이드 크롬 전용 전체화면 메타 태그(mobile-web-app-capable) 및 display_override 규격 추가
+
 v3.3.5
 
 (fix) PWA 모바일 기기 화면 회전 시 스마트폰 시스템 설정 연동 (세로 고정 시 강제 가로 회전 방지)

@@ -2981,7 +2981,7 @@ document.getElementById('importBackupFile')?.addEventListener('change', async (e
 // PWA 서비스 워커 등록
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/static/sw.js").catch(() => {});
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
   });
 }
 

@@ -64,6 +64,14 @@ def load_env_file() -> None:
 load_env_file()
 app = FastAPI(title="내 자산 대시보드", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.get("/sw.js")
+async def service_worker_file():
+    return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
+
+@app.get("/manifest.json")
+async def manifest_file_root():
+    return FileResponse(STATIC_DIR / "manifest.json", media_type="application/manifest+json")
 @app.on_event("startup")
 async def ensure_data_dir():
     data_dir = ROOT_DIR / "data"
@@ -94,7 +102,7 @@ COOKIE_NAME = "dashboard_session_v2"
 _serializer = URLSafeTimedSerializer(SECRET_KEY) if SECRET_KEY else None
 AUTH_CONFIGURED = bool(AUTH_USERNAME and AUTH_PASSWORD and SECRET_KEY)
 
-PUBLIC_PATHS = {"/login", "/api/export"}
+PUBLIC_PATHS = {"/login", "/api/export", "/sw.js", "/manifest.json"}
 
 
 LOGIN_PAGE_HTML = """<!DOCTYPE html>
@@ -222,7 +230,7 @@ class HoldingCreate(BaseModel):
 
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
-    return FileResponse(ROOT_DIR / "index.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/dashboard", include_in_schema=False)
