@@ -210,7 +210,7 @@ async def logout() -> RedirectResponse:
 class HoldingCreate(BaseModel):
     broker: str = Field(min_length=1, max_length=60)
     account_name: str = Field(min_length=1, max_length=80)
-    code: str = Field(min_length=1, max_length=20)
+    code: str = Field(default="", max_length=20)
     name: str = Field(min_length=1, max_length=80)
     quantity: float = Field(gt=0)
     avg_price: float = Field(ge=0)
@@ -1143,6 +1143,12 @@ async def refresh_prices() -> dict:
 @app.get("/api/stock-chart/{code}")
 async def get_stock_chart(code: str, period: str = "1M") -> dict:
     return await fetch_stock_chart_data(code, period)
+
+
+@app.get("/api/stock-search")
+async def stock_search(q: str = "") -> dict:
+    from app.services.stock_master import search_stock_by_name
+    return search_stock_by_name(q)
 
 
 @app.post("/api/sync/all")

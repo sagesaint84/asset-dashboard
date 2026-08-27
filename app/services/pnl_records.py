@@ -73,11 +73,15 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
 
     is_ipo = bool(payload.get("is_ipo", False))
 
+    raw_code = str(payload.get("code", "")).strip()
+    raw_name = str(payload.get("name", "")).strip()
+    code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
+
     record = {
         "id": str(uuid.uuid4()),
         "date": date_val,
-        "code": str(payload.get("code", "")).strip(),
-        "name": str(payload.get("name", "")).strip(),
+        "code": code,
+        "name": name,
         "currency": currency,
         "pnl": pnl,
         "fx_rate": fx_rate,
@@ -115,9 +119,13 @@ def update_pnl_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any]
     if pnl_krw == 0.0 and (pnl != 0.0 or fx_pnl_krw != 0.0):
         pnl_krw = round(pnl * fx_rate + fx_pnl_krw, 0) if currency == "USD" else round(pnl, 0)
 
+    raw_code = str(payload.get("code", target.get("code", ""))).strip()
+    raw_name = str(payload.get("name", target.get("name", ""))).strip()
+    code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
+
     target["date"] = str(payload.get("date", target.get("date")))
-    target["code"] = str(payload.get("code", target.get("code"))).strip()
-    target["name"] = str(payload.get("name", target.get("name"))).strip()
+    target["code"] = code
+    target["name"] = name
     target["currency"] = currency
     target["pnl"] = pnl
     target["fx_rate"] = fx_rate

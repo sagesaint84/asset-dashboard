@@ -104,6 +104,19 @@
   flex-wrap: wrap;
 }
 
+.summary-row-val .val-line.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.summary-row-val .val-line.stacked .sub-rate {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .summary-row-val strong {
   font-size: 15px;
   font-weight: 700;

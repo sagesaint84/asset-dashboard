@@ -1624,6 +1624,9 @@ function openHoldingDialog(record = null) {
     acctDatalist.innerHTML = uniqueNames.map(name => `<option value="${html(name)}"></option>`).join('');
   }
 
+  populateStockDatalists();
+  attachStockAutoFill("holdingForm");
+
   form.broker.value = record?.broker || "기타 증권사";
   form.account_name.value = record?.account_name || "내 주식 계좌";
   form.code.value = record?.code || "";
@@ -2397,6 +2400,38 @@ $("#holdingAccountSelect")?.addEventListener("change", (e) => {
   }
 });
 
+// 실현손익 추가/수정 팝업 내 등록된 계좌 선택 시 자동 채움
+$("#pnlAccountSelect")?.addEventListener("change", (e) => {
+  const sel = e.target;
+  const form = $("#pnlRecordForm");
+  if (!form || !sel) return;
+  const opt = sel.selectedOptions[0];
+  if (opt && opt.value) {
+    const brokerInput = form.querySelector("[name='broker']");
+    const accInput = form.querySelector("[name='account_name']");
+    const ownerSelect = form.querySelector("[name='owner']");
+    if (opt.dataset.broker && brokerInput) brokerInput.value = opt.dataset.broker;
+    if (opt.dataset.name && accInput) accInput.value = opt.dataset.name;
+    if (opt.dataset.owner && ownerSelect) ownerSelect.value = opt.dataset.owner;
+  }
+});
+
+// 배당금 추가/수정 팝업 내 등록된 계좌 선택 시 자동 채움
+$("#dividendAccountSelect")?.addEventListener("change", (e) => {
+  const sel = e.target;
+  const form = $("#dividendRecordForm");
+  if (!form || !sel) return;
+  const opt = sel.selectedOptions[0];
+  if (opt && opt.value) {
+    const brokerInput = form.querySelector("[name='broker']");
+    const accInput = form.querySelector("[name='account_name']");
+    const ownerSelect = form.querySelector("[name='owner']");
+    if (opt.dataset.broker && brokerInput) brokerInput.value = opt.dataset.broker;
+    if (opt.dataset.name && accInput) accInput.value = opt.dataset.name;
+    if (opt.dataset.owner && ownerSelect) ownerSelect.value = opt.dataset.owner;
+  }
+});
+
 // 11. 폼 서브밋 핸들러들
 $("#holdingForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2404,6 +2439,22 @@ $("#holdingForm")?.addEventListener("submit", async (e) => {
   const payload = Object.fromEntries(new FormData(form));
   if (!payload.owner) payload.owner = "모두";
   ["quantity", "avg_price", "current_price"].forEach(key => { payload[key] = Number(payload[key] || 0); });
+
+  // 종목코드가 없고 종목명만 있는 경우 자동 검색 보정
+  if (!payload.code && payload.name) {
+    try {
+      const searchRes = await api(`/api/stock-search?q=${encodeURIComponent(payload.name)}`);
+      if (searchRes && searchRes.code) {
+        payload.code = searchRes.code;
+        if (form.code) form.code.value = searchRes.code;
+        if (searchRes.currency && (!payload.currency || payload.currency === "KRW") && searchRes.currency === "USD") {
+          payload.currency = searchRes.currency;
+          if (form.currency) form.currency.value = searchRes.currency;
+        }
+      }
+    } catch (err) {}
+  }
+
   try {
     const id = form.dataset.recordId;
     const result = await api(id ? `/api/holdings/${id}` : "/api/holdings", {
@@ -2649,7 +2700,24 @@ function attachStockAutoFill(formId, updateFieldsFn) {
     }
   }
 
-  function onNameChanged() {
+  let searchTimer = null;
+  async function searchStockOnline(rawName) {
+    if (!rawName || rawName.length < 2) return;
+    try {
+      const res = await api(`/api/stock-search?q=${encodeURIComponent(rawName)}`);
+      if (res && res.found && res.code) {
+        if (codeInput && !codeInput.value) {
+          codeInput.value = res.code;
+        }
+        if (currSelect && res.currency && currSelect.value !== res.currency) {
+          currSelect.value = res.currency;
+        }
+        if (typeof updateFieldsFn === 'function') updateFieldsFn();
+      }
+    } catch (e) {}
+  }
+
+  function onNameChanged(e) {
     const raw = (nameInput?.value || "").trim();
     if (!raw) return;
     const all = getAllKnownStockList();
@@ -2662,6 +2730,13 @@ function attachStockAutoFill(formId, updateFieldsFn) {
       if (codeInput) codeInput.value = found.code;
       if (currSelect && found.currency) currSelect.value = found.currency;
       if (typeof updateFieldsFn === 'function') updateFieldsFn();
+    } else {
+      if (e && (e.type === 'change' || e.type === 'blur')) {
+        searchStockOnline(raw);
+      } else {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => searchStockOnline(raw), 350);
+      }
     }
   }
 
@@ -2674,6 +2749,7 @@ function attachStockAutoFill(formId, updateFieldsFn) {
     nameInput._boundAuto = true;
     nameInput.addEventListener("input", onNameChanged);
     nameInput.addEventListener("change", onNameChanged);
+    nameInput.addEventListener("blur", onNameChanged);
   }
 }
 
@@ -2686,9 +2762,11 @@ async function saveActualDividendRecord() {
   const rId = form.dataset.recordId;
   const dateVal = (form.querySelector("[name='date']")?.value || "").trim();
   const ownerVal = (form.querySelector("[name='owner']")?.value || "모두").trim();
-  const codeVal = (form.querySelector("[name='code']")?.value || "").trim().toUpperCase();
+  const brokerVal = (form.querySelector("[name='broker']")?.value || "").trim();
+  const accountNameVal = (form.querySelector("[name='account_name']")?.value || "").trim();
+  let codeVal = (form.querySelector("[name='code']")?.value || "").trim().toUpperCase();
   const nameVal = (form.querySelector("[name='name']")?.value || "").trim();
-  const currVal = (form.querySelector("[name='currency']")?.value || "KRW").toUpperCase();
+  let currVal = (form.querySelector("[name='currency']")?.value || "KRW").toUpperCase();
   const amtInput = form.querySelector("[name='amount']");
   const amtVal = Number(amtInput?.value || 0);
   const fxVal = Number(form.querySelector("[name='fx_rate']")?.value || 1385.0);
@@ -2702,9 +2780,22 @@ async function saveActualDividendRecord() {
     toast("입금일을 선택해 주세요.", true);
     return;
   }
-  if (!codeVal) {
-    toast("종목코드를 입력해 주세요.", true);
+  if (!nameVal && !codeVal) {
+    toast("종목명 또는 종목코드를 입력해 주세요.", true);
     return;
+  }
+  if (!codeVal && nameVal) {
+    try {
+      const searchRes = await api(`/api/stock-search?q=${encodeURIComponent(nameVal)}`);
+      if (searchRes && searchRes.code) {
+        codeVal = searchRes.code;
+        if (form.querySelector("[name='code']")) form.querySelector("[name='code']").value = codeVal;
+        if (searchRes.currency && form.querySelector("[name='currency']")) {
+          form.querySelector("[name='currency']").value = searchRes.currency;
+          currVal = searchRes.currency;
+        }
+      }
+    } catch (e) {}
   }
   if (!amtVal && (amtInput?.value === '' || amtInput?.value == null)) {
     toast("배당금(입금액)을 입력해 주세요.", true);
@@ -2714,6 +2805,8 @@ async function saveActualDividendRecord() {
   const payload = {
     date: dateVal,
     owner: ownerVal,
+    broker: brokerVal,
+    account_name: accountNameVal,
     code: codeVal,
     name: nameVal || codeVal,
     currency: currVal,
@@ -3279,6 +3372,27 @@ async function openDividendRecordDialog(record = null) {
   form.dataset.recordId = record ? record.id : "";
   $("#dividendDialogTitle") && ($("#dividendDialogTitle").textContent = record ? "실제 배당금 수정" : "실제 배당금 추가");
 
+  // ACCOUNTS 섹션의 등록된 계좌 목록 드롭다운 및 데이터리스트 채우기
+  const accounts = dashboard?.accounts || [];
+  const acctSel = $("#dividendAccountSelect");
+  if (acctSel) {
+    acctSel.innerHTML = '<option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>' +
+      accounts.map(a => `
+        <option value="${html(a.id)}" data-broker="${html(a.broker)}" data-name="${html(a.name)}" data-owner="${html(a.owner || '모두')}">
+          [${html(a.broker)}] ${html(a.name)} (${html(a.owner || '모두')})
+        </option>
+      `).join('');
+
+    const matchedAcct = accounts.find(a => (record?.broker && a.broker === record.broker && record?.account_name && a.name === record.account_name) || (record?.account_id && a.id === record.account_id));
+    acctSel.value = matchedAcct ? matchedAcct.id : "";
+  }
+
+  const acctDatalist = $("#divAccountDatalist");
+  if (acctDatalist) {
+    const uniqueNames = [...new Set(accounts.map(a => a.name).filter(Boolean))];
+    acctDatalist.innerHTML = uniqueNames.map(name => `<option value="${html(name)}"></option>`).join('');
+  }
+
   populateStockDatalists();
   attachStockAutoFill("dividendRecordForm", updateDivFormFields);
 
@@ -3287,6 +3401,8 @@ async function openDividendRecordDialog(record = null) {
 
   const dateEl = form.querySelector("[name='date']");
   const ownerEl = form.querySelector("[name='owner']");
+  const brokerEl = form.querySelector("[name='broker']");
+  const accEl = form.querySelector("[name='account_name']");
   const codeEl = form.querySelector("[name='code']");
   const nameEl = form.querySelector("[name='name']");
   const currEl = form.querySelector("[name='currency']");
@@ -3297,6 +3413,8 @@ async function openDividendRecordDialog(record = null) {
 
   if (dateEl) dateEl.value = targetDate;
   if (ownerEl) ownerEl.value = record ? (record.owner || "모두") : (currentOwner !== "모두" ? currentOwner : "모두");
+  if (brokerEl) brokerEl.value = record ? (record.broker || "") : "";
+  if (accEl) accEl.value = record ? (record.account_name || "") : "";
   if (codeEl) codeEl.value = record ? record.code : "";
   if (nameEl) nameEl.value = record ? record.name : "";
   if (currEl) currEl.value = record ? record.currency : "KRW";
@@ -3656,6 +3774,27 @@ async function openPnlRecordDialog(record = null) {
   form.dataset.recordId = record ? record.id : "";
   $("#pnlDialogTitle") && ($("#pnlDialogTitle").textContent = record ? "매도 실현손익 수정" : "매도 실현손익 추가");
 
+  // ACCOUNTS 섹션의 등록된 계좌 목록 드롭다운 및 데이터리스트 채우기
+  const accounts = dashboard?.accounts || [];
+  const acctSel = $("#pnlAccountSelect");
+  if (acctSel) {
+    acctSel.innerHTML = '<option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>' +
+      accounts.map(a => `
+        <option value="${html(a.id)}" data-broker="${html(a.broker)}" data-name="${html(a.name)}" data-owner="${html(a.owner || '모두')}">
+          [${html(a.broker)}] ${html(a.name)} (${html(a.owner || '모두')})
+        </option>
+      `).join('');
+
+    const matchedAcct = accounts.find(a => (record?.broker && a.broker === record.broker && record?.account_name && a.name === record.account_name) || (record?.account_id && a.id === record.account_id));
+    acctSel.value = matchedAcct ? matchedAcct.id : "";
+  }
+
+  const acctDatalist = $("#pnlAccountDatalist");
+  if (acctDatalist) {
+    const uniqueNames = [...new Set(accounts.map(a => a.name).filter(Boolean))];
+    acctDatalist.innerHTML = uniqueNames.map(name => `<option value="${html(name)}"></option>`).join('');
+  }
+
   populateStockDatalists();
   attachStockAutoFill("pnlRecordForm", updatePnlFormFields);
 
@@ -3745,9 +3884,9 @@ async function saveRealizedPnlRecord() {
   const ownerVal = (form.querySelector("[name='owner']")?.value || "모두").trim();
   const brokerVal = (form.querySelector("[name='broker']")?.value || "").trim();
   const accountNameVal = (form.querySelector("[name='account_name']")?.value || "").trim();
-  const codeVal = (form.querySelector("[name='code']")?.value || "").trim().toUpperCase();
+  let codeVal = (form.querySelector("[name='code']")?.value || "").trim().toUpperCase();
   const nameVal = (form.querySelector("[name='name']")?.value || "").trim();
-  const currVal = (form.querySelector("[name='currency']")?.value || "KRW").toUpperCase();
+  let currVal = (form.querySelector("[name='currency']")?.value || "KRW").toUpperCase();
   const pnlInputStr = form.querySelector("[name='pnl']")?.value;
   const pnlVal = Number(pnlInputStr || 0);
   const fxVal = Number(form.querySelector("[name='fx_rate']")?.value || 1385.0);
@@ -3762,9 +3901,22 @@ async function saveRealizedPnlRecord() {
     toast("매도일을 선택해 주세요.", true);
     return;
   }
-  if (!codeVal) {
-    toast("종목코드를 입력해 주세요.", true);
+  if (!nameVal && !codeVal) {
+    toast("종목명 또는 종목코드를 입력해 주세요.", true);
     return;
+  }
+  if (!codeVal && nameVal) {
+    try {
+      const searchRes = await api(`/api/stock-search?q=${encodeURIComponent(nameVal)}`);
+      if (searchRes && searchRes.code) {
+        codeVal = searchRes.code;
+        if (form.querySelector("[name='code']")) form.querySelector("[name='code']").value = codeVal;
+        if (searchRes.currency && form.querySelector("[name='currency']")) {
+          form.querySelector("[name='currency']").value = searchRes.currency;
+          currVal = searchRes.currency;
+        }
+      }
+    } catch (e) {}
   }
   if (pnlInputStr === '' || pnlInputStr == null) {
     toast("실현손익을 입력해 주세요.", true);

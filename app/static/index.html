@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260827-etfdividend" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260827-autoholdingcode" />
   </head>
   <body>
     <main class="shell">
@@ -86,7 +86,7 @@
                 <strong>총 수익</strong>
               </div>
               <div class="summary-row-val">
-                <div class="val-line">
+                <div class="val-line stacked">
                   <strong id="totalProfit">₩0</strong>
                   <span id="profitRate" class="sub-rate">(+0.00%)</span>
                 </div>
@@ -99,7 +99,7 @@
                 <strong>일간 수익</strong>
               </div>
               <div class="summary-row-val">
-                <div class="val-line">
+                <div class="val-line stacked">
                   <strong id="dayProfit">₩0</strong>
                   <span id="dayRate" class="sub-rate"></span>
                 </div>
@@ -470,8 +470,8 @@
             <input name="account_name" list="holdingAccountDatalist" value="내 주식 계좌" placeholder="계좌명 입력 또는 선택" required autocomplete="off" />
             <datalist id="holdingAccountDatalist"></datalist>
           </label>
-          <label>종목 코드<input name="code" placeholder="005930 또는 AAPL" required /></label>
-          <label>종목명<input name="name" required /></label>
+          <label>종목 코드<input name="code" list="holdingCodeList" placeholder="예: 005930 (종목명 입력 시 자동 완성)" autocomplete="off" /></label>
+          <label>종목명<input name="name" list="holdingNameList" placeholder="예: 삼성전자, 현대차, NVDA" autocomplete="off" required /></label>
           <label>보유 수량<input name="quantity" type="number" min="0.000001" step="any" required /></label>
           <label>평균매입가<input name="avg_price" type="number" min="0" step="any" required /></label>
           <label>현재가<input name="current_price" type="number" min="0" step="any" required /></label>
@@ -707,6 +707,12 @@
       </div>
       <form id="dividendRecordForm" onsubmit="return false;">
         <div class="form-grid">
+          <label style="grid-column: 1 / -1;">
+            등록된 계좌 선택 (선택 시 증권사·계좌명·소유자 자동 채움)
+            <select id="dividendAccountSelect">
+              <option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>
+            </select>
+          </label>
           <label>
             입금일 (Date)
             <input name="date" type="date" required />
@@ -718,12 +724,21 @@
             </select>
           </label>
           <label>
+            증권사
+            <input name="broker" placeholder="예: 토스증권, 키움증권" />
+          </label>
+          <label>
+            계좌명
+            <input name="account_name" list="divAccountDatalist" placeholder="예: 종합계좌" autocomplete="off" />
+            <datalist id="divAccountDatalist"></datalist>
+          </label>
+          <label>
             종목코드
-            <input name="code" list="holdingCodeList" placeholder="예: 005930, QQQM" autocomplete="off" required />
+            <input name="code" list="holdingCodeList" placeholder="예: 005930 (종목명 입력 시 자동 완성)" autocomplete="off" />
           </label>
           <label>
             종목명
-            <input name="name" list="holdingNameList" placeholder="예: 삼성전자, QQQM" autocomplete="off" required />
+            <input name="name" list="holdingNameList" placeholder="예: 삼성전자, 현대차, NVDA" autocomplete="off" required />
           </label>
           <label>
             통화
@@ -764,6 +779,12 @@
       </div>
       <form id="pnlRecordForm" onsubmit="return false;">
         <div class="form-grid">
+          <label style="grid-column: 1 / -1;">
+            등록된 계좌 선택 (선택 시 증권사·계좌명·소유자 자동 채움)
+            <select id="pnlAccountSelect">
+              <option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>
+            </select>
+          </label>
           <label>
             매도일 (Date)
             <input name="date" type="date" required />
@@ -780,15 +801,16 @@
           </label>
           <label>
             계좌명
-            <input name="account_name" placeholder="예: 종합계좌" />
+            <input name="account_name" list="pnlAccountDatalist" placeholder="예: 종합계좌" autocomplete="off" />
+            <datalist id="pnlAccountDatalist"></datalist>
           </label>
           <label>
             종목코드
-            <input name="code" list="holdingCodeList" placeholder="예: 005930, NVDA" autocomplete="off" required />
+            <input name="code" list="holdingCodeList" placeholder="예: 005930 (종목명 입력 시 자동 완성)" autocomplete="off" />
           </label>
           <label>
             종목명
-            <input name="name" list="holdingNameList" placeholder="예: 삼성전자, NVIDIA" autocomplete="off" required />
+            <input name="name" list="holdingNameList" placeholder="예: 삼성전자, 현대차, NVDA" autocomplete="off" required />
           </label>
           <label>
             통화
@@ -855,9 +877,13 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260827-etfdividend"></script>
+    <script src="/static/wealth.js?v=20260827-autoholdingcode"></script>
   </body>
 </html>
+
+
+
+
 
 
 
