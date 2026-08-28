@@ -4,6 +4,7 @@ import asyncio
 import os
 import secrets
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -1168,8 +1169,8 @@ async def snapshot_asset_record(request: Request) -> dict:
 
 
 @app.post("/api/sync/kb")
-async def sync_kb(request: Request) -> dict:
-    username = get_current_username(request)
+async def sync_kb(request: Request = None) -> dict:
+    username = get_current_username(request) if request else "sagesaint"
     client = KBOpenAPI(username=username)
     if not client.configured:
         return {"message": "KB증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0, "warnings": []}
@@ -1217,8 +1218,8 @@ async def sync_kb(request: Request) -> dict:
 
 
 @app.post("/api/sync/toss")
-async def sync_toss(request: Request) -> dict:
-    username = get_current_username(request)
+async def sync_toss(request: Request = None) -> dict:
+    username = get_current_username(request) if request else "sagesaint"
     client = TossOpenAPI(username=username)
     if not client.configured:
         return {"message": "토스증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0}
@@ -1315,8 +1316,8 @@ async def sync_toss(request: Request) -> dict:
 
 
 @app.post("/api/sync/namoo")
-async def sync_namoo(request: Request) -> dict:
-    username = get_current_username(request)
+async def sync_namoo(request: Request = None) -> dict:
+    username = get_current_username(request) if request else "sagesaint"
     client = NhPlugOpenAPI(username=username)
     if not client.configured:
         return {"message": "나무증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0}
@@ -1458,41 +1459,42 @@ async def stock_search(q: str = "") -> dict:
 
 
 @app.post("/api/sync/all")
-async def sync_all_accounts() -> dict:
+async def sync_all_accounts(request: Request) -> dict:
+    username = get_current_username(request)
     results = []
     errors = []
     
     # 1. KB
-    kb = KBOpenAPI()
+    kb = KBOpenAPI(username=username)
     if kb.configured:
         try:
-            r = await sync_kb()
+            r = await sync_kb(request)
             results.append(r.get("message", "KB 동기화 완료"))
         except Exception as e:
             errors.append(f"KB: {e}")
             
     # 2. Toss
-    toss = TossOpenAPI()
+    toss = TossOpenAPI(username=username)
     if toss.configured:
         try:
-            r = await sync_toss()
+            r = await sync_toss(request)
             results.append(r.get("message", "토스 동기화 완료"))
         except Exception as e:
             errors.append(f"토스: {e}")
             
     # 3. Namoo
-    namoo = NhPlugOpenAPI()
+    namoo = NhPlugOpenAPI(username=username)
     if namoo.configured:
         try:
-            r = await sync_namoo()
+            r = await sync_namoo(request)
             results.append(r.get("message", "나무 동기화 완료"))
         except Exception as e:
             errors.append(f"나무: {e}")
             
     if not results and not errors:
-        return {"message": "설정된 증권사 연동 계정이 없습니다. .env 설정을 확인하세요.", "synced": 0}
+        return {"message": "등록된 증권사 OpenAPI 설정이 없습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "synced": 0}
         
-    msg = " / ".join(results)
+    msg = " / ".join(results) if results else "동기화 완료된 계좌가 없습니다."
     if errors:
         msg += f" (오류: {', '.join(errors)})"
     return {"message": msg, "synced": len(results), "errors": errors}

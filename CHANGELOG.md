@@ -1,3 +1,8 @@
+v4.3.2
+
+(fix) 일괄 계좌 연결(POST /api/sync/all) 호출 시 request 누락(TypeError) 및 import uuid 누락(NameError) 해결
+(feat) 사용자별(potato 등) 나무/토스/KB 증권 계좌 및 예수금 격리 동기화 완벽 정상화
+
 v4.3.1
 
 (fix) 다이얼로그 닫기 함수(closeDialog) 전역 바인딩 및 [⚙️ OpenAPI], [비번 변경], [사용자 관리] 모달 닫기/취소 동작 복구
