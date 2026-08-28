@@ -574,13 +574,15 @@ function renderMarkets(result) {
     const sign = isUp ? "+" : "";
     const colorClass = isUp ? "up" : (isDown ? "down" : "");
 
-    let changeText = "";
+    let changePointHtml = "";
+    let changeRateHtml = "";
     if (item.change_rate != null) {
-      const changeNum = item.change != null ? `${sign}${number(item.change, 2)}` : "";
-      const rateNum = `(${sign}${number(item.change_rate, 2)}%)`;
-      changeText = changeNum ? `${changeNum} ${rateNum}` : rateNum;
+      if (item.change != null) {
+        changePointHtml = `<span class="change-point">${sign}${number(item.change, 2)}</span>`;
+      }
+      changeRateHtml = `<span class="change-rate">(${sign}${number(item.change_rate, 2)}%)</span>`;
     } else {
-      changeText = "—";
+      changeRateHtml = `<span class="change-rate">—</span>`;
     }
 
     const chartHtml = sparkline(item.series, item.change_rate);
@@ -596,7 +598,7 @@ function renderMarkets(result) {
           </div>
           <div class="market-value-row">
             <strong class="market-price ${colorClass}">${priceText}</strong>
-            <span class="market-change ${colorClass}">${changeText}</span>
+            <span class="market-change ${colorClass}">${changePointHtml} ${changeRateHtml}</span>
           </div>
         </div>
       </article>
