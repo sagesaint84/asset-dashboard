@@ -107,13 +107,20 @@ def init_users_and_migration() -> None:
             "username": env_user,
             "salt": salt,
             "password_hash": p_hash,
-            "role": "admin",  # sagesaint도 관리자 권한 부여
+            "role": "user",  # sagesaint는 일반 유저 등급
             "must_change_password": False,
             "created_at": datetime.now().isoformat(),
         })
         usernames.add(env_user)
         changed = True
-        logger.info("%s 계정이 자동 등록되었습니다.", env_user)
+        logger.info("%s 계정이 일반 유저로 등록되었습니다.", env_user)
+
+    # 3. 오직 admin 계정만 admin 역할을 유지하도록 정규화
+    for u in users:
+        if u.get("username") != "admin" and u.get("role") == "admin":
+            u["role"] = "user"
+            changed = True
+            logger.info("비관리자 계정 '%s'의 역할을 'user'로 조정했습니다.", u.get("username"))
 
     if changed:
         save_users_db({"users": users})
