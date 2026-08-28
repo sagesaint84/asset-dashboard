@@ -308,6 +308,55 @@ const escapeHtml = html;
 window.escapeHtml = html;
 const signClass = (value) => Number(value) < 0 ? "down" : "up";
 
+function closeDialog(idOrEl) {
+  try {
+    const el = typeof idOrEl === 'string' ? document.getElementById(idOrEl) : idOrEl;
+    if (!el) return;
+    if (typeof el.close === 'function') {
+      el.close();
+    } else {
+      el.removeAttribute('open');
+      el.style.display = 'none';
+    }
+  } catch (err) {
+    console.error('[DIALOG] closeDialog error:', err);
+  }
+}
+window.closeDialog = closeDialog;
+
+// 다이얼로그 닫기 버튼 위임 및 배경(백드롭) 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  // 1) 닫기 버튼 클릭 처리 (.close, [data-close-dialog], .dialog-close-btn, [aria-label="닫기"] 등)
+  const closeBtn = e.target.closest('[data-close-dialog], .close, .dialog-close-btn, [aria-label="닫기"]');
+  if (closeBtn) {
+    const targetId = closeBtn.getAttribute('data-close-dialog');
+    if (targetId) {
+      closeDialog(targetId);
+      return;
+    }
+    const dialog = closeBtn.closest('dialog');
+    if (dialog && dialog.id !== 'forcePasswordModal') {
+      closeDialog(dialog);
+      return;
+    }
+  }
+
+  // 2) 다이얼로그 바깥(배경 백드롭) 클릭 시 닫기
+  if (e.target && e.target.tagName === 'DIALOG' && e.target.open) {
+    // forcePasswordModal(강제 비번 변경 모달)은 바깥 클릭으로 닫히지 않음
+    if (e.target.id === 'forcePasswordModal') return;
+    const rect = e.target.getBoundingClientRect();
+    const isInDialog = (
+      rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+      rect.left <= e.clientX && e.clientX <= rect.left + rect.width
+    );
+    if (!isInDialog) {
+      closeDialog(e.target);
+    }
+  }
+});
+
+
 function sparkline(points, change) {
   if (!points || points.length < 2) {
     if (points && points.length === 1) points = [points[0], points[0]];
