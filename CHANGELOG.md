@@ -1,3 +1,10 @@
+v4.4.1
+
+(fix) 소유자 탭(아빠/엄마/자녀/모두)별 일간 수익 계산 및 비교 기준일 불일치 현상 완벽 해결
+- 모든 소유자 탭에서 asset_records.json의 해당 소유자 직전 일자(28일) 스냅샷 자산과 정확히 1:1 비교
+- 29일 스냅샷에 잘못 기록되었던 소유자별 일간 수익(day_profit_krw) 정상값으로 자동 보정
+(perf) 서비스 워커 캐시 버전(wealth-cache-v11) 및 스크립트 쿼리(v441) 갱신
+
 v4.4.0 (Major Release: 멀티 유저 완벽 격리 & 증권사 OpenAPI UI & 이자 배당 지원)
 
 (feat) 배당금/손익 내역에서 이자 전용 항목(원화이자: INTEREST_KRW, 달러이자: INTEREST_USD, RP이자: INTEREST_RP, 예탁금이자: INTEREST_CASH) 공식 지원

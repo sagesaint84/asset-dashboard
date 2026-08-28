@@ -243,22 +243,59 @@ function computeFilteredCurrencySummary(holdings, accounts, fxRates) {
   };
 }
 
-function computeFilteredDayChange(holdings, rawDayChange) {
+function computeFilteredDayChange(holdings, rawDayChange, owner = '모두', currentTotalValue = 0) {
+  const targetOwner = owner || '모두';
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const dayStr = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${dayStr}`;
+
+  // 1. 자산기록(allAssetRecords)에서 오늘 이전(date < todayStr)의 해당 owner 직전 기록 찾기
+  const ownerRecords = (allAssetRecords || []).filter(r => 
+    (r.owner || '모두') === targetOwner && 
+    r.date && 
+    r.date < todayStr && 
+    Number(r.total_value_krw || 0) > 0
+  );
+
+  if (ownerRecords.length > 0) {
+    ownerRecords.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const lastRec = ownerRecords[ownerRecords.length - 1];
+    const prevVal = Number(lastRec.total_value_krw || 0);
+    const prevDate = lastRec.date;
+    const change_krw = currentTotalValue - prevVal;
+    const change_rate = prevVal > 0 ? (change_krw / prevVal) * 100 : 0;
+    return {
+      change_rate,
+      change_krw,
+      date: prevDate,
+      value_krw: prevVal,
+    };
+  }
+
+  // 2. 만약 해당 소유자의 이전 스냅샷이 없다면 보유종목 등락률 가중평균으로 fallback
   if (!rawDayChange) return {};
-  let totalValue = 0, weightedChange = 0;
+  let totalStockVal = 0, weightedChange = 0;
   holdings.forEach(h => {
     const val = Number(h.market_value_krw || 0);
     const rate = Number(h.day_change_rate || 0);
-    totalValue += val;
+    totalStockVal += val;
     weightedChange += val * rate;
   });
-  if (totalValue === 0) return {};
-  const change_rate = weightedChange / totalValue;
-  const change_krw  = totalValue * change_rate / (100 + change_rate) || 0;
+  if (totalStockVal === 0) {
+    return {
+      change_rate: 0,
+      change_krw: 0,
+      date: (rawDayChange || {}).date || "전일",
+    };
+  }
+  const change_rate = weightedChange / totalStockVal;
+  const change_krw  = totalStockVal * change_rate / (100 + change_rate) || 0;
   return {
     change_rate,
     change_krw,
-    date: (rawDayChange || {}).date,
+    date: (rawDayChange || {}).date || "전일",
   };
 }
 
@@ -275,7 +312,7 @@ function renderWithOwner(data, owner) {
     filteredData.classifications       = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates);
     filteredData.sector_classifications= computeFilteredSectors(filteredData.holdings, filteredData.accounts, src.fx_rates);
     filteredData.currency_summary      = computeFilteredCurrencySummary(filteredData.holdings, filteredData.accounts, src.fx_rates);
-    filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change);
+    filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change, owner, filteredData.summary?.total_value_krw);
   } else {
     filteredData.accounts              = src.accounts               || [];
     filteredData.holdings              = src.holdings               || [];
@@ -283,7 +320,7 @@ function renderWithOwner(data, owner) {
     filteredData.classifications       = src.classifications        || [];
     filteredData.sector_classifications= src.sector_classifications || [];
     filteredData.currency_summary      = src.currency_summary       || {};
-    filteredData.day_change            = src.day_change             || {};
+    filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change, '모두', filteredData.summary?.total_value_krw);
   }
 
   render(filteredData);

@@ -523,6 +523,7 @@ async def dashboard(request: Request) -> dict:
             "currency": "KRW",
             "source": "auto",
             "memo": "자동 기록",
+            "owner": "모두",
         }
         upsert_asset_record(snapshot, by_date=True, username=username)
     return data
