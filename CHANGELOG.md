@@ -1,3 +1,15 @@
+v4.4.0 (Major Release: 멀티 유저 완벽 격리 & 증권사 OpenAPI UI & 이자 배당 지원)
+
+(feat) 배당금/손익 내역에서 이자 전용 항목(원화이자: INTEREST_KRW, 달러이자: INTEREST_USD, RP이자: INTEREST_RP, 예탁금이자: INTEREST_CASH) 공식 지원
+(fix) '원화이자'/'달러이자' 입력 시 화이자(Pfizer, PFE) 주식 종목으로 오매칭되던 자동완성 버그 원천 차단
+(feat) 👥 멀티 유저 격리 시스템 완성: data/users/{username}/ 전용 디렉터리를 통한 포트폴리오/배당/손익/OpenAPI 완벽 격리
+(security) 👑 역할 분리 완성: admin 계정 단독 사용자 관리 콘솔 제공, sagesaint 계정을 일반 유저(user) 등급으로 조정
+(security) 초기 비밀번호(4자리) 로그인 시 대시보드 진입 원천 차단 및 비밀번호 변경 전용 페이지(/change-password-init) 강제 라우팅
+(feat) ⚙️ 증권사 OpenAPI 웹 UI 개별 관리: 토스, KB, 나무증권 AppKey/Secret 웹에서 등록, 마스킹 보존 및 [🗑️ 삭제] 원클릭 연결 해제 탑재
+(feat) 보유종목이 없는 신규 계정에서도 [↻ 조회] 시 오류 없이 실시간 지수 및 환율 정상 동기화 ("지수 및 환율을 갱신했습니다.")
+(perf) 서비스 워커 캐시 버전(wealth-cache-v10) 및 스크립트 쿼리(v436) 갱신
+(docs) README.md 멀티 유저 아키텍처 및 OpenAPI 설정 가이드 전면 개편
+
 v4.3.5
 
 (security) sagesaint 계정을 'user' 등급으로 조정하고 사용자 관리 권한은 오직 admin 단독 계정으로 일원화

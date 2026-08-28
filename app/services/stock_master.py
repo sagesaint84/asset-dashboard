@@ -387,12 +387,70 @@ def search_stock_by_name(query: str) -> dict[str, Any]:
     if not q:
         return {"found": False, "code": "", "name": "", "currency": "KRW", "suggestions": []}
 
+    norm_q = _normalize_key(q)
+
+    # 0. 이자(원화이자, 달러이자, RP이자 등) 전용 처리 (화이자 주식 오매칭 방지)
+    is_interest_query = ("이자" in norm_q or "예탁금" in norm_q or norm_q.startswith("interest")) and norm_q != "화이자" and not norm_q.startswith("화이자")
+    if is_interest_query:
+        if "달러" in norm_q or "외화" in norm_q or "usd" in norm_q.lower() or norm_q == "interestusd":
+            return {
+                "found": True,
+                "code": "INTEREST_USD",
+                "name": "달러이자",
+                "currency": "USD",
+                "suggestions": [
+                    {"code": "INTEREST_USD", "name": "달러이자", "currency": "USD"},
+                    {"code": "INTEREST_KRW", "name": "원화이자", "currency": "KRW"},
+                ]
+            }
+        elif "rp" in norm_q.lower() or norm_q == "interestrp":
+            return {
+                "found": True,
+                "code": "INTEREST_RP",
+                "name": "RP이자",
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_RP", "name": "RP이자", "currency": "KRW"},
+                ]
+            }
+        elif "예탁금" in norm_q or norm_q == "interestcash":
+            return {
+                "found": True,
+                "code": "INTEREST_CASH",
+                "name": "예탁금이자",
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_CASH", "name": "예탁금이자", "currency": "KRW"},
+                ]
+            }
+        elif "원화" in norm_q or norm_q == "이자" or norm_q == "interestkrw":
+            return {
+                "found": True,
+                "code": "INTEREST_KRW",
+                "name": "원화이자",
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_KRW", "name": "원화이자", "currency": "KRW"},
+                    {"code": "INTEREST_USD", "name": "달러이자", "currency": "USD"},
+                ]
+            }
+        else:
+            return {
+                "found": True,
+                "code": "INTEREST_KRW",
+                "name": q,
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_KRW", "name": "원화이자", "currency": "KRW"},
+                    {"code": "INTEREST_USD", "name": "달러이자", "currency": "USD"},
+                ]
+            }
+
     code, name, curr = resolve_stock_info(code="", name=q)
     is_found = bool(code and code != q)
 
     # 부분 일치 후보 리스트 (최대 6개)
     suggestions: list[dict[str, str]] = []
-    norm_q = _normalize_key(q)
 
     # 1. 완전 일치 후보
     if is_found:
@@ -452,6 +510,24 @@ def resolve_stock_info(code: str = "", name: str = "", currency: str = "") -> tu
 
     norm_name = _normalize_key(name)
     norm_code = _normalize_key(code)
+
+    # 0. 이자(원화이자, 달러이자, RP이자, 예탁금이자 등) 전용 항목 처리 (화이자 주식 오매칭 방지)
+    is_interest_item = (
+        ("이자" in norm_name or "예탁금" in norm_name or code.startswith("INTEREST_"))
+        and norm_name != "화이자"
+        and not norm_name.startswith("화이자")
+    )
+    if is_interest_item:
+        if "달러" in norm_name or "외화" in norm_name or "usd" in norm_name.lower() or code == "INTEREST_USD":
+            return (code or "INTEREST_USD", name or "달러이자", "USD")
+        elif "rp" in norm_name.lower() or code == "INTEREST_RP":
+            return (code or "INTEREST_RP", name or "RP이자", curr or "KRW")
+        elif "예탁금" in norm_name or code == "INTEREST_CASH":
+            return (code or "INTEREST_CASH", name or "예탁금이자", curr or "KRW")
+        elif "원화" in norm_name or norm_name == "이자" or code == "INTEREST_KRW":
+            return (code or "INTEREST_KRW", name or "원화이자", curr or "KRW")
+        else:
+            return (code or "INTEREST_KRW", name, curr or "KRW")
 
     # 1. code가 없고 name만 있는 경우
     if not code and name:

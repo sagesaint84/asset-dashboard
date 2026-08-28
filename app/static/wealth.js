@@ -2699,6 +2699,12 @@ $("#accountAddForm")?.addEventListener("submit", (e) => {
 
 // ── 종목 사전 및 양방향 자동완성 (종목코드 ↔ 종목명) ─────────────────────────
 const POPULAR_STOCKS = [
+  // 이자 / 현금성 배당 전용 항목 (종목코드 선택 가능)
+  { code: "INTEREST_KRW", name: "원화이자", currency: "KRW" },
+  { code: "INTEREST_USD", name: "달러이자", currency: "USD" },
+  { code: "INTEREST_RP", name: "RP이자", currency: "KRW" },
+  { code: "INTEREST_CASH", name: "예탁금이자", currency: "KRW" },
+
   { code: "005930", name: "삼성전자", currency: "KRW" },
   { code: "005935", name: "삼성전자우", currency: "KRW" },
   { code: "000660", name: "SK하이닉스", currency: "KRW" },
@@ -2796,6 +2802,22 @@ function attachStockAutoFill(formId, updateFieldsFn) {
   function onCodeChanged() {
     const raw = (codeInput?.value || "").trim().toUpperCase();
     if (!raw) return;
+
+    // 이자 코드 즉시 매칭
+    const INTEREST_CODES = {
+      "INTEREST_KRW": { name: "원화이자", currency: "KRW" },
+      "INTEREST_USD": { name: "달러이자", currency: "USD" },
+      "INTEREST_RP": { name: "RP이자", currency: "KRW" },
+      "INTEREST_CASH": { name: "예탁금이자", currency: "KRW" },
+    };
+    if (INTEREST_CODES[raw]) {
+      const match = INTEREST_CODES[raw];
+      if (nameInput && (!nameInput.value || nameInput.value.includes("이자"))) nameInput.value = match.name;
+      if (currSelect) currSelect.value = match.currency;
+      if (typeof updateFieldsFn === 'function') updateFieldsFn();
+      return;
+    }
+
     const all = getAllKnownStockList();
     const found = all.find(s => s.code.toUpperCase() === raw || s.code.toUpperCase().replace(/\s+/g, '') === raw.replace(/\s+/g, ''));
     if (found) {
@@ -2825,11 +2847,43 @@ function attachStockAutoFill(formId, updateFieldsFn) {
   function onNameChanged(e) {
     const raw = (nameInput?.value || "").trim();
     if (!raw) return;
-    const all = getAllKnownStockList();
+
     const cleanRaw = raw.toLowerCase().replace(/\s+/g, '');
+
+    // [중요] 이자 관련 키워드 우선 매칭 (화이자 주식 오매칭 완벽 방어)
+    const INTEREST_KEYWORDS = {
+      "원화이자": { code: "INTEREST_KRW", name: "원화이자", currency: "KRW" },
+      "원화예탁금이용료": { code: "INTEREST_KRW", name: "원화이자", currency: "KRW" },
+      "달러이자": { code: "INTEREST_USD", name: "달러이자", currency: "USD" },
+      "외화이자": { code: "INTEREST_USD", name: "달러이자", currency: "USD" },
+      "usd이자": { code: "INTEREST_USD", name: "달러이자", currency: "USD" },
+      "rp이자": { code: "INTEREST_RP", name: "RP이자", currency: "KRW" },
+      "예탁금이자": { code: "INTEREST_CASH", name: "예탁금이자", currency: "KRW" },
+      "예탁금이용료": { code: "INTEREST_CASH", name: "예탁금이자", currency: "KRW" },
+      "이자": { code: "INTEREST_KRW", name: "원화이자", currency: "KRW" },
+    };
+
+    if (INTEREST_KEYWORDS[cleanRaw]) {
+      const match = INTEREST_KEYWORDS[cleanRaw];
+      if (codeInput) codeInput.value = match.code;
+      if (currSelect) currSelect.value = match.currency;
+      if (typeof updateFieldsFn === 'function') updateFieldsFn();
+      return;
+    }
+
+    const all = getAllKnownStockList();
     let found = all.find(s => s.name.toLowerCase().replace(/\s+/g, '') === cleanRaw || s.name === raw);
     if (!found && raw.length >= 2) {
-      found = all.find(s => s.name.toLowerCase().includes(cleanRaw) || cleanRaw.includes(s.name.toLowerCase().replace(/\s+/g, '')));
+      found = all.find(s => {
+        const cleanStockName = s.name.toLowerCase().replace(/\s+/g, '');
+        // "화이자" 주식이 "원화이자", "달러이자", "이자" 등에 매칭되는 것 방어!
+        if (cleanStockName === '화이자' || cleanStockName.startsWith('화이자(')) {
+          if (cleanRaw.includes('이자') && cleanRaw !== '화이자') {
+            return false;
+          }
+        }
+        return cleanStockName.includes(cleanRaw) || (cleanRaw.length >= 3 && cleanRaw.includes(cleanStockName));
+      });
     }
     if (found) {
       if (codeInput) codeInput.value = found.code;
