@@ -1,3 +1,11 @@
+v4.3.0
+
+(feat) 사용자 화면 상단 헤더에 [⚙️ OpenAPI] 설정 버튼 및 팝업 모달 추가 (토스, KB, 나무증권 AppKey/AppSecret 개별 등록)
+(security) 사용자별 OpenAPI 인증키 격리 저장(data/users/{username}/openapi_config.json) 및 타 사용자 .env 키 오염 원천 차단
+(feat) sagesaint 계정은 기존 .env 키를 자동 fallback 지원하여 기존 연동 100% 보존
+(fix) 신규 사용자(potato 등) 자산 기록 파일 파싱 시 발생하던 AttributeError('list' object has no attribute 'setdefault') 오류 해결
+(perf) 서비스 워커 캐시 버전(wealth-cache-v6) 및 스크립트 쿼리(v430) 갱신
+
 v4.2.0
 
 (feat) admin/admin 등 초기 비밀번호 계정 로그인 시 대시보드 진입 전 비밀번호 변경 전용 페이지(/change-password-init) 강제 라우팅

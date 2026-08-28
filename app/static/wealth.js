@@ -4309,6 +4309,12 @@ async function applyUserRoleView(me) {
     adminBtn.style.display = (!isAdminUser && me.role === 'admin') ? 'inline-flex' : 'none';
   }
 
+  // 증권사 OpenAPI 설정 버튼 (admin은 숨김, 일반 자산 관리 유저에게 표시)
+  const openApiBtn = document.getElementById('userOpenApiBtn');
+  if (openApiBtn) {
+    openApiBtn.style.display = isAdminUser ? 'none' : 'inline-flex';
+  }
+
   // PWA 설치 버튼은 admin일 때 숨김
   const pwaBtn = document.getElementById('pwaInstallButton');
   if (pwaBtn && isAdminUser) {
@@ -4575,6 +4581,146 @@ async function handleAdminDeleteUser(username) {
   }
 }
 window.handleAdminDeleteUser = handleAdminDeleteUser;
+
+// ── USER OPENAPI CONFIGURATION ──────────────────────────────────────────────
+async function openUserOpenApiModal() {
+  const modal = document.getElementById('userOpenApiModal');
+  if (!modal) return;
+
+  const statusMsg = document.getElementById('openapiStatusMsg');
+  if (statusMsg) statusMsg.style.display = 'none';
+
+  // 기존 폼 입력값 초기화
+  const tossKey = document.getElementById('openapiTossKey');
+  const tossSec = document.getElementById('openapiTossSecret');
+  const kbKey = document.getElementById('openapiKbKey');
+  const kbSec = document.getElementById('openapiKbSecret');
+  const nhKey = document.getElementById('openapiNhKey');
+  const nhSec = document.getElementById('openapiNhSecret');
+
+  if (tossKey) tossKey.value = '';
+  if (tossSec) tossSec.value = '';
+  if (kbKey) kbKey.value = '';
+  if (kbSec) kbSec.value = '';
+  if (nhKey) nhKey.value = '';
+  if (nhSec) nhSec.value = '';
+
+  modal.showModal();
+
+  try {
+    const config = await api('/api/user/openapi-config');
+    
+    // 토스
+    const tossBadge = document.getElementById('openapiTossBadge');
+    if (config.toss && config.toss.configured) {
+      if (tossBadge) {
+        tossBadge.textContent = '연결됨';
+        tossBadge.style.background = 'rgba(66,213,163,0.15)';
+        tossBadge.style.color = '#42d5a3';
+      }
+      if (tossKey) tossKey.value = config.toss.app_key || '';
+      if (tossSec) tossSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
+    } else {
+      if (tossBadge) {
+        tossBadge.textContent = '미연결';
+        tossBadge.style.background = 'rgba(255,255,255,0.06)';
+        tossBadge.style.color = '#91a0c1';
+      }
+      if (tossSec) tossSec.placeholder = 'Client Secret 입력';
+    }
+
+    // KB
+    const kbBadge = document.getElementById('openapiKbBadge');
+    if (config.kb && config.kb.configured) {
+      if (kbBadge) {
+        kbBadge.textContent = '연결됨';
+        kbBadge.style.background = 'rgba(66,213,163,0.15)';
+        kbBadge.style.color = '#42d5a3';
+      }
+      if (kbKey) kbKey.value = config.kb.app_key || '';
+      if (kbSec) kbSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
+    } else {
+      if (kbBadge) {
+        kbBadge.textContent = '미연결';
+        kbBadge.style.background = 'rgba(255,255,255,0.06)';
+        kbBadge.style.color = '#91a0c1';
+      }
+      if (kbSec) kbSec.placeholder = 'KB App Secret 입력';
+    }
+
+    // NH (나무)
+    const nhBadge = document.getElementById('openapiNhBadge');
+    if (config.nh && config.nh.configured) {
+      if (nhBadge) {
+        nhBadge.textContent = '연결됨';
+        nhBadge.style.background = 'rgba(66,213,163,0.15)';
+        nhBadge.style.color = '#42d5a3';
+      }
+      if (nhKey) nhKey.value = config.nh.app_key || '';
+      if (nhSec) nhSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
+    } else {
+      if (nhBadge) {
+        nhBadge.textContent = '미연결';
+        nhBadge.style.background = 'rgba(255,255,255,0.06)';
+        nhBadge.style.color = '#91a0c1';
+      }
+      if (nhSec) nhSec.placeholder = '나무 App Secret 입력';
+    }
+  } catch (err) {
+    console.error('[OPENAPI] 설정 조회 실패:', err);
+  }
+}
+window.openUserOpenApiModal = openUserOpenApiModal;
+
+async function handleSaveUserOpenApi(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById('saveUserOpenApiBtn');
+  const statusMsg = document.getElementById('openapiStatusMsg');
+
+  const payload = {
+    toss: {
+      app_key: (document.getElementById('openapiTossKey')?.value || '').trim(),
+      app_secret: (document.getElementById('openapiTossSecret')?.value || '').trim(),
+    },
+    kb: {
+      app_key: (document.getElementById('openapiKbKey')?.value || '').trim(),
+      app_secret: (document.getElementById('openapiKbSecret')?.value || '').trim(),
+    },
+    nh: {
+      app_key: (document.getElementById('openapiNhKey')?.value || '').trim(),
+      app_secret: (document.getElementById('openapiNhSecret')?.value || '').trim(),
+    },
+  };
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '저장 중...';
+  }
+
+  try {
+    const res = await api('/api/user/openapi-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    toast(res.message || '증권사 OpenAPI 설정이 안전하게 저장되었습니다.');
+    const modal = document.getElementById('userOpenApiModal');
+    if (modal) modal.close();
+  } catch (err) {
+    if (statusMsg) {
+      statusMsg.style.display = 'block';
+      statusMsg.style.background = 'rgba(255,113,140,0.15)';
+      statusMsg.style.color = '#ff718c';
+      statusMsg.textContent = '저장 실패: ' + (err.message || String(err));
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '💾 설정 저장';
+    }
+  }
+}
+window.handleSaveUserOpenApi = handleSaveUserOpenApi;
 
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
 async function bootstrap() {

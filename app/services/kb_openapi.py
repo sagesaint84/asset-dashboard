@@ -31,12 +31,18 @@ class Token:
 class KBOpenAPI:
     """KB B2C OpenAPI client. Credentials live only in the server environment."""
 
-    def __init__(self) -> None:
+    def __init__(self, username: str = "sagesaint") -> None:
+        self.username = username
+        from app.services.user_openapi import get_user_openapi_config
+        cfg = get_user_openapi_config(username).get("kb", {})
+
         self.base_url = os.getenv("KB_OPENAPI_BASE_URL", "https://developer.kbsec.com:32484").rstrip("/")
-        self.app_key = os.getenv("KB_OPENAPI_APP_KEY", "")
-        self.app_secret = os.getenv("KB_OPENAPI_APP_SECRET", "")
+        self.app_key = cfg.get("app_key", "")
+        self.app_secret = cfg.get("app_secret", "")
         self._token: Token | None = None
-        self.token_cache_file = Path(__file__).resolve().parents[2] / "data" / "kb_token_cache.json"
+        user_dir = Path(__file__).resolve().parents[2] / "data" / "users" / username
+        user_dir.mkdir(parents=True, exist_ok=True)
+        self.token_cache_file = user_dir / "kb_token_cache.json"
 
     @property
     def configured(self) -> bool:
@@ -48,7 +54,7 @@ class KBOpenAPI:
 
     async def _access_token(self, client: httpx.AsyncClient) -> str:
         if not self.configured:
-            raise KBOpenAPIError("KB OpenAPI 키가 설정되지 않았습니다. .env에 appKey와 appSecret을 입력하세요.")
+            raise KBOpenAPIError("KB OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 appKey와 appSecret을 먼저 등록하세요.")
         if self._token and self._token.expires_at > time.time() + 60:
             return self._token.value
         try:

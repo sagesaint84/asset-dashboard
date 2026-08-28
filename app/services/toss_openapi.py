@@ -34,10 +34,14 @@ class Token:
 class TossOpenAPI:
     """토스증권 Open API의 읽기 전용 계좌·보유종목 클라이언트."""
 
-    def __init__(self) -> None:
+    def __init__(self, username: str = "sagesaint") -> None:
+        self.username = username
+        from app.services.user_openapi import get_user_openapi_config
+        cfg = get_user_openapi_config(username).get("toss", {})
+
         self.base_url = os.getenv("TOSSINVEST_OPENAPI_BASE_URL", "https://openapi.tossinvest.com").rstrip("/")
-        self.client_id = os.getenv("TOSSINVEST_CLIENT_ID", "")
-        self.client_secret = os.getenv("TOSSINVEST_CLIENT_SECRET", "")
+        self.client_id = cfg.get("app_key", "")
+        self.client_secret = cfg.get("app_secret", "")
         self._token: Token | None = None
         self.last_accounts: list[dict[str, Any]] = []
 
@@ -47,7 +51,7 @@ class TossOpenAPI:
 
     async def _access_token(self, client: httpx.AsyncClient) -> str:
         if not self.configured:
-            raise TossOpenAPIError("토스증권 OpenAPI 키가 설정되지 않았습니다. .env에 client ID와 secret을 입력하세요.")
+            raise TossOpenAPIError("토스증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 Client ID와 Secret을 먼저 등록하세요.")
         if self._token and self._token.expires_at > time.time() + 60:
             return self._token.value
         response = await client.post(

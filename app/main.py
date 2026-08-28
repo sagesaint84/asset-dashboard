@@ -372,6 +372,25 @@ async def force_change_password_endpoint(request: Request) -> dict:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/user/openapi-config")
+async def get_user_openapi_keys(request: Request) -> dict:
+    """현재 로그인한 사용자의 마스킹된 OpenAPI 키 정보 반환"""
+    username = get_current_username(request)
+    from app.services.user_openapi import get_masked_user_openapi_config
+    return get_masked_user_openapi_config(username)
+
+
+@app.post("/api/user/openapi-config")
+async def save_user_openapi_keys(request: Request) -> dict:
+    """현재 로그인한 사용자의 OpenAPI 키 설정 저장"""
+    username = get_current_username(request)
+    payload = await request.json()
+    from app.services.user_openapi import save_user_openapi_config
+    save_user_openapi_config(username, payload)
+    return {"message": "증권사 OpenAPI 키가 안전하게 저장되었습니다."}
+
+
+
 @app.get("/api/admin/users")
 async def admin_list_users(request: Request) -> dict:
     """(Admin 전용) 등록된 모든 사용자 목록 반환"""
@@ -1149,13 +1168,16 @@ async def snapshot_asset_record(request: Request) -> dict:
 
 
 @app.post("/api/sync/kb")
-async def sync_kb() -> dict:
-    client = KBOpenAPI()
+async def sync_kb(request: Request) -> dict:
+    username = get_current_username(request)
+    client = KBOpenAPI(username=username)
+    if not client.configured:
+        return {"message": "KB증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0, "warnings": []}
     try:
         records = await client.sync_holdings()
     except KBOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
-    data = read_portfolio()
+    data = read_portfolio(username=username)
 
     # 1. 고유 키(kb_primary) 또는 기존 KB 동기화 계좌 찾기
     existing = next((a for a in data["accounts"] if a.get("broker") == "KB증권" and (a.get("account_key") == "kb_primary" or a.get("source") == "kb_api")), None)
@@ -1178,7 +1200,7 @@ async def sync_kb() -> dict:
             "family_group": "All",
             "source": "kb_api",
             "account_key": "kb_primary",
-            "owner": "아빠",
+            "owner": "모두",
         })
 
     holdings = [normalize_holding(record, account_id, "KB증권", account_name, "kb_api") for record in records]
@@ -1190,19 +1212,22 @@ async def sync_kb() -> dict:
             if holding["avg_price"] == 0:
                 holding["avg_price"] = price
     upsert_holdings(data, holdings, replace_source="kb_api")
-    write_portfolio(data)
+    write_portfolio(data, username=username)
     return {"message": f"KB증권 보유종목 {len(holdings)}개를 동기화했습니다.", "count": len(holdings), "warnings": warnings[:10]}
 
 
 @app.post("/api/sync/toss")
-async def sync_toss() -> dict:
-    client = TossOpenAPI()
+async def sync_toss(request: Request) -> dict:
+    username = get_current_username(request)
+    client = TossOpenAPI(username=username)
+    if not client.configured:
+        return {"message": "토스증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0}
     try:
         records = await client.sync_holdings()
         toss_accounts = client.last_accounts
     except TossOpenAPIError as exc:
         raise HTTPException(400, str(exc)) from exc
-    data = read_portfolio()
+    data = read_portfolio(username=username)
     cash = data["settings"].setdefault("toss_cash", {})
     cash_balances = data["settings"].setdefault("cash_balances", {})
 
@@ -1255,7 +1280,7 @@ async def sync_toss() -> dict:
                 "source": "toss_api",
                 "account_key": seq_str,
                 "account_no": suffix,
-                "owner": "아빠",
+                "owner": "모두",
             })
 
         toss_map[seq_str] = (account_id, account_name)
@@ -1285,13 +1310,16 @@ async def sync_toss() -> dict:
         holdings.append(normalize_holding(record, account_id, "토스증권", account_name, "toss_api"))
 
     upsert_holdings(data, holdings, replace_source="toss_api")
-    write_portfolio(data)
+    write_portfolio(data, username=username)
     return {"message": f"토스증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
 
 
 @app.post("/api/sync/namoo")
-async def sync_namoo() -> dict:
-    client = NhPlugOpenAPI()
+async def sync_namoo(request: Request) -> dict:
+    username = get_current_username(request)
+    client = NhPlugOpenAPI(username=username)
+    if not client.configured:
+        return {"message": "나무증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0}
     try:
         records = await client.sync_holdings()
     except NhPlugOpenAPIError as exc:
@@ -1299,7 +1327,7 @@ async def sync_namoo() -> dict:
         if "IGW42903" in detail or "거래건수를 초과" in detail:
             detail = "나무증권 API 호출 한도를 초과했습니다(IGW42903). 잠시 후 다시 시도하거나 나무 OpenAPI 포털에서 호출 한도·계정별 제한을 확인해 주세요. 인증키 오류가 아닙니다."
         raise HTTPException(429 if "IGW42903" in str(exc) else 400, detail) from exc
-    data = read_portfolio()
+    data = read_portfolio(username=username)
     cash_balances = data["settings"].setdefault("cash_balances", {})
 
     def resolve_namoo_account(data_accounts, acct_no, default_name):
@@ -1363,25 +1391,27 @@ async def sync_namoo() -> dict:
 
     upsert_holdings(data, holdings, replace_source="nhplug_api")
     data["settings"]["cash_balances"] = cash_balances
-    write_portfolio(data)
+    write_portfolio(data, username=username)
     return {"message": f"나무증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
 
 
 @app.post("/api/fx/refresh")
-async def refresh_fx_rate() -> dict:
+async def refresh_fx_rate(request: Request) -> dict:
+    username = get_current_username(request)
     rate = await fetch_fx_rate_usd_krw()
-    data = read_portfolio()
+    data = read_portfolio(username=username)
     data["settings"]["fx_rates"]["USD"] = rate
     now_str = datetime.now().astimezone().isoformat(timespec="seconds")
     data["settings"]["fx_info"] = {"source": "실시간 웹 환율", "rate": rate, "updated_at": now_str}
     data["settings"]["fx_updated_at"] = now_str
-    write_portfolio(data)
+    write_portfolio(data, username=username)
     return {"message": f"실시간 환율(USD/KRW: {rate:,.1f}원)을 반영했습니다.", "rate": rate}
 
 
 @app.post("/api/refresh-prices")
-async def refresh_prices() -> dict:
-    data = read_portfolio()
+async def refresh_prices(request: Request) -> dict:
+    username = get_current_username(request)
+    data = read_portfolio(username=username)
     if not data["holdings"]:
         raise HTTPException(400, "갱신할 보유종목이 없습니다.")
 

@@ -45,7 +45,13 @@ def read_asset_records(username: str | None = None) -> dict[str, Any]:
     with _LOCK:
         f = _ensure_data_file(username)
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
+            raw = json.loads(f.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                data = {"records": raw, "updated_at": None}
+            elif isinstance(raw, dict):
+                data = raw
+            else:
+                data = deepcopy(EMPTY_RECORDS)
         except (json.JSONDecodeError, OSError):
             data = deepcopy(EMPTY_RECORDS)
         data.setdefault("records", [])

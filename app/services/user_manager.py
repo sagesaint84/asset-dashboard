@@ -225,7 +225,7 @@ def init_empty_portfolio(user_dir: Path, overwrite: bool = False) -> None:
     rec_file = user_dir / "asset_records.json"
     if overwrite or not rec_file.exists():
         with open(rec_file, "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=2)
+            json.dump({"records": [], "updated_at": None}, f, ensure_ascii=False, indent=2)
 
     div_file = user_dir / "dividend_records.json"
     if overwrite or not div_file.exists():

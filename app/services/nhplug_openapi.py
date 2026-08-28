@@ -34,14 +34,20 @@ class NhPlugOpenAPI:
         "170": ("CNY", "NH_CN"),
     }
 
-    def __init__(self) -> None:
+    def __init__(self, username: str = "sagesaint") -> None:
+        self.username = username
+        from app.services.user_openapi import get_user_openapi_config
+        cfg = get_user_openapi_config(username).get("nh", {})
+
         self.base_url = os.getenv("NHPLUG_BASE_URL", "https://api.nhplug.com:8443").rstrip("/")
         self.auth_url = os.getenv("NHPLUG_AUTH_URL", "https://api.nhplug.com:8443").rstrip("/")
-        self.app_key = os.getenv("NHPLUG_APP_KEY", "")
-        self.app_secret = os.getenv("NHPLUG_APP_SECRET", "")
+        self.app_key = cfg.get("app_key", "")
+        self.app_secret = cfg.get("app_secret", "")
         self._validate_url(self.base_url, "NHPLUG_BASE_URL")
         self._validate_url(self.auth_url, "NHPLUG_AUTH_URL")
-        self.token_cache_file = Path(__file__).resolve().parents[2] / "data" / "nhplug_token_cache.json"
+        user_dir = Path(__file__).resolve().parents[2] / "data" / "users" / username
+        user_dir.mkdir(parents=True, exist_ok=True)
+        self.token_cache_file = user_dir / "nhplug_token_cache.json"
         self.last_accounts: list[dict[str, Any]] = []
         self.account_cash: dict[str, dict[str, float]] = {}
 
@@ -61,7 +67,7 @@ class NhPlugOpenAPI:
 
     async def _access_token(self, client: httpx.AsyncClient, force_refresh: bool = False) -> str:
         if not self.configured:
-            raise NhPlugOpenAPIError("나무증권 NHPLUG 앱 키가 설정되지 않았습니다. .env에 app key와 secret을 입력하세요.")
+            raise NhPlugOpenAPIError("나무증권 NHPLUG 앱 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 app key와 secret을 먼저 등록하세요.")
         if not force_refresh:
             try:
                 cached = json.loads(self.token_cache_file.read_text(encoding="utf-8"))
