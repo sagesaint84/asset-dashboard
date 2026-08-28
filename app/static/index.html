@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-mdnpwa" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-multiuser" />
   </head>
   <body>
     <main class="shell">
@@ -24,8 +24,14 @@
           <a class="brand" href="/" aria-label="시작 화면">W</a>
           <div class="title"><p>Human Index INVESTMENT</p><h1>인간지표의 투자 대시보드</h1></div>
         </div>
-        <div class="topbar-actions" style="margin-left:auto;">
+        <div class="topbar-actions" style="margin-left:auto;display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
           <button id="pwaInstallButton" class="button primary compact" type="button" onclick="triggerPwaInstall()" style="display:none;font-size:11.5px;padding:5px 10px;gap:4px;border-radius:8px;background:linear-gradient(135deg, #6366f1, #8b5cf6);color:#fff;border:none;box-shadow:0 2px 8px rgba(99,102,241,0.35);cursor:pointer;">📱 앱 설치</button>
+          <div class="user-pill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid #263558;font-size:12px;color:#dbe4ff;">
+            <span>👤</span> <strong id="topbarUsername">sagesaint</strong>
+          </div>
+          <button id="adminUserBtn" class="button secondary compact" type="button" onclick="openAdminUsersModal()" style="display:none;font-size:11.5px;padding:5px 9px;border-radius:8px;color:#c4b5fd;border-color:#4c3e80;" title="사용자 관리">⚙️ 사용자 관리</button>
+          <button id="changePwBtn" class="button secondary compact" type="button" onclick="openChangePasswordModal()" style="font-size:11.5px;padding:5px 9px;border-radius:8px;color:#aeb8d8;" title="비밀번호 변경">🔑 비번 변경</button>
+          <a href="/logout" class="button secondary compact" style="font-size:11.5px;padding:5px 9px;border-radius:8px;color:#ff8ca0;text-decoration:none;display:inline-flex;align-items:center;" title="로그아웃">로그아웃</a>
         </div>
       </header>
 
@@ -878,7 +884,110 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260828-mdnpwa"></script>
+    <!-- 1) 최초 로그인/초기화 시 비밀번호 변경 강제 모달 -->
+    <dialog id="forcePasswordModal" class="dialog" style="max-width:400px;border:1px solid #7c65dc;box-shadow:0 12px 40px rgba(0,0,0,0.8);">
+      <form id="forcePasswordForm" method="dialog" onsubmit="handleForcePasswordSubmit(event)">
+        <div class="dialog-head">
+          <h2 style="color:#b6a6ff;font-size:17px;display:flex;align-items:center;gap:6px;">⚠️ 비밀번호 변경 필수</h2>
+        </div>
+        <p class="dialog-description" style="margin-top:8px;line-height:1.5;color:#c3cbea;">
+          초기 비밀번호 상태입니다.<br>
+          계정보호를 위해 <strong>새로 사용할 비밀번호(4자 이상)</strong>를 설정해 주세요.
+        </p>
+        <div style="margin:16px 0;display:flex;flex-direction:column;gap:12px;">
+          <label>
+            새 비밀번호
+            <input id="forceNewPassword" type="password" placeholder="새 비밀번호 입력 (4자 이상)" required minlength="4" style="margin-top:4px;" />
+          </label>
+          <label>
+            새 비밀번호 확인
+            <input id="forceNewPasswordConfirm" type="password" placeholder="비밀번호 한 번 더 입력" required minlength="4" style="margin-top:4px;" />
+          </label>
+        </div>
+        <div class="dialog-actions" style="margin-top:18px;">
+          <button class="button primary" type="submit" style="width:100%;">비밀번호 변경 및 대시보드 시작</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 2) 일반 사용자 비밀번호 변경 모달 -->
+    <dialog id="changePasswordModal" class="dialog" style="max-width:380px;">
+      <form id="changePasswordForm" method="dialog" onsubmit="handleChangePasswordSubmit(event)">
+        <div class="dialog-head">
+          <h2>🔑 비밀번호 변경</h2>
+          <button class="close" type="button" onclick="closeDialog('changePasswordModal')">×</button>
+        </div>
+        <div style="margin:16px 0;display:flex;flex-direction:column;gap:12px;">
+          <label>
+            현재 비밀번호
+            <input id="changeOldPassword" type="password" placeholder="현재 비밀번호 입력" required style="margin-top:4px;" />
+          </label>
+          <label>
+            새 비밀번호
+            <input id="changeNewPassword" type="password" placeholder="새 비밀번호 (4자 이상)" required minlength="4" style="margin-top:4px;" />
+          </label>
+          <label>
+            새 비밀번호 확인
+            <input id="changeNewPasswordConfirm" type="password" placeholder="새 비밀번호 확인" required minlength="4" style="margin-top:4px;" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" onclick="closeDialog('changePasswordModal')">취소</button>
+          <button class="button primary" type="submit">변경 완료</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 3) 관리자(Admin) 전용 사용자 관리 모달 -->
+    <dialog id="adminUsersModal" class="dialog" style="max-width:680px;width:95%;">
+      <div style="padding:22px;">
+        <div class="dialog-head" style="margin-bottom:16px;">
+          <h2 style="display:flex;align-items:center;gap:8px;">⚙️ 사용자 계정 관리 <span style="font-size:12px;font-weight:400;color:#91a0c1;">(Admin)</span></h2>
+          <button class="close" type="button" onclick="closeDialog('adminUsersModal')">×</button>
+        </div>
+        
+        <!-- 신규 아이디 추가 영역 -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:14px 16px;margin-bottom:20px;">
+          <h3 style="margin:0 0 10px;font-size:13.5px;color:#b6a6ff;font-weight:700;">➕ 새 사용자 아이디 추가</h3>
+          <form id="adminCreateUserForm" onsubmit="handleAdminCreateUser(event)" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <label style="flex:1;min-width:140px;">
+              아이디
+              <input id="adminNewUsername" type="text" placeholder="예: user2, family" required style="margin-top:4px;" />
+            </label>
+            <label style="width:130px;">
+              초기 비밀번호 (4자리)
+              <input id="adminNewPassword" type="password" placeholder="숫자/문자 4자리" maxlength="4" minlength="4" required style="margin-top:4px;" />
+            </label>
+            <button class="button primary compact" type="submit" style="height:37px;white-space:nowrap;">사용자 등록</button>
+          </form>
+          <small style="display:block;margin-top:8px;color:#91a0c1;font-size:11.5px;">* 생성된 사용자는 첫 로그인 시 새 비밀번호를 필수로 설정해야 합니다.</small>
+        </div>
+
+        <!-- 사용자 목록 테이블 -->
+        <h3 style="margin:0 0 10px;font-size:13.5px;color:#f3f5ff;font-weight:700;">📋 등록된 사용자 목록</h3>
+        <div style="overflow-x:auto;max-height:280px;border:1px solid #263558;border-radius:9px;">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;text-align:left;">
+            <thead>
+              <tr style="background:#091024;color:#91a0c1;border-bottom:1px solid #263558;">
+                <th style="padding:9px 12px;">아이디</th>
+                <th style="padding:9px 12px;">권한</th>
+                <th style="padding:9px 12px;">상태</th>
+                <th style="padding:9px 12px;text-align:center;">관리</th>
+              </tr>
+            </thead>
+            <tbody id="adminUserListTbody">
+              <!-- JS에서 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:20px;">
+          <button class="button secondary" type="button" onclick="closeDialog('adminUsersModal')">닫기</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script src="/static/wealth.js?v=20260828-multiuser"></script>
   </body>
 </html>
 

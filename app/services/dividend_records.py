@@ -15,42 +15,50 @@ from app.services.stock_master import resolve_stock_info
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
-DIVIDEND_FILE = DATA_DIR / "dividend_records.json"
+
+def _get_user_dir(username: str | None = None) -> Path:
+    from app.services.user_manager import get_user_data_dir
+    return get_user_data_dir(username)
+
+def _get_dividend_file(username: str | None = None) -> Path:
+    return _get_user_dir(username) / "dividend_records.json"
 
 
-def _ensure_dividend_file() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not DIVIDEND_FILE.exists():
+def _ensure_dividend_file(username: str | None = None) -> Path:
+    f = _get_dividend_file(username)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    if not f.exists():
         initial = {
             "records": [],
             "updated_at": datetime.now().astimezone().isoformat(),
         }
-        with open(DIVIDEND_FILE, "w", encoding="utf-8") as f:
-            json.dump(initial, f, ensure_ascii=False, indent=2)
+        with open(f, "w", encoding="utf-8") as fp:
+            json.dump(initial, fp, ensure_ascii=False, indent=2)
+    return f
 
 
-def read_dividend_records() -> list[dict[str, Any]]:
-    _ensure_dividend_file()
+def read_dividend_records(username: str | None = None) -> list[dict[str, Any]]:
+    f = _ensure_dividend_file(username)
     try:
-        with open(DIVIDEND_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        with open(f, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
             return data.get("records", [])
     except Exception:
         return []
 
 
-def write_dividend_records(records: list[dict[str, Any]]) -> None:
-    _ensure_dividend_file()
+def write_dividend_records(records: list[dict[str, Any]], username: str | None = None) -> None:
+    f = _ensure_dividend_file(username)
     payload = {
         "records": records,
         "updated_at": datetime.now().astimezone().isoformat(),
     }
-    with open(DIVIDEND_FILE, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    with open(f, "w", encoding="utf-8") as fp:
+        json.dump(payload, fp, ensure_ascii=False, indent=2)
 
 
-def create_dividend_record(payload: dict[str, Any]) -> dict[str, Any]:
-    records = read_dividend_records()
+def create_dividend_record(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    records = read_dividend_records(username)
     now_iso = datetime.now().astimezone().isoformat()
     
     currency = str(payload.get("currency", "KRW")).upper()
@@ -91,12 +99,12 @@ def create_dividend_record(payload: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now_iso,
     }
     records.append(record)
-    write_dividend_records(records)
+    write_dividend_records(records, username)
     return record
 
 
-def update_dividend_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-    records = read_dividend_records()
+def update_dividend_record(record_id: str, payload: dict[str, Any], username: str | None = None) -> dict[str, Any] | None:
+    records = read_dividend_records(username)
     target = None
     for r in records:
         if r.get("id") == record_id:
@@ -129,26 +137,26 @@ def update_dividend_record(record_id: str, payload: dict[str, Any]) -> dict[str,
     target["memo"] = str(payload.get("memo", target.get("memo", ""))).strip()
     target["updated_at"] = datetime.now().astimezone().isoformat()
 
-    write_dividend_records(records)
+    write_dividend_records(records, username)
     return target
 
 
-def delete_dividend_record(record_id: str) -> bool:
-    records = read_dividend_records()
+def delete_dividend_record(record_id: str, username: str | None = None) -> bool:
+    records = read_dividend_records(username)
     initial_len = len(records)
     records = [r for r in records if r.get("id") != record_id]
     if len(records) < initial_len:
-        write_dividend_records(records)
+        write_dividend_records(records, username)
         return True
     return False
 
 
-def clear_dividend_records() -> None:
-    write_dividend_records([])
+def clear_dividend_records(username: str | None = None) -> None:
+    write_dividend_records([], username)
 
 
-def get_actual_dividend_summary(owner: str = "모두", year: int | str | None = None) -> dict[str, Any]:
-    records = read_dividend_records()
+def get_actual_dividend_summary(owner: str = "모두", year: int | str | None = None, username: str | None = None) -> dict[str, Any]:
+    records = read_dividend_records(username)
     
     # 가용 연도 목록 추출
     available_years = sorted(list({str(r.get("date", ""))[:4] for r in records if len(str(r.get("date", ""))) >= 4}), reverse=True)
@@ -269,11 +277,11 @@ def _parse_date(val: Any) -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _get_stock_name_to_code_map() -> dict[str, tuple[str, str]]:
+def _get_stock_name_to_code_map(username: str | None = None) -> dict[str, tuple[str, str]]:
     """보유종목 DB에서 종목명 -> (종목코드, 통화) 매핑 생성."""
     mapping: dict[str, tuple[str, str]] = {}
     try:
-        portfolio_file = DATA_DIR / "portfolio.json"
+        portfolio_file = _get_user_dir(username) / "portfolio.json"
         if portfolio_file.exists():
             with open(portfolio_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -292,7 +300,7 @@ def _get_stock_name_to_code_map() -> dict[str, tuple[str, str]]:
     return mapping
 
 
-def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 1385.0) -> list[dict[str, Any]]:
+def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 1385.0, username: str | None = None) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     
     if filename.lower().endswith(".xlsx"):
@@ -339,7 +347,7 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
             if any(r.values()):
                 rows.append({_clean_str(k): v for k, v in r.items() if k})
 
-    existing_records = read_dividend_records()
+    existing_records = read_dividend_records(username)
     now_iso = datetime.now().astimezone().isoformat()
     imported_records = []
 
@@ -394,14 +402,14 @@ def import_dividend_file_data(content: bytes, filename: str, fx_rate: float = 13
 
     if imported_records:
         existing_records.extend(imported_records)
-        write_dividend_records(existing_records)
+        write_dividend_records(existing_records, username)
 
     return imported_records
 
 
-def recalculate_dividend_historical_fx() -> int:
+def recalculate_dividend_historical_fx(username: str | None = None) -> int:
     """기존 등록된 모든 배당 내역의 환율을 입금일 기준 과거 환율로 일괄 재계산합니다."""
-    records = read_dividend_records()
+    records = read_dividend_records(username)
     updated_count = 0
     now_iso = datetime.now().astimezone().isoformat()
 
@@ -422,5 +430,5 @@ def recalculate_dividend_historical_fx() -> int:
             r["amount_krw"] = round(float(r.get("amount", 0.0)), 0)
 
     if updated_count > 0:
-        write_dividend_records(records)
+        write_dividend_records(records, username)
     return updated_count

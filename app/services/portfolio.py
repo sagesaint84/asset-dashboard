@@ -15,8 +15,14 @@ from openpyxl import load_workbook
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DATA_FILE = ROOT_DIR / "data" / "portfolio.json"
 _LOCK = threading.Lock()
+
+def _get_user_dir(username: str | None = None) -> Path:
+    from app.services.user_manager import get_user_data_dir
+    return get_user_data_dir(username)
+
+def _get_portfolio_file(username: str | None = None) -> Path:
+    return _get_user_dir(username) / "portfolio.json"
 
 EMPTY_PORTFOLIO: dict[str, Any] = {
     "settings": {"fx_rates": {"KRW": 1.0}, "fx_info": {}, "daily_snapshot": {}, "cash_balances": {}},
@@ -43,17 +49,19 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
-def _ensure_data_file() -> None:
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not DATA_FILE.exists():
-        DATA_FILE.write_text(json.dumps(EMPTY_PORTFOLIO, ensure_ascii=False, indent=2), encoding="utf-8")
+def _ensure_data_file(username: str | None = None) -> Path:
+    f = _get_portfolio_file(username)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    if not f.exists():
+        f.write_text(json.dumps(EMPTY_PORTFOLIO, ensure_ascii=False, indent=2), encoding="utf-8")
+    return f
 
 
-def read_portfolio() -> dict[str, Any]:
+def read_portfolio(username: str | None = None) -> dict[str, Any]:
     with _LOCK:
-        _ensure_data_file()
+        f = _ensure_data_file(username)
         try:
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = deepcopy(EMPTY_PORTFOLIO)
         data.setdefault("settings", deepcopy(EMPTY_PORTFOLIO["settings"]))
@@ -77,27 +85,27 @@ def read_portfolio() -> dict[str, Any]:
         return data
 
 
-def write_portfolio(data: dict[str, Any]) -> dict[str, Any]:
+def write_portfolio(data: dict[str, Any], username: str | None = None) -> dict[str, Any]:
     with _LOCK:
-        _ensure_data_file()
+        f = _ensure_data_file(username)
         data["updated_at"] = now_iso()
-        temp_file = DATA_FILE.with_suffix(".json.tmp")
+        temp_file = f.with_suffix(".json.tmp")
         temp_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        temp_file.replace(DATA_FILE)
+        temp_file.replace(f)
         return data
 
 
-def migrate_add_family_group() -> None:
+def migrate_add_family_group(username: str | None = None) -> None:
     """Ensure all account entries have a 'family_group' key.
     Existing accounts without the key will get the default value 'All'."""
-    data = read_portfolio()
+    data = read_portfolio(username)
     modified = False
     for account in data.get('accounts', []):
         if 'family_group' not in account:
             account['family_group'] = 'All'
             modified = True
     if modified:
-        write_portfolio(data)
+        write_portfolio(data, username)
 
 
 
@@ -255,8 +263,8 @@ def upsert_holdings(data: dict[str, Any], holdings: Iterable[dict[str, Any]], re
     return count
 
 
-def get_dashboard() -> dict[str, Any]:
-    data = read_portfolio()
+def get_dashboard(data: dict[str, Any] | None = None, username: str | None = None) -> dict[str, Any]:
+    data = data or read_portfolio(username)
     fx_rates = {key.upper(): to_number(value, 1.0) for key, value in data["settings"]["fx_rates"].items()}
     fx_rates.setdefault("KRW", 1.0)
     usd_rate = fx_rates.get("USD", 1.0)
@@ -290,7 +298,7 @@ def get_dashboard() -> dict[str, Any]:
             "holding_count": 0,
         }
 
-    period_cache_file = ROOT_DIR / "data" / "period_rates.json"
+    period_cache_file = _get_user_dir(username) / "period_rates.json"
     period_rates_data: dict[str, dict[str, float]] = data.get("settings", {}).get("period_rates", {})
     if not period_rates_data and period_cache_file.exists():
         try:
@@ -367,7 +375,7 @@ def get_dashboard() -> dict[str, Any]:
 
     # 1. asset_records.json에서 오늘 이전의 가장 최근 기록 조회
     try:
-        rec_file = ROOT_DIR / "data" / "asset_records.json"
+        rec_file = _get_user_dir(username) / "asset_records.json"
         if rec_file.exists():
             rec_data = json.loads(rec_file.read_text(encoding="utf-8"))
             past_records = [
@@ -605,9 +613,9 @@ def rows_from_upload(filename: str, contents: bytes) -> list[dict[str, Any]]:
     raise ValueError("CSV 인코딩을 읽을 수 없습니다. UTF-8 또는 CP949 파일을 사용하세요.")
 
 
-def import_rows(filename: str, contents: bytes, default_broker: str = "기타 증권사") -> tuple[int, list[str]]:
+def import_rows(filename: str, contents: bytes, default_broker: str = "기타 증권사", username: str | None = None) -> tuple[int, list[str]]:
     rows = rows_from_upload(filename, contents)
-    data = read_portfolio()
+    data = read_portfolio(username)
     normalized: list[dict[str, Any]] = []
     errors: list[str] = []
     for number, row in enumerate(rows, start=2):
@@ -641,7 +649,7 @@ def import_rows(filename: str, contents: bytes, default_broker: str = "기타 �
         h_item["owner"] = owner
         normalized.append(h_item)
     count = upsert_holdings(data, normalized)
-    write_portfolio(data)
+    write_portfolio(data, username)
     return count, errors[:10]
 
 

@@ -10,8 +10,14 @@ from typing import Any
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DATA_FILE = ROOT_DIR / "data" / "asset_records.json"
 _LOCK = threading.Lock()
+
+def _get_user_dir(username: str | None = None) -> Path:
+    from app.services.user_manager import get_user_data_dir
+    return get_user_data_dir(username)
+
+def _get_records_file(username: str | None = None) -> Path:
+    return _get_user_dir(username) / "asset_records.json"
 
 EMPTY_RECORDS: dict[str, Any] = {"records": [], "updated_at": None}
 
@@ -20,10 +26,12 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
-def _ensure_data_file() -> None:
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not DATA_FILE.exists():
-        DATA_FILE.write_text(json.dumps(EMPTY_RECORDS, ensure_ascii=False, indent=2), encoding="utf-8")
+def _ensure_data_file(username: str | None = None) -> Path:
+    f = _get_records_file(username)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    if not f.exists():
+        f.write_text(json.dumps(EMPTY_RECORDS, ensure_ascii=False, indent=2), encoding="utf-8")
+    return f
 
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -33,11 +41,11 @@ def _coerce_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def read_asset_records() -> dict[str, Any]:
+def read_asset_records(username: str | None = None) -> dict[str, Any]:
     with _LOCK:
-        _ensure_data_file()
+        f = _ensure_data_file(username)
         try:
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = deepcopy(EMPTY_RECORDS)
         data.setdefault("records", [])
@@ -52,13 +60,13 @@ def read_asset_records() -> dict[str, Any]:
         return data
 
 
-def write_asset_records(data: dict[str, Any]) -> dict[str, Any]:
+def write_asset_records(data: dict[str, Any], username: str | None = None) -> dict[str, Any]:
     with _LOCK:
-        _ensure_data_file()
+        f = _ensure_data_file(username)
         data["updated_at"] = now_iso()
-        temp_file = DATA_FILE.with_suffix(".json.tmp")
+        temp_file = f.with_suffix(".json.tmp")
         temp_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        temp_file.replace(DATA_FILE)
+        temp_file.replace(f)
         return data
 
 
@@ -85,12 +93,12 @@ def normalize_record(raw: dict[str, Any], preserve_id: bool = False) -> dict[str
     }
 
 
-def list_asset_records() -> list[dict[str, Any]]:
-    return read_asset_records()["records"]
+def list_asset_records(username: str | None = None) -> list[dict[str, Any]]:
+    return read_asset_records(username)["records"]
 
 
-def upsert_asset_record(raw: dict[str, Any], by_date: bool = False) -> dict[str, Any]:
-    data = read_asset_records()
+def upsert_asset_record(raw: dict[str, Any], by_date: bool = False, username: str | None = None) -> dict[str, Any]:
+    data = read_asset_records(username)
     record = normalize_record(raw)
     existing_index = None
     if by_date and record["date"]:
@@ -112,17 +120,17 @@ def upsert_asset_record(raw: dict[str, Any], by_date: bool = False) -> dict[str,
         data["records"].append(record)
     else:
         data["records"][existing_index] = record
-    write_asset_records(data)
+    write_asset_records(data, username)
     return record
 
 
 
-def delete_asset_record(record_id: str) -> bool:
-    data = read_asset_records()
+def delete_asset_record(record_id: str, username: str | None = None) -> bool:
+    data = read_asset_records(username)
     before = len(data["records"])
     data["records"] = [item for item in data["records"] if item.get("id") != record_id]
     if len(data["records"]) == before:
         return False
-    write_asset_records(data)
+    write_asset_records(data, username)
     return True
 

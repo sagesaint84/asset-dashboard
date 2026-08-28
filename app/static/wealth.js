@@ -4240,10 +4240,223 @@ window.addEventListener('resize', () => {
   }, 200);
 });
 
+// ── 21. 멀티유저 인증 세션 및 사용자 관리 (Admin) ───────────────────────────
+let currentUserProfile = null;
+
+async function initAuthSession() {
+  try {
+    const me = await fetchJson('/api/auth/me');
+    currentUserProfile = me;
+    
+    // 상단 사용자명 표시
+    const unameEl = document.getElementById('topbarUsername');
+    if (unameEl && me.username) {
+      unameEl.textContent = me.username;
+    }
+
+    // 관리자 버튼 노출
+    const adminBtn = document.getElementById('adminUserBtn');
+    if (adminBtn) {
+      adminBtn.style.display = (me.role === 'admin') ? 'inline-flex' : 'none';
+    }
+
+    // 초기 비밀번호 상태이면 강제 변경 모달 띄우기
+    if (me.must_change_password) {
+      const forceModal = document.getElementById('forcePasswordModal');
+      if (forceModal) {
+        forceModal.showModal();
+        forceModal.addEventListener('cancel', (e) => e.preventDefault()); // ESC 닫기 방지
+      }
+    }
+  } catch (err) {
+    console.warn('[AUTH] 세션 정보 확인 실패:', err);
+  }
+}
+
+async function handleForcePasswordSubmit(e) {
+  e.preventDefault();
+  const p1 = document.getElementById('forceNewPassword')?.value || '';
+  const p2 = document.getElementById('forceNewPasswordConfirm')?.value || '';
+  if (p1.length < 4) {
+    alert('비밀번호는 최소 4자 이상이어야 합니다.');
+    return;
+  }
+  if (p1 !== p2) {
+    alert('비밀번호 확인이 일치하지 않습니다.');
+    return;
+  }
+  try {
+    await fetchJson('/api/auth/force-change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: p1 })
+    });
+    toast('새 비밀번호가 설정되었습니다!');
+    const modal = document.getElementById('forcePasswordModal');
+    if (modal) modal.close();
+    if (currentUserProfile) currentUserProfile.must_change_password = false;
+  } catch (err) {
+    alert(err.message || '비밀번호 변경에 실패했습니다.');
+  }
+}
+window.handleForcePasswordSubmit = handleForcePasswordSubmit;
+
+function openChangePasswordModal() {
+  const modal = document.getElementById('changePasswordModal');
+  if (modal) {
+    document.getElementById('changeOldPassword').value = '';
+    document.getElementById('changeNewPassword').value = '';
+    document.getElementById('changeNewPasswordConfirm').value = '';
+    modal.showModal();
+  }
+}
+window.openChangePasswordModal = openChangePasswordModal;
+
+async function handleChangePasswordSubmit(e) {
+  e.preventDefault();
+  const oldP = document.getElementById('changeOldPassword')?.value || '';
+  const p1 = document.getElementById('changeNewPassword')?.value || '';
+  const p2 = document.getElementById('changeNewPasswordConfirm')?.value || '';
+  if (p1.length < 4) {
+    alert('새 비밀번호는 최소 4자 이상이어야 합니다.');
+    return;
+  }
+  if (p1 !== p2) {
+    alert('새 비밀번호가 일치하지 않습니다.');
+    return;
+  }
+  try {
+    await fetchJson('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_password: oldP, new_password: p1 })
+    });
+    toast('비밀번호가 성공적으로 변경되었습니다.');
+    const modal = document.getElementById('changePasswordModal');
+    if (modal) modal.close();
+  } catch (err) {
+    alert(err.message || '비밀번호 변경 실패');
+  }
+}
+window.handleChangePasswordSubmit = handleChangePasswordSubmit;
+
+async function openAdminUsersModal() {
+  const modal = document.getElementById('adminUsersModal');
+  if (!modal) return;
+  modal.showModal();
+  await refreshAdminUserList();
+}
+window.openAdminUsersModal = openAdminUsersModal;
+
+async function refreshAdminUserList() {
+  const tbody = document.getElementById('adminUserListTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#91a0c1;">불러오는 중...</td></tr>';
+  try {
+    const res = await fetchJson('/api/admin/users');
+    const users = res.users || [];
+    if (!users.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#91a0c1;">등록된 사용자가 없습니다.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const isSelf = currentUserProfile && currentUserProfile.username === u.username;
+      const isAdminRoot = u.username === 'admin';
+      const statusBadge = u.must_change_password 
+        ? '<span style="color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 6px;border-radius:4px;font-size:11px;">⚠️ 비번변경필요</span>'
+        : '<span style="color:#42d5a3;background:rgba(66,213,163,0.12);padding:2px 6px;border-radius:4px;font-size:11px;">정상</span>';
+
+      return `
+        <tr style="border-bottom:1px solid #1c2742;">
+          <td style="padding:10px 12px;font-weight:700;color:#f3f5ff;">
+            ${escapeHtml(u.username)}
+            ${isSelf ? '<span style="font-size:10px;color:#9d7bff;margin-left:4px;">(나)</span>' : ''}
+          </td>
+          <td style="padding:10px 12px;color:#c3cbea;">${escapeHtml(u.role)}</td>
+          <td style="padding:10px 12px;">${statusBadge}</td>
+          <td style="padding:10px 12px;text-align:center;">
+            <div style="display:inline-flex;gap:6px;">
+              <button type="button" class="button secondary compact" onclick="handleAdminResetUserPw('${escapeHtml(u.username)}')" style="font-size:11px;padding:3px 8px;border-radius:6px;color:#c4b5fd;">비번초기화(4자리)</button>
+              ${isAdminRoot ? '' : `<button type="button" class="button secondary compact" onclick="handleAdminDeleteUser('${escapeHtml(u.username)}')" style="font-size:11px;padding:3px 8px;border-radius:6px;color:#ff718c;">삭제</button>`}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function handleAdminCreateUser(e) {
+  e.preventDefault();
+  const uname = document.getElementById('adminNewUsername')?.value.trim() || '';
+  const pw = document.getElementById('adminNewPassword')?.value.trim() || '';
+  if (!uname) {
+    alert('아이디를 입력하세요.');
+    return;
+  }
+  if (pw.length !== 4) {
+    alert('초기 비밀번호는 정확히 4자리여야 합니다.');
+    return;
+  }
+  try {
+    const res = await fetchJson('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: uname, initial_password: pw })
+    });
+    toast(res.message || '사용자가 등록되었습니다.');
+    document.getElementById('adminNewUsername').value = '';
+    document.getElementById('adminNewPassword').value = '';
+    await refreshAdminUserList();
+  } catch (err) {
+    alert(err.message || '사용자 생성 실패');
+  }
+}
+window.handleAdminCreateUser = handleAdminCreateUser;
+
+async function handleAdminResetUserPw(username) {
+  const newPw = prompt(`[${username}] 계정의 초기 비밀번호(4자리)를 입력하세요:`, '0000');
+  if (newPw === null) return;
+  const cleanPw = newPw.trim();
+  if (cleanPw.length !== 4) {
+    alert('초기화 비밀번호는 정확히 4자리여야 합니다.');
+    return;
+  }
+  try {
+    const res = await fetchJson(`/api/admin/users/${encodeURIComponent(username)}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: cleanPw })
+    });
+    toast(res.message || '비밀번호가 초기화되었습니다.');
+    await refreshAdminUserList();
+  } catch (err) {
+    alert(err.message || '초기화 실패');
+  }
+}
+window.handleAdminResetUserPw = handleAdminResetUserPw;
+
+async function handleAdminDeleteUser(username) {
+  if (!confirm(`정말로 사용자 '${username}' 계정을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  try {
+    const res = await fetchJson(`/api/admin/users/${encodeURIComponent(username)}`, {
+      method: 'DELETE'
+    });
+    toast(res.message || '사용자 계정이 삭제되었습니다.');
+    await refreshAdminUserList();
+  } catch (err) {
+    alert(err.message || '삭제 실패');
+  }
+}
+window.handleAdminDeleteUser = handleAdminDeleteUser;
+
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
 async function bootstrap() {
   initAppTheme();
   initCollapsedSections();
+  await initAuthSession();
   try { await loadFamilyMembers(); } catch (e) {}
   try { await loadDashboard(); } catch (e) { toast(e.message || "대시보드를 불러오지 못했습니다.", true); }
   try { await loadMarkets(); } catch (e) {}

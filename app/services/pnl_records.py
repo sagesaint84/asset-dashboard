@@ -15,42 +15,50 @@ from app.services.stock_master import resolve_stock_info
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
-PNL_FILE = DATA_DIR / "realized_pnl_records.json"
+
+def _get_user_dir(username: str | None = None) -> Path:
+    from app.services.user_manager import get_user_data_dir
+    return get_user_data_dir(username)
+
+def _get_pnl_file(username: str | None = None) -> Path:
+    return _get_user_dir(username) / "realized_pnl_records.json"
 
 
-def _ensure_pnl_file() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not PNL_FILE.exists():
+def _ensure_pnl_file(username: str | None = None) -> Path:
+    f = _get_pnl_file(username)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    if not f.exists():
         initial = {
             "records": [],
             "updated_at": datetime.now().astimezone().isoformat(),
         }
-        with open(PNL_FILE, "w", encoding="utf-8") as f:
-            json.dump(initial, f, ensure_ascii=False, indent=2)
+        with open(f, "w", encoding="utf-8") as fp:
+            json.dump(initial, fp, ensure_ascii=False, indent=2)
+    return f
 
 
-def read_pnl_records() -> list[dict[str, Any]]:
-    _ensure_pnl_file()
+def read_pnl_records(username: str | None = None) -> list[dict[str, Any]]:
+    f = _ensure_pnl_file(username)
     try:
-        with open(PNL_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        with open(f, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
             return data.get("records", [])
     except Exception:
         return []
 
 
-def write_pnl_records(records: list[dict[str, Any]]) -> None:
-    _ensure_pnl_file()
+def write_pnl_records(records: list[dict[str, Any]], username: str | None = None) -> None:
+    f = _ensure_pnl_file(username)
     payload = {
         "records": records,
         "updated_at": datetime.now().astimezone().isoformat(),
     }
-    with open(PNL_FILE, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    with open(f, "w", encoding="utf-8") as fp:
+        json.dump(payload, fp, ensure_ascii=False, indent=2)
 
 
-def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
-    records = read_pnl_records()
+def create_pnl_record(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    records = read_pnl_records(username)
     now_iso = datetime.now().astimezone().isoformat()
     
     currency = str(payload.get("currency", "KRW")).upper()
@@ -96,12 +104,12 @@ def create_pnl_record(payload: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now_iso,
     }
     records.append(record)
-    write_pnl_records(records)
+    write_pnl_records(records, username)
     return record
 
 
-def update_pnl_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-    records = read_pnl_records()
+def update_pnl_record(record_id: str, payload: dict[str, Any], username: str | None = None) -> dict[str, Any] | None:
+    records = read_pnl_records(username)
     target = None
     for r in records:
         if r.get("id") == record_id:
@@ -139,26 +147,26 @@ def update_pnl_record(record_id: str, payload: dict[str, Any]) -> dict[str, Any]
     target["memo"] = str(payload.get("memo", target.get("memo", ""))).strip()
     target["updated_at"] = datetime.now().astimezone().isoformat()
 
-    write_pnl_records(records)
+    write_pnl_records(records, username)
     return target
 
 
-def delete_pnl_record(record_id: str) -> bool:
-    records = read_pnl_records()
+def delete_pnl_record(record_id: str, username: str | None = None) -> bool:
+    records = read_pnl_records(username)
     initial_len = len(records)
     records = [r for r in records if r.get("id") != record_id]
     if len(records) < initial_len:
-        write_pnl_records(records)
+        write_pnl_records(records, username)
         return True
     return False
 
 
-def clear_pnl_records() -> None:
-    write_pnl_records([])
+def clear_pnl_records(username: str | None = None) -> None:
+    write_pnl_records([], username)
 
 
-def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_type: str = "all") -> dict[str, Any]:
-    records = read_pnl_records()
+def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_type: str = "all", username: str | None = None) -> dict[str, Any]:
+    records = read_pnl_records(username)
     
     # 가용 연도 목록 추출
     available_years = sorted(list({str(r.get("date", ""))[:4] for r in records if len(str(r.get("date", ""))) >= 4}), reverse=True)
@@ -303,7 +311,7 @@ def _parse_date(val: Any) -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0) -> list[dict[str, Any]]:
+def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0, username: str | None = None) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     
     if filename.lower().endswith(".xlsx"):
@@ -352,7 +360,7 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
 
     from app.services.stock_master import resolve_stock_info
 
-    existing_records = read_pnl_records()
+    existing_records = read_pnl_records(username)
     now_iso = datetime.now().astimezone().isoformat()
     imported_records = []
 
@@ -413,14 +421,14 @@ def import_pnl_file_data(content: bytes, filename: str, fx_rate: float = 1385.0)
 
     if imported_records:
         existing_records.extend(imported_records)
-        write_pnl_records(existing_records)
+        write_pnl_records(existing_records, username)
 
     return imported_records
 
 
-def recalculate_pnl_historical_fx() -> int:
+def recalculate_pnl_historical_fx(username: str | None = None) -> int:
     """기존에 저장된 매도 실현손익 중 USD 레코드들의 환율과 원화 손익을 매도일자 기준으로 일괄 재계산합니다."""
-    records = read_pnl_records()
+    records = read_pnl_records(username)
     updated_count = 0
     for r in records:
         if str(r.get("currency", "KRW")).upper() == "USD":
@@ -434,5 +442,5 @@ def recalculate_pnl_historical_fx() -> int:
                 r["updated_at"] = datetime.now().astimezone().isoformat()
                 updated_count += 1
     if updated_count > 0:
-        write_pnl_records(records)
+        write_pnl_records(records, username)
     return updated_count
