@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-multiuser" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-adminview" />
   </head>
   <body>
     <main class="shell">
@@ -35,8 +35,90 @@
         </div>
       </header>
 
-      <!-- 1. 주요지수 (상단 마켓 오버뷰 & 기간별 지수 변화 탭) -->
-      <section id="marketPanel" class="panel market-panel" style="margin-top:16px;">
+      <!-- 0. [Admin 전용] 사용자 계정 관리 메인 화면 (admin 로그인 시 단독 노출) -->
+      <section id="adminMainPanel" class="panel" style="display:none;margin-top:20px;border:1px solid #3b2d71;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
+        <div class="panel-head" style="border-bottom:1px solid #263558;padding-bottom:16px;">
+          <div>
+            <p class="eyebrow" style="color:#a78bfa;">SYSTEM ADMINISTRATION</p>
+            <h2 style="font-size:22px;display:flex;align-items:center;gap:10px;">
+              👑 시스템 사용자 계정 관리
+              <span style="font-size:12px;font-weight:600;color:#9d7bff;background:rgba(157,123,255,0.15);padding:3px 9px;border-radius:6px;">Admin Only</span>
+            </h2>
+          </div>
+          <div style="font-size:12px;color:#91a0c1;">
+            각 사용자의 자산 데이터는 <code>data/users/{username}/</code>에 완전 격리되어 안전하게 보관됩니다.
+          </div>
+        </div>
+
+        <!-- 관리자 통계 요약 카드 3종 -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin:20px 0 24px;">
+          <div class="metric-card" style="background:#0e1529;border:1px solid #263558;border-radius:12px;padding:16px 20px;">
+            <div style="font-size:12px;color:#91a0c1;margin-bottom:6px;">총 등록 사용자</div>
+            <div id="adminStatTotalUsers" style="font-size:28px;font-weight:800;color:#f3f5ff;">-</div>
+          </div>
+          <div class="metric-card" style="background:#0e1529;border:1px solid #263558;border-radius:12px;padding:16px 20px;">
+            <div style="font-size:12px;color:#91a0c1;margin-bottom:6px;">정상 활성 사용자</div>
+            <div id="adminStatActiveUsers" style="font-size:28px;font-weight:800;color:#42d5a3;">-</div>
+          </div>
+          <div class="metric-card" style="background:#0e1529;border:1px solid #263558;border-radius:12px;padding:16px 20px;">
+            <div style="font-size:12px;color:#91a0c1;margin-bottom:6px;">초기 비번 변경 대기</div>
+            <div id="adminStatPendingUsers" style="font-size:28px;font-weight:800;color:#f59e0b;">-</div>
+          </div>
+        </div>
+
+        <!-- 1) 신규 사용자 생성 영역 -->
+        <div style="background:#0e1529;border:1px solid #2d3e68;border-radius:12px;padding:20px;margin-bottom:24px;">
+          <h3 style="margin:0 0 12px;font-size:15px;color:#c4b5fd;display:flex;align-items:center;gap:8px;">
+            ➕ 새 사용자 아이디 추가
+          </h3>
+          <form id="adminMainCreateUserForm" onsubmit="handleAdminCreateUser(event)" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <label style="flex:1;min-width:180px;">
+              <span style="display:block;font-size:12px;color:#91a0c1;margin-bottom:6px;">사용자 아이디</span>
+              <input id="adminMainNewUsername" type="text" placeholder="예: user2, family" required style="width:100%;box-sizing:border-box;" />
+            </label>
+            <label style="width:160px;">
+              <span style="display:block;font-size:12px;color:#91a0c1;margin-bottom:6px;">초기 비밀번호 (4자리)</span>
+              <input id="adminMainNewPassword" type="password" placeholder="숫자/문자 4자리" maxlength="4" minlength="4" required style="width:100%;box-sizing:border-box;" />
+            </label>
+            <button class="button primary" type="submit" style="height:42px;white-space:nowrap;padding:0 20px;font-weight:700;">
+              사용자 등록
+            </button>
+          </form>
+          <div style="margin-top:10px;color:#91a0c1;font-size:12px;line-height:1.5;">
+            * 생성된 사용자는 첫 로그인 시 <strong>새 비밀번호(4자 이상) 변경을 필수로 완료</strong>해야 자산 대시보드를 사용할 수 있습니다.<br>
+            * 등록 즉시 <code>data/users/{username}/</code> 격리 폴더가 자동 생성됩니다.
+          </div>
+        </div>
+
+        <!-- 2) 사용자 계정 목록 테이블 -->
+        <div style="margin-top:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h3 style="margin:0;font-size:15px;color:#f3f5ff;">📋 등록된 사용자 계정 목록</h3>
+            <button type="button" class="button secondary compact" onclick="refreshAdminUserList()" style="font-size:11.5px;padding:4px 10px;">🔄 새로고침</button>
+          </div>
+          <div style="overflow-x:auto;border:1px solid #263558;border-radius:10px;background:#091024;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
+              <thead>
+                <tr style="background:#0e1529;color:#91a0c1;border-bottom:1px solid #263558;">
+                  <th style="padding:12px 16px;">아이디</th>
+                  <th style="padding:12px 16px;">권한</th>
+                  <th style="padding:12px 16px;">접속 상태</th>
+                  <th style="padding:12px 16px;">생성일시</th>
+                  <th style="padding:12px 16px;text-align:center;">관리 작업</th>
+                </tr>
+              </thead>
+              <tbody id="adminMainUserListTbody">
+                <!-- JS에서 렌더링 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 자산 관리 전체 래퍼 (admin 로그인 시 제외, 일반 사용자 로그인 시 표시) -->
+      <div id="userAssetDashboardWrapper">
+        <!-- 1. 주요지수 (상단 마켓 오버뷰 & 기간별 지수 변화 탭) -->
+        <section id="marketPanel" class="panel market-panel user-asset-section" style="margin-top:16px;">
         <div class="panel-head market-head" style="flex-wrap:wrap;gap:0.75rem;align-items:center;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <div>
@@ -661,6 +743,7 @@
     <div style="text-align:center; padding-bottom:28px;">
       <p id="updatedAt" class="muted" style="margin:0;font-size:12px;opacity:0.75;">데이터를 불러오는 중입니다.</p>
     </div>
+  </div><!-- end of userAssetDashboardWrapper -->
 
 
     <!-- 가족 구성원 관리 다이얼로그 -->
@@ -987,7 +1070,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260828-multiuser"></script>
+    <script src="/static/wealth.js?v=20260828-adminview"></script>
   </body>
 </html>
 

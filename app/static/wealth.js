@@ -4241,6 +4241,7 @@ window.addEventListener('resize', () => {
 });
 
 // ── 21. 멀티유저 인증 세션 및 사용자 관리 (Admin) ───────────────────────────
+// ── 21. 멀티유저 인증 세션 및 사용자 관리 (Admin) ───────────────────────────
 let currentUserProfile = null;
 
 async function initAuthSession() {
@@ -4248,29 +4249,92 @@ async function initAuthSession() {
     const me = await fetchJson('/api/auth/me');
     currentUserProfile = me;
     
-    // 상단 사용자명 표시
-    const unameEl = document.getElementById('topbarUsername');
-    if (unameEl && me.username) {
-      unameEl.textContent = me.username;
-    }
-
-    // 관리자 버튼 노출
-    const adminBtn = document.getElementById('adminUserBtn');
-    if (adminBtn) {
-      adminBtn.style.display = (me.role === 'admin') ? 'inline-flex' : 'none';
-    }
-
-    // 초기 비밀번호 상태이면 강제 변경 모달 띄우기
+    // 1) 초기 비밀번호 상태이면 강제 변경 모달만 띄우고 진입 대기
     if (me.must_change_password) {
       const forceModal = document.getElementById('forcePasswordModal');
       if (forceModal) {
+        // 배경 패널 모두 숨김 처리하여 완전 차단
+        const wrapper = document.getElementById('userAssetDashboardWrapper');
+        if (wrapper) wrapper.style.display = 'none';
+        const adminPanel = document.getElementById('adminMainPanel');
+        if (adminPanel) adminPanel.style.display = 'none';
+
         forceModal.showModal();
         forceModal.addEventListener('cancel', (e) => e.preventDefault()); // ESC 닫기 방지
       }
+      return false; // 비밀번호 변경 전에는 자산/관리 데이터 로드 중단
     }
+
+    // 2) 정상 계정이면 역할에 따라 화면 분기
+    await applyUserRoleView(me);
+    return true;
   } catch (err) {
     console.warn('[AUTH] 세션 정보 확인 실패:', err);
+    return false;
   }
+}
+
+async function applyUserRoleView(me) {
+  if (!me) return;
+  const isAdminUser = (me.username === 'admin');
+
+  // 상단 사용자명 표시
+  const unameEl = document.getElementById('topbarUsername');
+  if (unameEl) {
+    unameEl.textContent = isAdminUser ? 'admin (시스템 관리자)' : me.username;
+  }
+
+  // 상단 타이틀 커스텀
+  const brandTitle = document.querySelector('.topbar .title h1');
+  const brandEyebrow = document.querySelector('.topbar .title p');
+  if (brandTitle) {
+    brandTitle.textContent = isAdminUser ? '👑 시스템 관리자 - 사용자 계정 관리' : '인간지표의 투자 대시보드';
+  }
+  if (brandEyebrow) {
+    brandEyebrow.textContent = isAdminUser ? 'SYSTEM ADMIN CONSOLE' : 'Human Index INVESTMENT';
+  }
+
+  // 관리자 팝업 버튼 (admin 메인 계정은 메인에 노출되므로 숨김, sagesaint 등 admin 권한 유저는 팝업용 버튼 표시)
+  const adminBtn = document.getElementById('adminUserBtn');
+  if (adminBtn) {
+    adminBtn.style.display = (!isAdminUser && me.role === 'admin') ? 'inline-flex' : 'none';
+  }
+
+  // PWA 설치 버튼은 admin일 때 숨김
+  const pwaBtn = document.getElementById('pwaInstallButton');
+  if (pwaBtn && isAdminUser) {
+    pwaBtn.style.display = 'none';
+  }
+
+  const assetWrapper = document.getElementById('userAssetDashboardWrapper');
+  const adminMainPanel = document.getElementById('adminMainPanel');
+
+  if (isAdminUser) {
+    // 👑 admin 계정: 자산 관리 화면은 완전히 제외하고, 사용자 관리 화면만 노출!
+    if (assetWrapper) assetWrapper.style.display = 'none';
+    if (adminMainPanel) adminMainPanel.style.display = 'block';
+
+    // 관리자 사용자 목록 및 통계 로드
+    await refreshAdminUserList();
+  } else {
+    // 👤 일반 사용자/마스터 사용자(sagesaint 등): 자산 관리 화면 정상 노출
+    if (adminMainPanel) adminMainPanel.style.display = 'none';
+    if (assetWrapper) assetWrapper.style.display = '';
+
+    // 일반 자산 데이터 로드
+    await loadAssetDataForUser();
+  }
+}
+
+async function loadAssetDataForUser() {
+  try { await loadFamilyMembers(); } catch (e) {}
+  try { await loadDashboard(); } catch (e) { toast(e.message || "대시보드를 불러오지 못했습니다.", true); }
+  try { await loadMarkets(); } catch (e) {}
+  try { await loadAssetRecords('모두'); } catch (e) {}
+  try { await loadDividends('모두'); } catch (e) {}
+  try { await loadActualDividends('모두', selectedDividendYear); } catch (e) {}
+  try { await loadRealizedPnl('모두', selectedPnlYear, currentPnlTradeType); } catch (e) {}
+  try { await updateOverviewCardsAllTime('모두'); } catch (e) {}
 }
 
 async function handleForcePasswordSubmit(e) {
@@ -4291,10 +4355,13 @@ async function handleForcePasswordSubmit(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_password: p1 })
     });
-    toast('새 비밀번호가 설정되었습니다!');
+    toast('새 비밀번호가 설정되었습니다! 대시보드로 접속합니다.');
     const modal = document.getElementById('forcePasswordModal');
     if (modal) modal.close();
-    if (currentUserProfile) currentUserProfile.must_change_password = false;
+    if (currentUserProfile) {
+      currentUserProfile.must_change_password = false;
+      await applyUserRoleView(currentUserProfile);
+    }
   } catch (err) {
     alert(err.message || '비밀번호 변경에 실패했습니다.');
   }
@@ -4349,51 +4416,90 @@ async function openAdminUsersModal() {
 window.openAdminUsersModal = openAdminUsersModal;
 
 async function refreshAdminUserList() {
-  const tbody = document.getElementById('adminUserListTbody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#91a0c1;">불러오는 중...</td></tr>';
+  const tbodyMain = document.getElementById('adminMainUserListTbody');
+  const tbodyDialog = document.getElementById('adminUserListTbody');
+
+  const loadingHtml = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#91a0c1;">불러오는 중...</td></tr>';
+  if (tbodyMain) tbodyMain.innerHTML = loadingHtml;
+  if (tbodyDialog) tbodyDialog.innerHTML = loadingHtml;
+
   try {
     const res = await fetchJson('/api/admin/users');
     const users = res.users || [];
+
+    // 통계 카드 업데이트
+    const statTotal = document.getElementById('adminStatTotalUsers');
+    const statActive = document.getElementById('adminStatActiveUsers');
+    const statPending = document.getElementById('adminStatPendingUsers');
+
+    const totalCount = users.length;
+    const pendingCount = users.filter(u => u.must_change_password).length;
+    const activeCount = totalCount - pendingCount;
+
+    if (statTotal) statTotal.textContent = `${totalCount}명`;
+    if (statActive) statActive.textContent = `${activeCount}명`;
+    if (statPending) statPending.textContent = `${pendingCount}명`;
+
     if (!users.length) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#91a0c1;">등록된 사용자가 없습니다.</td></tr>';
+      const emptyHtml = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#91a0c1;">등록된 사용자가 없습니다.</td></tr>';
+      if (tbodyMain) tbodyMain.innerHTML = emptyHtml;
+      if (tbodyDialog) tbodyDialog.innerHTML = emptyHtml;
       return;
     }
-    tbody.innerHTML = users.map(u => {
+
+    const rowsHtml = users.map(u => {
       const isSelf = currentUserProfile && currentUserProfile.username === u.username;
-      const isAdminRoot = u.username === 'admin';
+      const isAdminRoot = (u.username === 'admin');
       const statusBadge = u.must_change_password 
-        ? '<span style="color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 6px;border-radius:4px;font-size:11px;">⚠️ 비번변경필요</span>'
-        : '<span style="color:#42d5a3;background:rgba(66,213,163,0.12);padding:2px 6px;border-radius:4px;font-size:11px;">정상</span>';
+        ? '<span style="color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600;">⚠️ 비번 변경 필요</span>'
+        : '<span style="color:#42d5a3;background:rgba(66,213,163,0.12);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600;">정상 활성</span>';
+
+      const createdAtStr = u.created_at ? u.created_at.substring(0, 10) : '-';
 
       return `
         <tr style="border-bottom:1px solid #1c2742;">
-          <td style="padding:10px 12px;font-weight:700;color:#f3f5ff;">
-            ${escapeHtml(u.username)}
-            ${isSelf ? '<span style="font-size:10px;color:#9d7bff;margin-left:4px;">(나)</span>' : ''}
+          <td style="padding:12px 16px;font-weight:700;color:#f3f5ff;">
+            👤 ${escapeHtml(u.username)}
+            ${isSelf ? '<span style="font-size:10px;color:#9d7bff;margin-left:4px;background:rgba(157,123,255,0.15);padding:1px 5px;border-radius:4px;">(나)</span>' : ''}
           </td>
-          <td style="padding:10px 12px;color:#c3cbea;">${escapeHtml(u.role)}</td>
-          <td style="padding:10px 12px;">${statusBadge}</td>
-          <td style="padding:10px 12px;text-align:center;">
-            <div style="display:inline-flex;gap:6px;">
-              <button type="button" class="button secondary compact" onclick="handleAdminResetUserPw('${escapeHtml(u.username)}')" style="font-size:11px;padding:3px 8px;border-radius:6px;color:#c4b5fd;">비번초기화(4자리)</button>
-              ${isAdminRoot ? '' : `<button type="button" class="button secondary compact" onclick="handleAdminDeleteUser('${escapeHtml(u.username)}')" style="font-size:11px;padding:3px 8px;border-radius:6px;color:#ff718c;">삭제</button>`}
+          <td style="padding:12px 16px;color:#c3cbea;">
+            <span style="background:${u.role === 'admin' ? 'rgba(157,123,255,0.15)' : 'rgba(255,255,255,0.06)'};padding:2px 7px;border-radius:4px;font-size:11.5px;">
+              ${escapeHtml(u.role)}
+            </span>
+          </td>
+          <td style="padding:12px 16px;">${statusBadge}</td>
+          <td style="padding:12px 16px;color:#8593b5;font-size:12px;">${createdAtStr}</td>
+          <td style="padding:12px 16px;text-align:center;">
+            <div style="display:inline-flex;gap:8px;">
+              <button type="button" class="button secondary compact" onclick="handleAdminResetUserPw('${escapeHtml(u.username)}')" style="font-size:11.5px;padding:4px 9px;border-radius:6px;color:#c4b5fd;" title="초기 4자리 비밀번호로 재설정">
+                🔑 비번 초기화(4자리)
+              </button>
+              ${isAdminRoot ? '' : `<button type="button" class="button secondary compact" onclick="handleAdminDeleteUser('${escapeHtml(u.username)}')" style="font-size:11.5px;padding:4px 9px;border-radius:6px;color:#ff718c;" title="계정 및 데이터 삭제">
+                🗑️ 삭제
+              </button>`}
             </div>
           </td>
         </tr>
       `;
     }).join('');
+
+    if (tbodyMain) tbodyMain.innerHTML = rowsHtml;
+    if (tbodyDialog) tbodyDialog.innerHTML = rowsHtml;
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message)}</td></tr>`;
+    const errHtml = `<tr><td colspan="5" style="text-align:center;padding:16px;color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message)}</td></tr>`;
+    if (tbodyMain) tbodyMain.innerHTML = errHtml;
+    if (tbodyDialog) tbodyDialog.innerHTML = errHtml;
   }
 }
 
 async function handleAdminCreateUser(e) {
   e.preventDefault();
-  const uname = document.getElementById('adminNewUsername')?.value.trim() || '';
-  const pw = document.getElementById('adminNewPassword')?.value.trim() || '';
+  // 메인 화면 폼 또는 다이얼로그 폼에서 입력값 읽기
+  const uname = (document.getElementById('adminMainNewUsername')?.value || document.getElementById('adminNewUsername')?.value || '').trim();
+  const pw = (document.getElementById('adminMainNewPassword')?.value || document.getElementById('adminNewPassword')?.value || '').trim();
+
   if (!uname) {
-    alert('아이디를 입력하세요.');
+    alert('사용자 아이디를 입력하세요.');
     return;
   }
   if (pw.length !== 4) {
@@ -4407,8 +4513,13 @@ async function handleAdminCreateUser(e) {
       body: JSON.stringify({ username: uname, initial_password: pw })
     });
     toast(res.message || '사용자가 등록되었습니다.');
-    document.getElementById('adminNewUsername').value = '';
-    document.getElementById('adminNewPassword').value = '';
+
+    // 폼 초기화
+    if (document.getElementById('adminMainNewUsername')) document.getElementById('adminMainNewUsername').value = '';
+    if (document.getElementById('adminMainNewPassword')) document.getElementById('adminMainNewPassword').value = '';
+    if (document.getElementById('adminNewUsername')) document.getElementById('adminNewUsername').value = '';
+    if (document.getElementById('adminNewPassword')) document.getElementById('adminNewPassword').value = '';
+
     await refreshAdminUserList();
   } catch (err) {
     alert(err.message || '사용자 생성 실패');
@@ -4439,7 +4550,7 @@ async function handleAdminResetUserPw(username) {
 window.handleAdminResetUserPw = handleAdminResetUserPw;
 
 async function handleAdminDeleteUser(username) {
-  if (!confirm(`정말로 사용자 '${username}' 계정을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  if (!confirm(`정말로 사용자 '${username}' 계정과 해당 자산 데이터를 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
   try {
     const res = await fetchJson(`/api/admin/users/${encodeURIComponent(username)}`, {
       method: 'DELETE'
@@ -4457,14 +4568,6 @@ async function bootstrap() {
   initAppTheme();
   initCollapsedSections();
   await initAuthSession();
-  try { await loadFamilyMembers(); } catch (e) {}
-  try { await loadDashboard(); } catch (e) { toast(e.message || "대시보드를 불러오지 못했습니다.", true); }
-  try { await loadMarkets(); } catch (e) {}
-  try { await loadAssetRecords('모두'); } catch (e) {}
-  try { await loadDividends('모두'); } catch (e) {}
-  try { await loadActualDividends('모두', selectedDividendYear); } catch (e) {}
-  try { await loadRealizedPnl('모두', selectedPnlYear, currentPnlTradeType); } catch (e) {}
-  try { await updateOverviewCardsAllTime('모두'); } catch (e) {}
 }
 
 if (document.readyState === 'loading') {

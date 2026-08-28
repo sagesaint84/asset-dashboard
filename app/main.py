@@ -170,25 +170,31 @@ LOGIN_PAGE_HTML = """<!DOCTYPE html>
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     path = request.url.path
-    client_host = request.client.host if request.client else ""
-    is_local = client_host in ("127.0.0.1", "localhost", "::1", "testclient")
     
     if path in PUBLIC_PATHS or path.startswith("/static/"):
         return await call_next(request)
     
     user = _get_authenticated_user(request)
     if not user:
-        if is_local:
-            from app.services.user_manager import get_user_by_name
-            user = get_user_by_name("sagesaint") or {"username": "sagesaint", "role": "admin", "must_change_password": False}
-        else:
-            if path.startswith("/api/"):
-                return JSONResponse({"detail": "로그인이 필요합니다."}, status_code=401)
-            return RedirectResponse("/login")
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "로그인이 필요합니다."}, status_code=401)
+        return RedirectResponse("/login")
     
     request.state.username = user["username"]
     request.state.role = user.get("role", "user")
     request.state.must_change_password = bool(user.get("must_change_password", False))
+
+    # 초기 비밀번호 상태(must_change_password)일 때 허용된 경로 이외의 API 호출 차단
+    if request.state.must_change_password:
+        allowed_paths = {
+            "/api/auth/me",
+            "/api/auth/force-change-password",
+            "/logout",
+            "/dashboard",
+            "/",
+        }
+        if path.startswith("/api/") and path not in allowed_paths:
+            return JSONResponse({"detail": "비밀번호 변경이 필요합니다."}, status_code=403)
 
     return await call_next(request)
 
@@ -355,6 +361,17 @@ async def favicon() -> HTMLResponse:
 @app.get("/api/dashboard")
 async def dashboard(request: Request) -> dict:
     username = get_current_username(request)
+    if username == "admin":
+        return {
+            "summary": {"total_value_krw": 0, "total_cost_krw": 0, "profit_krw": 0, "return_rate": 0, "holding_count": 0, "account_count": 0},
+            "holdings": [],
+            "accounts": [],
+            "classifications": [],
+            "currency_summary": {},
+            "fx_rates": {"KRW": 1.0, "USD": 1385.0},
+            "day_change": {"change_krw": 0, "change_rate": 0},
+            "updated_at": datetime.now().astimezone().isoformat(),
+        }
     data = get_dashboard(username=username)
     day = data.get("day_change") or {}
     today = datetime.now().astimezone().date().isoformat()
