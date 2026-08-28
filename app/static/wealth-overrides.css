@@ -1072,8 +1072,43 @@
 #classificationList .classification-row {
   display: block !important;
   width: 100% !important;
-  padding: 8px 4px;
+  padding: 8px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.classification-row.clickable-sector-row,
+.sector-legend-item.clickable-sector-item {
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out;
+  border-radius: 6px;
+}
+.classification-row.clickable-sector-row:hover {
+  background: rgba(142, 112, 250, 0.14) !important;
+  padding-left: 10px !important;
+}
+.sector-legend-item.clickable-sector-item {
+  padding: 2px 4px;
+}
+.sector-legend-item.clickable-sector-item:hover {
+  background: rgba(142, 112, 250, 0.14) !important;
+  border-radius: 4px;
+}
+.clickable-sector-slice {
+  cursor: pointer;
+  transition: opacity 0.15s ease, stroke-width 0.15s ease;
+}
+.clickable-sector-slice:hover {
+  stroke-width: 28px !important;
+  filter: brightness(1.2);
+}
+
+/* 검색창 하이라이트 펄스 애니메이션 */
+@keyframes searchInputPulse {
+  0% { box-shadow: 0 0 0 0 rgba(142, 112, 250, 0.8); border-color: #a78bfa; }
+  50% { box-shadow: 0 0 0 8px rgba(142, 112, 250, 0.35); border-color: #c084fc; }
+  100% { box-shadow: 0 0 0 0 rgba(142, 112, 250, 0); border-color: #30405f; }
+}
+.search-pulse {
+  animation: searchInputPulse 1.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
 .overview-alloc-col .classification-list .classification-row:last-child,
 .classification-list.sector-mode .classification-row:last-child,

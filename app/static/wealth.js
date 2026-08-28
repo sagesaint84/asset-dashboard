@@ -765,8 +765,9 @@ function renderAllocationDonut(items, emptyMsg = "투자자산 데이터가 없�
     const el = `
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${strokeWidth}"
         stroke-dasharray="${dash.toFixed(2)} ${(circumference - dash).toFixed(2)}"
-        stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="round">
-        <title>${s.name}: ${money(s.market_value_krw)} (${(pct * 100).toFixed(1)}%)</title>
+        stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="round"
+        class="clickable-sector-slice" data-sector-filter="${html(s.name)}" style="cursor:pointer;">
+        <title>${s.name}: ${money(s.market_value_krw)} (${(pct * 100).toFixed(1)}%) - 클릭하여 종목 검색</title>
       </circle>
     `;
     offset += dash;
@@ -777,7 +778,7 @@ function renderAllocationDonut(items, emptyMsg = "투자자산 데이터가 없�
   const legendHtml = topItems.map((s, idx) => {
     const color = SECTOR_COLORS[idx % SECTOR_COLORS.length];
     return `
-      <div class="sector-legend-item">
+      <div class="sector-legend-item clickable-sector-item" data-sector-filter="${html(s.name)}" style="cursor:pointer;" title="${html(s.name)} 관련 종목 검색">
         <span style="display:flex;align-items:center;gap:6px;">
           <i class="sector-legend-color" style="background:${color};"></i>
           <strong>${html(s.name)}</strong>
@@ -801,6 +802,40 @@ function renderAllocationDonut(items, emptyMsg = "투자자산 데이터가 없�
   `;
 }
 
+// ── 자산 분류 (섹터/자산군) 클릭 시 보유종목 자동 검색 & 스크롤 연동 ─────────────
+function filterHoldingsByClassification(name) {
+  if (!name) return;
+  const searchInput = $("#searchInput");
+  if (!searchInput) return;
+
+  const currentVal = searchInput.value.trim();
+  // 동일 항목 재클릭 시 검색어 해제(토글)
+  if (currentVal.toLowerCase() === name.toLowerCase()) {
+    searchInput.value = '';
+  } else {
+    searchInput.value = name;
+  }
+
+  if (dashboard) renderHoldings(dashboard);
+
+  // 보유종목 섹션이 접혀있다면 펼침
+  const holdingsPanel = document.getElementById('holdingsPanel');
+  if (holdingsPanel && holdingsPanel.classList.contains('is-collapsed')) {
+    if (typeof toggleSection === 'function') {
+      toggleSection('holdings');
+    }
+  }
+
+  // 보유종목 섹션으로 부드럽게 스크롤 & 검색창 하이라이트
+  if (holdingsPanel) {
+    holdingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  searchInput.focus();
+  searchInput.classList.remove('search-pulse');
+  void searchInput.offsetWidth; // re-flow
+  searchInput.classList.add('search-pulse');
+}
+
 function renderClassifications(items) {
   const list = $("#classificationList");
   const donutWrap = $("#sectorDonutWrap");
@@ -815,7 +850,7 @@ function renderClassifications(items) {
     const sectors = dashboard?.sector_classifications || [];
     renderAllocationDonut(sectors, '섹터별 투자자산 데이터가 없습니다.');
     list.innerHTML = sectors.length ? sectors.map((item) => `
-      <div class="classification-row">
+      <div class="classification-row clickable-sector-row" data-sector-filter="${html(item.name)}" style="cursor:pointer;" title="🔍 클릭하여 '${html(item.name)}' 보유종목 보기">
         <div class="classification-title">
           <strong>${html(item.name)}</strong>
           <span>${number(item.holding_count, 0)}종목 · ${number(item.weight, 1)}%</span>
@@ -831,7 +866,7 @@ function renderClassifications(items) {
     const classes = dashboard?.classifications || items || [];
     renderAllocationDonut(classes, '자산군별 투자자산 데이터가 없습니다.');
     list.innerHTML = classes.length ? classes.map((item) => `
-      <div class="classification-row">
+      <div class="classification-row clickable-sector-row" data-sector-filter="${html(item.name)}" style="cursor:pointer;" title="🔍 클릭하여 '${html(item.name)}' 보유종목 보기">
         <div class="classification-title">
           <strong>${html(item.name)}</strong>
           <span>${number(item.holding_count, 0)}종목 · ${number(item.weight, 1)}%</span>
@@ -1337,9 +1372,10 @@ function bindHeatmapInteractions(container) {
 // ── 6. 보유종목 테이블 (정렬 + 섹터 뱃지 + 인터랙티브 차트 모달) ─────────────
 function renderHoldings(data) {
   const query = $("#searchInput")?.value.trim().toLowerCase() || "";
-  const rows = (data.holdings || []).filter((item) =>
-    [item.name, item.code, item.broker, item.account_name, item.sector].join(" ").toLowerCase().includes(query)
-  );
+  const rows = (data.holdings || []).filter((item) => {
+    const assetClass = typeof classifyHolding === 'function' ? classifyHolding(item) : '';
+    return [item.name, item.code, item.broker, item.account_name, item.sector, assetClass].join(" ").toLowerCase().includes(query);
+  });
 
   const groups = new Map();
   rows.forEach((item) => {
@@ -1991,6 +2027,14 @@ document.addEventListener('click', async (e) => {
   const familyTab = e.target.closest('.family-tabs .family-tab');
   if (familyTab) {
     selectOwner(familyTab.dataset.owner);
+    return;
+  }
+
+  // 🔍 자산분류 항목(섹터/자산군) 클릭 시 보유종목 자동 검색 & 스크롤 연동
+  const sectorItem = e.target.closest('[data-sector-filter]');
+  if (sectorItem) {
+    e.preventDefault();
+    filterHoldingsByClassification(sectorItem.dataset.sectorFilter);
     return;
   }
 
