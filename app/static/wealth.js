@@ -20,16 +20,14 @@ let dashboard = null;
 let rawDashboard = null; // 필터링 전 원본 서버 데이터
 let currentOwner = '모두'; // 선택된 가족 구성원
 
-// ── 가족 구성원 선택 – 탑바 + ACCOUNTS 탭 동기화 ─────────────────────────────
+// ── 가족 구성원 선택 – 모든 섹션(요약/기록/히트맵/배당/손익/보유종목/계좌) 전역 동기화 ───────
 function selectOwner(owner) {
   currentOwner = owner || '모두';
-  document.querySelectorAll('#familyTabs .family-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.owner === currentOwner);
-  });
-  document.querySelectorAll('#topbarFamilyTabs .family-tab').forEach(t => {
+  document.querySelectorAll('.family-tabs .family-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.owner === currentOwner);
   });
   if (rawDashboard) renderWithOwner(rawDashboard, currentOwner);
+  loadAssetRecords(currentOwner);
   loadDividends(currentOwner);
   loadActualDividends(currentOwner, selectedDividendYear);
   loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
@@ -1942,16 +1940,27 @@ function updateOwnerSelectOptions(members) {
   });
 }
 
+const FAMILY_TAB_CONTAINER_IDS = [
+  'topbarFamilyTabs',
+  'recordsFamilyTabs',
+  'heatmapFamilyTabs',
+  'dividendFamilyTabs',
+  'pnlFamilyTabs',
+  'holdingsFamilyTabs',
+  'familyTabs',
+];
+
 function renderFamilyTabs(members) {
   const allBtn = '<button type="button" class="family-tab' + (currentOwner === '모두' ? ' active' : '') + '" data-owner="모두">모두</button>';
   const memberBtns = members.map(m =>
     '<button type="button" class="family-tab' + (currentOwner === m ? ' active' : '') + '" data-owner="' + m + '">' + m + '</button>'
   ).join('');
   const inner = allBtn + memberBtns;
-  const container = document.getElementById('familyTabs');
-  if (container) container.innerHTML = inner;
-  const topbar = document.getElementById('topbarFamilyTabs');
-  if (topbar) topbar.innerHTML = inner;
+
+  FAMILY_TAB_CONTAINER_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = inner;
+  });
 }
 
 // ── 전역 클릭 이벤트 위임 ───────────────────────────────────────────────────
@@ -1977,11 +1986,12 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 가족 탭 선택
-  const accountsTab = e.target.closest('#familyTabs .family-tab');
-  if (accountsTab) { selectOwner(accountsTab.dataset.owner); return; }
-  const topbarTab = e.target.closest('#topbarFamilyTabs .family-tab');
-  if (topbarTab) { selectOwner(topbarTab.dataset.owner); return; }
+  // 가족 탭 선택 (모든 섹션 전역 연동)
+  const familyTab = e.target.closest('.family-tabs .family-tab');
+  if (familyTab) {
+    selectOwner(familyTab.dataset.owner);
+    return;
+  }
 
   // ⚙️ 가족 관리 모달 열기
   if (e.target.closest('#manageFamilyBtn')) {
@@ -4350,7 +4360,7 @@ function initAppTheme() {
 // ── 섹션 접기 / 펼치기 관리 (Accordion / Collapse) ───────────────────────────
 const SECTION_MAP = {
   summary: '#summaryPanel',
-  allocation: '#allocationPanel',
+  allocation: '#summaryPanel',
   records: '#recordsPanel',
   heatmap: '#assetHeatmapPanel',
   dividend: '#dividendPanel',
