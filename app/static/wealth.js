@@ -4661,12 +4661,14 @@ async function openUserOpenApiModal() {
     
     // 토스
     const tossBadge = document.getElementById('openapiTossBadge');
+    const tossDelBtn = document.getElementById('openapiTossDeleteBtn');
     if (config.toss && config.toss.configured) {
       if (tossBadge) {
         tossBadge.textContent = '연결됨';
         tossBadge.style.background = 'rgba(66,213,163,0.15)';
         tossBadge.style.color = '#42d5a3';
       }
+      if (tossDelBtn) tossDelBtn.style.display = 'inline-flex';
       if (tossKey) tossKey.value = config.toss.app_key || '';
       if (tossSec) tossSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
     } else {
@@ -4675,17 +4677,20 @@ async function openUserOpenApiModal() {
         tossBadge.style.background = 'rgba(255,255,255,0.06)';
         tossBadge.style.color = '#91a0c1';
       }
+      if (tossDelBtn) tossDelBtn.style.display = 'none';
       if (tossSec) tossSec.placeholder = 'Client Secret 입력';
     }
 
     // KB
     const kbBadge = document.getElementById('openapiKbBadge');
+    const kbDelBtn = document.getElementById('openapiKbDeleteBtn');
     if (config.kb && config.kb.configured) {
       if (kbBadge) {
         kbBadge.textContent = '연결됨';
         kbBadge.style.background = 'rgba(66,213,163,0.15)';
         kbBadge.style.color = '#42d5a3';
       }
+      if (kbDelBtn) kbDelBtn.style.display = 'inline-flex';
       if (kbKey) kbKey.value = config.kb.app_key || '';
       if (kbSec) kbSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
     } else {
@@ -4694,17 +4699,20 @@ async function openUserOpenApiModal() {
         kbBadge.style.background = 'rgba(255,255,255,0.06)';
         kbBadge.style.color = '#91a0c1';
       }
+      if (kbDelBtn) kbDelBtn.style.display = 'none';
       if (kbSec) kbSec.placeholder = 'KB App Secret 입력';
     }
 
     // NH (나무)
     const nhBadge = document.getElementById('openapiNhBadge');
+    const nhDelBtn = document.getElementById('openapiNhDeleteBtn');
     if (config.nh && config.nh.configured) {
       if (nhBadge) {
         nhBadge.textContent = '연결됨';
         nhBadge.style.background = 'rgba(66,213,163,0.15)';
         nhBadge.style.color = '#42d5a3';
       }
+      if (nhDelBtn) nhDelBtn.style.display = 'inline-flex';
       if (nhKey) nhKey.value = config.nh.app_key || '';
       if (nhSec) nhSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
     } else {
@@ -4713,6 +4721,7 @@ async function openUserOpenApiModal() {
         nhBadge.style.background = 'rgba(255,255,255,0.06)';
         nhBadge.style.color = '#91a0c1';
       }
+      if (nhDelBtn) nhDelBtn.style.display = 'none';
       if (nhSec) nhSec.placeholder = '나무 App Secret 입력';
     }
   } catch (err) {
@@ -4720,6 +4729,23 @@ async function openUserOpenApiModal() {
   }
 }
 window.openUserOpenApiModal = openUserOpenApiModal;
+
+async function handleDeleteBrokerApi(broker) {
+  const names = { toss: '토스증권', kb: 'KB증권', nh: '나무증권' };
+  const bname = names[broker] || broker;
+  if (!confirm(`정말로 ${bname} OpenAPI 키와 시크릿을 삭제(연결 해제)하시겠습니까?`)) return;
+
+  try {
+    const res = await api(`/api/user/openapi-config/${encodeURIComponent(broker)}`, {
+      method: 'DELETE'
+    });
+    toast(res.message || `${bname} OpenAPI 키가 삭제되었습니다.`);
+    await openUserOpenApiModal();
+  } catch (err) {
+    alert(err.message || '삭제 실패');
+  }
+}
+window.handleDeleteBrokerApi = handleDeleteBrokerApi;
 
 async function handleSaveUserOpenApi(e) {
   if (e) e.preventDefault();

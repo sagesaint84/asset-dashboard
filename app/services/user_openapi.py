@@ -56,27 +56,63 @@ def get_user_openapi_config(username: str) -> dict[str, dict[str, str]]:
     }
 
 
-def save_user_openapi_config(username: str, update_data: dict[str, dict[str, str]]) -> dict[str, Any]:
-    """사용자의 OpenAPI 설정을 저장합니다. 마스킹된 값(****)은 기존 값을 보존합니다."""
+def delete_user_broker_openapi(username: str, broker: str) -> dict[str, Any]:
+    """특정 증권사의 OpenAPI 키, 시크릿 및 캐시 토큰을 완전히 삭제합니다."""
+    current = get_user_openapi_config(username)
+    if broker in current:
+        current[broker] = {"app_key": "", "app_secret": ""}
+
+    file_path = _get_user_openapi_file(username)
+    file_path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 토큰 캐시 파일도 함께 삭제하여 깨끗하게 초기화
+    user_dir = USERS_DIR / username
+    cache_map = {
+        "toss": "toss_token_cache.json",
+        "kb": "kb_token_cache.json",
+        "nh": "nhplug_token_cache.json",
+    }
+    c_filename = cache_map.get(broker)
+    if c_filename:
+        c_file = user_dir / c_filename
+        if c_file.exists():
+            try:
+                c_file.unlink()
+            except OSError:
+                pass
+
+    logger.info("사용자 %s의 %s OpenAPI 설정 및 토큰 캐시 삭제 완료", username, broker)
+    return current
+
+
+def save_user_openapi_config(username: str, update_data: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """사용자의 OpenAPI 설정을 저장합니다. 마스킹된 값(****)이나 빈 시크릿은 기존 값을 보존합니다."""
     current = get_user_openapi_config(username)
 
     for broker in ("toss", "kb", "nh"):
         if broker in update_data:
             b_data = update_data[broker]
             current.setdefault(broker, {})
-            
-            # app_key
-            new_key = b_data.get("app_key", "").strip()
+
+            # 1) 명시적 삭제 플래그가 있는 경우
+            if b_data.get("delete") is True:
+                delete_user_broker_openapi(username, broker)
+                current[broker] = {"app_key": "", "app_secret": ""}
+                continue
+
+            # 2) app_key 처리
+            new_key = str(b_data.get("app_key", "")).strip()
             if new_key and not new_key.endswith("****"):
                 current[broker]["app_key"] = new_key
             elif new_key == "":
                 current[broker]["app_key"] = ""
 
-            # app_secret
-            new_sec = b_data.get("app_secret", "").strip()
+            # 3) app_secret 처리: 새 값이 들어왔을 때만 변경 (비어있거나 '********'이면 기존값 보존)
+            new_sec = str(b_data.get("app_secret", "")).strip()
             if new_sec and not new_sec.startswith("****") and new_sec != "********":
                 current[broker]["app_secret"] = new_sec
-            elif new_sec == "":
+            elif new_key == "" and new_sec == "":
+                # 둘 다 명시적으로 빈 칸으로 제출한 경우 삭제로 처리
                 current[broker]["app_secret"] = ""
 
     file_path = _get_user_openapi_file(username)

@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-v431" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-v433" />
   </head>
   <body>
     <main class="shell">
@@ -1094,7 +1094,10 @@
               <span style="font-weight:700;color:#60a5fa;font-size:13.5px;display:flex;align-items:center;gap:6px;">
                 🟦 토스증권 (Toss)
               </span>
-              <span id="openapiTossBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span id="openapiTossBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+                <button id="openapiTossDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('toss')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="토스증권 연결 삭제">🗑️ 삭제</button>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <div>
@@ -1114,7 +1117,10 @@
               <span style="font-weight:700;color:#facc15;font-size:13.5px;display:flex;align-items:center;gap:6px;">
                 🟨 KB증권
               </span>
-              <span id="openapiKbBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span id="openapiKbBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+                <button id="openapiKbDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kb')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="KB증권 연결 삭제">🗑️ 삭제</button>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <div>
@@ -1134,7 +1140,10 @@
               <span style="font-weight:700;color:#4ade80;font-size:13.5px;display:flex;align-items:center;gap:6px;">
                 🟩 NH투자증권 (나무)
               </span>
-              <span id="openapiNhBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span id="openapiNhBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+                <button id="openapiNhDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('nh')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="나무증권 연결 삭제">🗑️ 삭제</button>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <div>
@@ -1162,7 +1171,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260828-v431"></script>
+    <script src="/static/wealth.js?v=20260828-v433"></script>
   </body>
 </html>
 

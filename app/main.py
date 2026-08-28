@@ -391,6 +391,20 @@ async def save_user_openapi_keys(request: Request) -> dict:
     return {"message": "증권사 OpenAPI 키가 안전하게 저장되었습니다."}
 
 
+@app.delete("/api/user/openapi-config/{broker}")
+async def delete_user_openapi_broker(broker: str, request: Request) -> dict:
+    """현재 로그인한 사용자의 특정 증권사 OpenAPI 설정 및 토큰 삭제"""
+    username = get_current_username(request)
+    if broker not in ("toss", "kb", "nh"):
+        raise HTTPException(status_code=400, detail="유효하지 않은 증권사입니다.")
+    from app.services.user_openapi import delete_user_broker_openapi
+    delete_user_broker_openapi(username, broker)
+    broker_names = {"toss": "토스증권", "kb": "KB증권", "nh": "나무증권"}
+    bname = broker_names.get(broker, broker)
+    return {"message": f"{bname} OpenAPI 키 및 시크릿이 삭제되었습니다."}
+
+
+
 
 @app.get("/api/admin/users")
 async def admin_list_users(request: Request) -> dict:

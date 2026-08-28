@@ -1,3 +1,10 @@
+v4.3.3
+
+(feat) 증권사별 OpenAPI AppKey 및 AppSecret 개별 삭제(연결 해제) 기능 탑재
+(feat) 증권사 키 삭제 시 해당 증권사 토큰 캐시 파일 자동 정리
+(feat) OpenAPI 모달 내 연결된 증권사 카드에 [🗑️ 삭제] 버튼 노출 및 확인 팝업 연동
+(perf) 서비스 워커 캐시 버전(wealth-cache-v8) 및 스크립트 쿼리(v433) 갱신
+
 v4.3.2
 
 (fix) 일괄 계좌 연결(POST /api/sync/all) 호출 시 request 누락(TypeError) 및 import uuid 누락(NameError) 해결
