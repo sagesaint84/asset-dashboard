@@ -2329,3 +2329,12 @@ dialog.dialog .dialog-actions {
   color: #7c3aed !important;
 }
 
+/* ── 강제 비밀번호 변경 모달 백드롭 및 전용 스타일 ── */
+#forcePasswordModal::backdrop {
+  background: rgba(4, 7, 18, 0.92) !important;
+  backdrop-filter: blur(10px) !important;
+}
+#forcePasswordModal {
+  color: #f3f5ff !important;
+}
+

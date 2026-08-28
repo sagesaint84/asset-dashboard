@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-adminview" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260828-v411" />
   </head>
   <body>
     <main class="shell">
@@ -968,27 +968,27 @@
     </dialog>
 
     <!-- 1) 최초 로그인/초기화 시 비밀번호 변경 강제 모달 -->
-    <dialog id="forcePasswordModal" class="dialog" style="max-width:400px;border:1px solid #7c65dc;box-shadow:0 12px 40px rgba(0,0,0,0.8);">
-      <form id="forcePasswordForm" method="dialog" onsubmit="handleForcePasswordSubmit(event)">
-        <div class="dialog-head">
-          <h2 style="color:#b6a6ff;font-size:17px;display:flex;align-items:center;gap:6px;">⚠️ 비밀번호 변경 필수</h2>
+    <dialog id="forcePasswordModal" class="dialog" style="position:fixed;inset:0;margin:auto;max-width:440px;width:92%;background:#0d1429;border:1px solid #7c65dc;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.9);z-index:99999;padding:24px;">
+      <form id="forcePasswordForm" onsubmit="handleForcePasswordSubmit(event); return false;">
+        <div class="dialog-head" style="margin-bottom:12px;">
+          <h2 style="color:#c4b5fd;font-size:18px;display:flex;align-items:center;gap:8px;margin:0;">⚠️ 초기 비밀번호 변경 필수</h2>
         </div>
-        <p class="dialog-description" style="margin-top:8px;line-height:1.5;color:#c3cbea;">
-          초기 비밀번호 상태입니다.<br>
-          계정보호를 위해 <strong>새로 사용할 비밀번호(4자 이상)</strong>를 설정해 주세요.
+        <p class="dialog-description" style="margin:0 0 16px;line-height:1.6;color:#c3cbea;font-size:13px;">
+          현재 <strong>초기 비밀번호 상태</strong>입니다.<br>
+          계정 보호를 위해 <strong>새로 사용할 비밀번호(4자 이상)</strong>를 설정해 주세요. 변경 완료 후 바로 시스템에 접속됩니다.
         </p>
-        <div style="margin:16px 0;display:flex;flex-direction:column;gap:12px;">
-          <label>
-            새 비밀번호
-            <input id="forceNewPassword" type="password" placeholder="새 비밀번호 입력 (4자 이상)" required minlength="4" style="margin-top:4px;" />
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <label style="display:block;">
+            <span style="display:block;font-size:12px;color:#91a0c1;margin-bottom:4px;">새 비밀번호</span>
+            <input id="forceNewPassword" type="password" placeholder="새 비밀번호 입력 (4자 이상)" required minlength="4" style="width:100%;box-sizing:border-box;" autofocus />
           </label>
-          <label>
-            새 비밀번호 확인
-            <input id="forceNewPasswordConfirm" type="password" placeholder="비밀번호 한 번 더 입력" required minlength="4" style="margin-top:4px;" />
+          <label style="display:block;">
+            <span style="display:block;font-size:12px;color:#91a0c1;margin-bottom:4px;">새 비밀번호 확인</span>
+            <input id="forceNewPasswordConfirm" type="password" placeholder="비밀번호 한 번 더 입력" required minlength="4" style="width:100%;box-sizing:border-box;" />
           </label>
         </div>
-        <div class="dialog-actions" style="margin-top:18px;">
-          <button class="button primary" type="submit" style="width:100%;">비밀번호 변경 및 대시보드 시작</button>
+        <div class="dialog-actions" style="margin-top:22px;">
+          <button class="button primary" type="submit" style="width:100%;padding:12px;font-size:14.5px;font-weight:700;">비밀번호 변경 및 시작하기</button>
         </div>
       </form>
     </dialog>
@@ -1070,7 +1070,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260828-adminview"></script>
+    <script src="/static/wealth.js?v=20260828-v411"></script>
   </body>
 </html>
 

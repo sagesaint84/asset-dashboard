@@ -353,6 +353,9 @@ async function api(url, options = {}) {
   return result;
 }
 
+const fetchJson = api;
+window.fetchJson = api;
+
 let toastTimer;
 function toast(message, isError = false) {
   const element = $("#toast");
@@ -4241,25 +4244,28 @@ window.addEventListener('resize', () => {
 });
 
 // ── 21. 멀티유저 인증 세션 및 사용자 관리 (Admin) ───────────────────────────
-// ── 21. 멀티유저 인증 세션 및 사용자 관리 (Admin) ───────────────────────────
 let currentUserProfile = null;
 
 async function initAuthSession() {
   try {
-    const me = await fetchJson('/api/auth/me');
+    console.log('[AUTH] 세션 검증 시작...');
+    const me = await api('/api/auth/me');
+    console.log('[AUTH] 로그인 사용자 정보:', me);
     currentUserProfile = me;
     
-    // 1) 초기 비밀번호 상태이면 강제 변경 모달만 띄우고 진입 대기
+    // 1) 초기 비밀번호 상태이면 강제 변경 모달만 띄우고 모든 패널 가림
     if (me.must_change_password) {
+      console.warn('[AUTH] 초기 비밀번호 강제 변경 상태 감지');
+      const wrapper = document.getElementById('userAssetDashboardWrapper');
+      if (wrapper) wrapper.style.display = 'none';
+      const adminPanel = document.getElementById('adminMainPanel');
+      if (adminPanel) adminPanel.style.display = 'none';
+
       const forceModal = document.getElementById('forcePasswordModal');
       if (forceModal) {
-        // 배경 패널 모두 숨김 처리하여 완전 차단
-        const wrapper = document.getElementById('userAssetDashboardWrapper');
-        if (wrapper) wrapper.style.display = 'none';
-        const adminPanel = document.getElementById('adminMainPanel');
-        if (adminPanel) adminPanel.style.display = 'none';
-
-        forceModal.showModal();
+        if (!forceModal.open) {
+          try { forceModal.showModal(); } catch (e) { forceModal.setAttribute('open', ''); }
+        }
         forceModal.addEventListener('cancel', (e) => e.preventDefault()); // ESC 닫기 방지
       }
       return false; // 비밀번호 변경 전에는 자산/관리 데이터 로드 중단
@@ -4269,7 +4275,7 @@ async function initAuthSession() {
     await applyUserRoleView(me);
     return true;
   } catch (err) {
-    console.warn('[AUTH] 세션 정보 확인 실패:', err);
+    console.error('[AUTH] 세션 정보 확인 실패:', err);
     return false;
   }
 }
@@ -4277,6 +4283,7 @@ async function initAuthSession() {
 async function applyUserRoleView(me) {
   if (!me) return;
   const isAdminUser = (me.username === 'admin');
+  console.log('[AUTH] 화면 뷰 분기 적용 - isAdminUser:', isAdminUser, 'username:', me.username);
 
   // 상단 사용자명 표시
   const unameEl = document.getElementById('topbarUsername');
@@ -4338,7 +4345,7 @@ async function loadAssetDataForUser() {
 }
 
 async function handleForcePasswordSubmit(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   const p1 = document.getElementById('forceNewPassword')?.value || '';
   const p2 = document.getElementById('forceNewPasswordConfirm')?.value || '';
   if (p1.length < 4) {
@@ -4350,14 +4357,16 @@ async function handleForcePasswordSubmit(e) {
     return;
   }
   try {
-    await fetchJson('/api/auth/force-change-password', {
+    await api('/api/auth/force-change-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_password: p1 })
     });
-    toast('새 비밀번호가 설정되었습니다! 대시보드로 접속합니다.');
+    toast('새 비밀번호가 설정되었습니다! 화면으로 접속합니다.');
     const modal = document.getElementById('forcePasswordModal');
-    if (modal) modal.close();
+    if (modal) {
+      try { modal.close(); } catch (e) { modal.removeAttribute('open'); }
+    }
     if (currentUserProfile) {
       currentUserProfile.must_change_password = false;
       await applyUserRoleView(currentUserProfile);
@@ -4380,7 +4389,7 @@ function openChangePasswordModal() {
 window.openChangePasswordModal = openChangePasswordModal;
 
 async function handleChangePasswordSubmit(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   const oldP = document.getElementById('changeOldPassword')?.value || '';
   const p1 = document.getElementById('changeNewPassword')?.value || '';
   const p2 = document.getElementById('changeNewPasswordConfirm')?.value || '';
@@ -4393,7 +4402,7 @@ async function handleChangePasswordSubmit(e) {
     return;
   }
   try {
-    await fetchJson('/api/auth/change-password', {
+    await api('/api/auth/change-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ old_password: oldP, new_password: p1 })
@@ -4424,7 +4433,7 @@ async function refreshAdminUserList() {
   if (tbodyDialog) tbodyDialog.innerHTML = loadingHtml;
 
   try {
-    const res = await fetchJson('/api/admin/users');
+    const res = await api('/api/admin/users');
     const users = res.users || [];
 
     // 통계 카드 업데이트
@@ -4493,7 +4502,7 @@ async function refreshAdminUserList() {
 }
 
 async function handleAdminCreateUser(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
   // 메인 화면 폼 또는 다이얼로그 폼에서 입력값 읽기
   const uname = (document.getElementById('adminMainNewUsername')?.value || document.getElementById('adminNewUsername')?.value || '').trim();
   const pw = (document.getElementById('adminMainNewPassword')?.value || document.getElementById('adminNewPassword')?.value || '').trim();
@@ -4507,7 +4516,7 @@ async function handleAdminCreateUser(e) {
     return;
   }
   try {
-    const res = await fetchJson('/api/admin/users', {
+    const res = await api('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: uname, initial_password: pw })
@@ -4536,7 +4545,7 @@ async function handleAdminResetUserPw(username) {
     return;
   }
   try {
-    const res = await fetchJson(`/api/admin/users/${encodeURIComponent(username)}/reset-password`, {
+    const res = await api(`/api/admin/users/${encodeURIComponent(username)}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_password: cleanPw })
@@ -4552,7 +4561,7 @@ window.handleAdminResetUserPw = handleAdminResetUserPw;
 async function handleAdminDeleteUser(username) {
   if (!confirm(`정말로 사용자 '${username}' 계정과 해당 자산 데이터를 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
   try {
-    const res = await fetchJson(`/api/admin/users/${encodeURIComponent(username)}`, {
+    const res = await api(`/api/admin/users/${encodeURIComponent(username)}`, {
       method: 'DELETE'
     });
     toast(res.message || '사용자 계정이 삭제되었습니다.');

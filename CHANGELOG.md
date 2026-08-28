@@ -1,3 +1,10 @@
+v4.1.1
+
+(fix) 프론트엔드 API 통신 헬퍼(api) 누락 바인딩 수정 및 fetchJson 별칭 연동
+(fix) 서비스 워커 캐시 버전(wealth-cache-v4) 갱신 및 구버전 JS/CSS 클라이언트 캐시 자동 무효화
+(fix) 초기 비밀번호 강제 변경 모달(#forcePasswordModal) 백드롭 스타일 및 중앙 팝업 레이아웃 보강
+(fix) admin 로그인 시 비동기 세션 검증 후 화면 분기(applyUserRoleView) 안정화
+
 v4.1.0
 
 (feat) admin 로그인 시 자산관리 화면 제외 및 사용자 관리 메인 전용 대시보드(#adminMainPanel) 노출
