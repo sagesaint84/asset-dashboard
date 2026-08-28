@@ -249,16 +249,18 @@ def _calculate_market_periods(
     current_price: float,
     quotes_5m: list[float] | None = None,
     quotes_60m: list[float] | None = None,
+    quotes_monthly: list[float] | None = None,
 ) -> dict[str, Any]:
     """
     valid_quotes_1y: [(timestamp, close_price), ...]
     quotes_5m: 당일 5분봉 종가 리스트
     quotes_60m: 1주 60분봉 종가 리스트
+    quotes_monthly: 전체 월봉(1mo) 종가 리스트 (3Y/5Y/10Y/MAX 장기용)
     """
     p = current_price or (valid_quotes_1y[-1][1] if valid_quotes_1y else (quotes_5m[-1] if quotes_5m else 0.0))
-    if not valid_quotes_1y and not quotes_5m:
+    if not valid_quotes_1y and not quotes_5m and not quotes_monthly:
         empty_stat = {"change": 0.0, "change_rate": 0.0, "series": [p, p] if p else []}
-        return {k: empty_stat for k in ["1D", "1W", "1M", "3M", "YTD", "1Y"]}
+        return {k: empty_stat for k in ["1D", "1W", "1M", "3M", "YTD", "1Y", "3Y", "5Y", "10Y", "MAX", "ALL"]}
 
     now = datetime.now()
     cur_year = now.year
@@ -316,6 +318,33 @@ def _calculate_market_periods(
     diff_1y = last_price - base_1y
     rate_1y = (diff_1y / base_1y * 100) if base_1y else 0.0
 
+    # ── 월봉 기반 장기/전체 기간 (3Y, 5Y, 10Y, MAX) ─────────────────────────
+    qm = quotes_monthly or []
+
+    # 3Y: 최근 37개월
+    sub_3y = qm[-37:] if len(qm) >= 2 else (sub_1y or [last_price, last_price])
+    base_3y = sub_3y[0] if sub_3y else last_price
+    diff_3y = last_price - base_3y
+    rate_3y = (diff_3y / base_3y * 100) if base_3y else 0.0
+
+    # 5Y: 최근 61개월
+    sub_5y = qm[-61:] if len(qm) >= 2 else sub_3y
+    base_5y = sub_5y[0] if sub_5y else last_price
+    diff_5y = last_price - base_5y
+    rate_5y = (diff_5y / base_5y * 100) if base_5y else 0.0
+
+    # 10Y: 최근 121개월
+    sub_10y = qm[-121:] if len(qm) >= 2 else sub_5y
+    base_10y = sub_10y[0] if sub_10y else last_price
+    diff_10y = last_price - base_10y
+    rate_10y = (diff_10y / base_10y * 100) if base_10y else 0.0
+
+    # MAX: 전체 월봉 (지수 전체 역사)
+    sub_max = qm if len(qm) >= 2 else sub_10y
+    base_max = sub_max[0] if sub_max else last_price
+    diff_max = last_price - base_max
+    rate_max = (diff_max / base_max * 100) if base_max else 0.0
+
     return {
         "1D": {"change": round(diff_1d, 2), "change_rate": round(rate_1d, 2), "series": series_1d},
         "1W": {"change": round(diff_1w, 2), "change_rate": round(rate_1w, 2), "series": series_1w},
@@ -323,6 +352,11 @@ def _calculate_market_periods(
         "3M": {"change": round(diff_3m, 2), "change_rate": round(rate_3m, 2), "series": sub_3m},
         "YTD": {"change": round(diff_ytd, 2), "change_rate": round(rate_ytd, 2), "series": sub_ytd},
         "1Y": {"change": round(diff_1y, 2), "change_rate": round(rate_1y, 2), "series": sub_1y},
+        "3Y": {"change": round(diff_3y, 2), "change_rate": round(rate_3y, 2), "series": sub_3y},
+        "5Y": {"change": round(diff_5y, 2), "change_rate": round(rate_5y, 2), "series": sub_5y},
+        "10Y": {"change": round(diff_10y, 2), "change_rate": round(rate_10y, 2), "series": sub_10y},
+        "MAX": {"change": round(diff_max, 2), "change_rate": round(rate_max, 2), "series": sub_max},
+        "ALL": {"change": round(diff_3y, 2), "change_rate": round(rate_3y, 2), "series": sub_3y},
     }
 
 
@@ -349,16 +383,20 @@ async def get_web_market_overview() -> dict[str, Any]:
             tasks.append(client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=60m&range=5d", headers=HEADERS, timeout=6.0))
             # 3) 1년 일봉
             tasks.append(client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=1y", headers=HEADERS, timeout=6.0))
+            # 4) 전체 월봉 (3Y, 5Y, 10Y, MAX 장기용)
+            tasks.append(client.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1mo&range=max", headers=HEADERS, timeout=6.0))
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
     overview = []
     for i, idx in enumerate(indices):
-        r_5m = responses[i * 3]
-        r_60m = responses[i * 3 + 1]
-        r_1y = responses[i * 3 + 2]
+        r_5m = responses[i * 4]
+        r_60m = responses[i * 4 + 1]
+        r_1y = responses[i * 4 + 2]
+        r_max = responses[i * 4 + 3]
 
         q_5m = _extract_quotes(r_5m)
         q_60m = _extract_quotes(r_60m)
+        q_max = _extract_quotes(r_max)
 
         price = 0.0
         prev_close = 0.0
@@ -380,7 +418,7 @@ async def get_web_market_overview() -> dict[str, Any]:
         if not price and q_5m:
             price = q_5m[-1]
 
-        periods = _calculate_market_periods(valid_quotes_1y, prev_close, price, quotes_5m=q_5m, quotes_60m=q_60m)
+        periods = _calculate_market_periods(valid_quotes_1y, prev_close, price, quotes_5m=q_5m, quotes_60m=q_60m, quotes_monthly=q_max)
         stat_1d = periods.get("1D", {})
 
         overview.append({
@@ -400,12 +438,14 @@ async def get_web_market_overview() -> dict[str, Any]:
 
     # USD/KRW 환율 처리 (마지막 심볼)
     fx_idx = len(indices)
-    fx_5m = responses[fx_idx * 3]
-    fx_60m = responses[fx_idx * 3 + 1]
-    fx_1y = responses[fx_idx * 3 + 2]
+    fx_5m = responses[fx_idx * 4]
+    fx_60m = responses[fx_idx * 4 + 1]
+    fx_1y = responses[fx_idx * 4 + 2]
+    fx_max = responses[fx_idx * 4 + 3]
 
     fx_q_5m = _extract_quotes(fx_5m)
     fx_q_60m = _extract_quotes(fx_60m)
+    fx_q_max = _extract_quotes(fx_max)
 
     fx_price = 1385.0
     fx_prev = 1385.0
@@ -427,7 +467,7 @@ async def get_web_market_overview() -> dict[str, Any]:
     if not fx_price and fx_q_5m:
         fx_price = fx_q_5m[-1]
 
-    fx_periods = _calculate_market_periods(fx_valid_quotes_1y, fx_prev, fx_price, quotes_5m=fx_q_5m, quotes_60m=fx_q_60m)
+    fx_periods = _calculate_market_periods(fx_valid_quotes_1y, fx_prev, fx_price, quotes_5m=fx_q_5m, quotes_60m=fx_q_60m, quotes_monthly=fx_q_max)
     fx_stat_1d = fx_periods.get("1D", {})
 
     return {

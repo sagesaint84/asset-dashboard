@@ -505,7 +505,9 @@ function filterRecordsByPeriod(records, period) {
 }
 
 // ── 1. 주요 지수 렌더링 ──────────────────────────────────────────────────────
+// ── 1. 주요 지수 렌더링 ──────────────────────────────────────────────────────
 let currentMarketPeriod = '1D';
+let currentMarketAllSub = '3Y'; // '3Y' | '5Y' | '10Y' | 'MAX'
 let marketOverviewData = null;
 
 function renderMarkets(result) {
@@ -514,11 +516,14 @@ function renderMarkets(result) {
 
   const mkts = marketOverviewData.markets || [];
   const fx = marketOverviewData.exchange_rate || {};
-  const period = currentMarketPeriod || '1D';
+  let period = currentMarketPeriod || '1D';
+  if (period === 'ALL') {
+    period = currentMarketAllSub || '3Y';
+  }
 
   const allCards = [
     ...mkts.map(m => {
-      const pStat = (m.periods && m.periods[period]) || {};
+      const pStat = (m.periods && (m.periods[period] || m.periods['ALL'])) || {};
       const change = pStat.change != null ? pStat.change : (m.change != null ? m.change : m.change_price);
       const changeRate = pStat.change_rate != null ? pStat.change_rate : m.change_rate;
       const series = (pStat.series && pStat.series.length) ? pStat.series : (m.series || [m.price || 0]);
@@ -536,7 +541,7 @@ function renderMarkets(result) {
       };
     }),
     (() => {
-      const fxPStat = (fx.periods && fx.periods[period]) || {};
+      const fxPStat = (fx.periods && (fx.periods[period] || fx.periods['ALL'])) || {};
       const fxChange = fxPStat.change != null ? fxPStat.change : (fx.change != null ? fx.change : fx.change_price);
       const fxChangeRate = fxPStat.change_rate != null ? fxPStat.change_rate : fx.change_rate;
       const fxSeries = (fxPStat.series && fxPStat.series.length) ? fxPStat.series : (fx.series || [fx.rate || 1385]);
@@ -601,17 +606,83 @@ function renderMarkets(result) {
   }).join("");
 }
 
+// ── 대시보드 전역 기간 탭 연동 (주요지수 ↔ 자산기록 ↔ 자산히트맵) ──────────────
+function setDashboardPeriod(period, subOption = null) {
+  if (!period) return;
+  const p = period.toUpperCase();
+
+  let mktPeriod = p;      // 주요지수: 1D, 1W, 1M, 1Y, ALL
+  let recPeriod = p;      // 자산기록: 1D, 1W, 1M, 1Y, ALL
+  let hmPeriod = p;       // 자산히트맵: 1D, 1W, 1M, 1Y, TOTAL
+
+  if (p === 'TOTAL') {
+    mktPeriod = 'ALL';
+    recPeriod = 'ALL';
+    hmPeriod = 'TOTAL';
+  } else if (p === 'ALL' || ['3Y', '5Y', '10Y', 'MAX'].includes(p)) {
+    mktPeriod = 'ALL';
+    recPeriod = 'ALL';
+    hmPeriod = 'TOTAL';
+    if (['3Y', '5Y', '10Y', 'MAX'].includes(p)) {
+      currentMarketAllSub = p;
+    }
+  }
+
+  if (subOption && ['3Y', '5Y', '10Y', 'MAX'].includes(subOption.toUpperCase())) {
+    currentMarketAllSub = subOption.toUpperCase();
+  }
+
+  // 1. 주요지수 탭 동기화
+  currentMarketPeriod = mktPeriod;
+  document.querySelectorAll("#marketPeriodTabs .heatmap-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.period === mktPeriod);
+  });
+  const subLabelEl = document.getElementById("marketAllSubLabel");
+  if (subLabelEl) {
+    const labelMap = { "3Y": "(3Y)", "5Y": "(5Y)", "10Y": "(10Y)", "MAX": "(최대)" };
+    subLabelEl.textContent = labelMap[currentMarketAllSub] || `(${currentMarketAllSub})`;
+  }
+  const selectEl = document.getElementById("marketAllSelect");
+  if (selectEl && selectEl.value !== currentMarketAllSub) {
+    selectEl.value = currentMarketAllSub;
+  }
+  if (marketOverviewData) {
+    renderMarkets(marketOverviewData);
+  }
+
+  // 2. 자산기록 탭 동기화
+  currentRecordPeriod = recPeriod;
+  document.querySelectorAll("#recordPeriodTabs .heatmap-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.period === recPeriod);
+  });
+  if (window.assetRecords || assetRecords) {
+    renderAssetRecords(window.assetRecords || assetRecords);
+  }
+
+  // 3. 자산히트맵 탭 동기화
+  heatmapPeriod = hmPeriod;
+  localStorage.setItem("heatmap_period", heatmapPeriod);
+  document.querySelectorAll("#heatmapPeriodTabs .heatmap-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.period === hmPeriod);
+  });
+  if (dashboard) {
+    renderHeatmaps(dashboard);
+  }
+}
+
 // 주요지수 기간 선택 탭 이벤트 등록
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("#marketPeriodTabs .heatmap-tab");
   if (!btn) return;
   const period = btn.dataset.period;
   if (!period) return;
+  setDashboardPeriod(period);
+});
 
-  document.querySelectorAll("#marketPeriodTabs .heatmap-tab").forEach(t => t.classList.toggle("active", t === btn));
-  currentMarketPeriod = period;
-  if (marketOverviewData) {
-    renderMarkets(marketOverviewData);
+// 주요지수 전체 서브선택 드롭다운 이벤트 등록
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "marketAllSelect") {
+    setDashboardPeriod("ALL", e.target.value);
   }
 });
 
@@ -2050,13 +2121,10 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 자산기록 기간 탭 (1M, 3M, 6M, 1Y, ALL)
+  // 자산기록 기간 탭 (1D, 1W, 1M, 1Y, ALL)
   const recordPeriodTab = e.target.closest('#recordPeriodTabs .heatmap-tab');
   if (recordPeriodTab) {
-    document.querySelectorAll('#recordPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
-    recordPeriodTab.classList.add('active');
-    currentRecordPeriod = recordPeriodTab.dataset.period || 'ALL';
-    renderAssetRecords(assetRecords);
+    setDashboardPeriod(recordPeriodTab.dataset.period);
     return;
   }
 
@@ -2081,14 +2149,10 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 히트맵 기간 탭 (1D, 1W, 1M, YTD, 1Y, TOTAL)
+  // 히트맵 기간 탭 (1D, 1W, 1M, 1Y, TOTAL)
   const hmPeriodTab = e.target.closest('#heatmapPeriodTabs .heatmap-tab');
   if (hmPeriodTab) {
-    document.querySelectorAll('#heatmapPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
-    hmPeriodTab.classList.add('active');
-    heatmapPeriod = hmPeriodTab.dataset.period || '1D';
-    localStorage.setItem("heatmap_period", heatmapPeriod);
-    if (dashboard) renderHeatmaps(dashboard);
+    setDashboardPeriod(hmPeriodTab.dataset.period);
     return;
   }
 
@@ -2432,10 +2496,7 @@ document.getElementById('recordViewTabs')?.addEventListener('click', (e) => {
 document.getElementById('recordPeriodTabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.heatmap-tab');
   if (!tab) return;
-  document.querySelectorAll('#recordPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  currentRecordPeriod = tab.dataset.period || 'ALL';
-  renderAssetRecords(assetRecords);
+  setDashboardPeriod(tab.dataset.period);
 });
 
 // 6. 히트맵 [면적형] / [카드형] 뷰 전환 탭
@@ -2453,11 +2514,7 @@ document.getElementById('heatmapViewTabs')?.addEventListener('click', (e) => {
 document.getElementById('heatmapPeriodTabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.heatmap-tab');
   if (!tab) return;
-  document.querySelectorAll('#heatmapPeriodTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  heatmapPeriod = tab.dataset.period || '1D';
-  localStorage.setItem("heatmap_period", heatmapPeriod);
-  if (dashboard) renderHeatmaps(dashboard);
+  setDashboardPeriod(tab.dataset.period);
 });
 
 document.getElementById('heatmapCapSelect')?.addEventListener('change', (e) => {
