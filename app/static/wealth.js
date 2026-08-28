@@ -637,12 +637,7 @@ function setDashboardPeriod(period, subOption = null) {
   document.querySelectorAll("#marketPeriodTabs .heatmap-tab").forEach(t => {
     t.classList.toggle("active", t.dataset.period === mktPeriod);
   });
-  const subLabelEl = document.getElementById("marketAllSubLabel");
-  if (subLabelEl) {
-    const labelMap = { "3Y": "(3Y)", "5Y": "(5Y)", "10Y": "(10Y)", "MAX": "(최대)" };
-    subLabelEl.textContent = labelMap[currentMarketAllSub] || `(${currentMarketAllSub})`;
-  }
-  const selectEl = document.getElementById("marketAllSelect");
+  const selectEl = document.getElementById("marketPeriodSelect");
   if (selectEl && selectEl.value !== currentMarketAllSub) {
     selectEl.value = currentMarketAllSub;
   }
@@ -681,7 +676,7 @@ document.addEventListener("click", (e) => {
 
 // 주요지수 전체 서브선택 드롭다운 이벤트 등록
 document.addEventListener("change", (e) => {
-  if (e.target && e.target.id === "marketAllSelect") {
+  if (e.target && e.target.id === "marketPeriodSelect") {
     setDashboardPeriod("ALL", e.target.value);
   }
 });
