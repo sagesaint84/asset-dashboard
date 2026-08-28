@@ -304,6 +304,8 @@ const money = (value, currency = "KRW") => {
   catch { return number(value); }
 };
 const html = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
+const escapeHtml = html;
+window.escapeHtml = html;
 const signClass = (value) => Number(value) < 0 ? "down" : "up";
 
 function sparkline(points, change) {
@@ -4435,6 +4437,7 @@ async function refreshAdminUserList() {
   try {
     const res = await api('/api/admin/users');
     const users = res.users || [];
+    console.log('[ADMIN] 사용자 목록 수신:', users);
 
     // 통계 카드 업데이트
     const statTotal = document.getElementById('adminStatTotalUsers');
@@ -4495,7 +4498,8 @@ async function refreshAdminUserList() {
     if (tbodyMain) tbodyMain.innerHTML = rowsHtml;
     if (tbodyDialog) tbodyDialog.innerHTML = rowsHtml;
   } catch (err) {
-    const errHtml = `<tr><td colspan="5" style="text-align:center;padding:16px;color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message)}</td></tr>`;
+    console.error('[ADMIN] 사용자 목록 로드 실패:', err);
+    const errHtml = `<tr><td colspan="5" style="text-align:center;padding:16px;color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message || String(err))}</td></tr>`;
     if (tbodyMain) tbodyMain.innerHTML = errHtml;
     if (tbodyDialog) tbodyDialog.innerHTML = errHtml;
   }

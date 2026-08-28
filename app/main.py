@@ -6,6 +6,7 @@ import secrets
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -96,7 +97,7 @@ SESSION_MAX_AGE = 60 * 60 * 24 * 14  # 14일 동안 로그인 유지
 COOKIE_NAME = "dashboard_session_v2"
 
 _serializer = URLSafeTimedSerializer(SECRET_KEY)
-PUBLIC_PATHS = {"/login", "/api/export", "/sw.js", "/manifest.json", "/favicon.ico"}
+PUBLIC_PATHS = {"/login", "/change-password-init", "/api/export", "/sw.js", "/manifest.json", "/favicon.ico"}
 
 
 def get_current_username(request: Request) -> str:
@@ -167,6 +168,55 @@ LOGIN_PAGE_HTML = """<!DOCTYPE html>
 </html>"""
 
 
+FORCE_PASSWORD_PAGE_HTML = """<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>비밀번호 변경 필수 - 시스템 관리자</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:radial-gradient(ellipse at 50% 20%, #15102a 0%, #060913 70%); color:#e0e6f5;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .card { width:100%; max-width:380px; padding:34px 28px; border-radius:16px; box-sizing:border-box;
+          background:rgba(14,21,41,0.95); border:1px solid #4a3885;
+          box-shadow:0 20px 50px rgba(0,0,0,0.7), 0 0 0 1px rgba(157,123,255,0.2); backdrop-filter:blur(10px); }
+  .badge { display:inline-block; font-size:11.5px; font-weight:700; color:#f59e0b; background:rgba(245,158,11,0.15);
+           padding:4px 9px; border-radius:6px; margin-bottom:10px; border:1px solid rgba(245,158,11,0.3); }
+  h1 { font-size:20px; font-weight:800; margin:0 0 8px; color:#f3f5ff; }
+  p.desc { font-size:13px; color:#91a0c1; line-height:1.5; margin:0 0 20px; }
+  label { display:block; color:#91a0c1; font-size:12px; margin:14px 0 6px; font-weight:600; }
+  input { width:100%; box-sizing:border-box; padding:11px 13px; border-radius:9px;
+          border:1px solid #263558; background:#080e1e; color:#f3f5ff; font-size:14px; transition:.15s; }
+  input:focus { outline:none; border-color:#9d7bff; box-shadow:0 0 0 3px rgba(157,123,255,0.2); }
+  input[readonly] { opacity:0.8; cursor:not-allowed; background:#090f20; border-color:#1c2742; font-weight:700; color:#c4b5fd; }
+  button { width:100%; margin-top:22px; padding:12px; border:none; border-radius:9px;
+           background:linear-gradient(135deg,#8e70fa,#5d3ad4); color:white; font-size:15px; font-weight:700; cursor:pointer;
+           box-shadow:0 6px 18px rgba(93,58,212,0.4); transition:.18s; }
+  button:hover { filter:brightness(1.12); transform:translateY(-1px); }
+  .error { color:#ff718c; font-size:12.5px; margin-top:14px; text-align:center; background:#2c121e; padding:8px 10px; border-radius:7px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">⚠️ 초기 비밀번호 변경 필수</span>
+    <h1>새 비밀번호 설정</h1>
+    <p class="desc">초기 계정 보호를 위해 <strong>비밀번호를 새로 변경한 후 접속</strong>이 완료됩니다.</p>
+    <form method="post" action="/change-password-init">
+      <label>접속 아이디</label>
+      <input type="text" value="{{username}}" readonly />
+      <label>새 비밀번호 (4자 이상)</label>
+      <input type="password" name="new_password" placeholder="새 비밀번호 입력" required minlength="4" autofocus />
+      <label>새 비밀번호 확인</label>
+      <input type="password" name="new_password_confirm" placeholder="새 비밀번호 확인 입력" required minlength="4" />
+      <button type="submit">비밀번호 변경 및 로그인 완료</button>
+    </form>
+    {{message}}
+  </div>
+</body>
+</html>"""
+
+
 @app.middleware("http")
 async def require_login(request: Request, call_next):
     path = request.url.path
@@ -184,17 +234,15 @@ async def require_login(request: Request, call_next):
     request.state.role = user.get("role", "user")
     request.state.must_change_password = bool(user.get("must_change_password", False))
 
-    # 초기 비밀번호 상태(must_change_password)일 때 허용된 경로 이외의 API 호출 차단
+    # 초기 비밀번호 상태(must_change_password)일 때: 대시보드 진입을 원천 차단하고 비밀번호 변경 화면으로 리다이렉트
     if request.state.must_change_password:
-        allowed_paths = {
-            "/api/auth/me",
-            "/api/auth/force-change-password",
-            "/logout",
-            "/dashboard",
-            "/",
-        }
-        if path.startswith("/api/") and path not in allowed_paths:
-            return JSONResponse({"detail": "비밀번호 변경이 필요합니다."}, status_code=403)
+        if path.startswith("/api/"):
+            allowed_api = {"/api/auth/me", "/api/auth/force-change-password"}
+            if path not in allowed_api:
+                return JSONResponse({"detail": "비밀번호 변경이 필요합니다."}, status_code=403)
+        else:
+            if path not in ("/change-password-init", "/logout"):
+                return RedirectResponse("/change-password-init")
 
     return await call_next(request)
 
@@ -211,12 +259,64 @@ async def login_submit(username: str = Form(...), password: str = Form(...)):
     u = authenticate_user(username.strip(), password.strip())
     if u:
         token = _serializer.dumps({"user": u["username"], "role": u.get("role", "user")})
-        response = RedirectResponse("/dashboard", status_code=303)
+        # 초기 비밀번호 변경 필요 계정이면 대시보드가 아닌 비번 변경 전용 페이지로 즉시 리다이렉트
+        if u.get("must_change_password", False):
+            response = RedirectResponse("/change-password-init", status_code=303)
+        else:
+            response = RedirectResponse("/dashboard", status_code=303)
+        
         response.set_cookie(
             COOKIE_NAME, token, httponly=True, samesite="lax", max_age=SESSION_MAX_AGE
         )
         return response
     return RedirectResponse("/login?error=1", status_code=303)
+
+
+@app.get("/change-password-init", include_in_schema=False)
+async def change_password_init_page(request: Request, error: str | None = None) -> HTMLResponse:
+    user = _get_authenticated_user(request)
+    if not user:
+        return RedirectResponse("/login")
+    if not user.get("must_change_password", False):
+        return RedirectResponse("/dashboard")
+    
+    uname = user["username"]
+    message_html = f"<p class='error'>{error}</p>" if error else ""
+    html = FORCE_PASSWORD_PAGE_HTML.replace("{{username}}", uname).replace("{{message}}", message_html)
+    return HTMLResponse(html)
+
+
+@app.post("/change-password-init", include_in_schema=False)
+async def change_password_init_submit(
+    request: Request,
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...)
+):
+    user = _get_authenticated_user(request)
+    if not user:
+        return RedirectResponse("/login")
+    uname = user["username"]
+    
+    p1 = new_password.strip()
+    p2 = new_password_confirm.strip()
+    if len(p1) < 4:
+        return RedirectResponse("/change-password-init?error=" + quote("새 비밀번호는 최소 4자 이상이어야 합니다."), status_code=303)
+    if p1 != p2:
+        return RedirectResponse("/change-password-init?error=" + quote("새 비밀번호 확인이 일치하지 않습니다."), status_code=303)
+    
+    from app.services.user_manager import force_set_user_password
+    try:
+        force_set_user_password(uname, p1)
+    except Exception as e:
+        return RedirectResponse("/change-password-init?error=" + quote(str(e)), status_code=303)
+    
+    # 변경 완료 -> 정식 세션 갱신 후 비로소 대시보드로 이동!
+    token = _serializer.dumps({"user": uname, "role": user.get("role", "user")})
+    response = RedirectResponse("/dashboard", status_code=303)
+    response.set_cookie(
+        COOKIE_NAME, token, httponly=True, samesite="lax", max_age=SESSION_MAX_AGE
+    )
+    return response
 
 
 @app.get("/logout", include_in_schema=False)

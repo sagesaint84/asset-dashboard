@@ -1,3 +1,10 @@
+v4.2.0
+
+(feat) admin/admin 등 초기 비밀번호 계정 로그인 시 대시보드 진입 전 비밀번호 변경 전용 페이지(/change-password-init) 강제 라우팅
+(security) 비밀번호를 변경하기 전까지는 대시보드(/dashboard) URL을 직접 입력해도 접근 불가 차단
+(fix) admin 화면에서 사용자 계정 목록 테이블 렌더링 시 escapeHtml 참조 오류 수정 (사용자 목록 정상 표시)
+(perf) 서비스 워커 캐시 버전(wealth-cache-v5) 및 스크립트 쿼리(v412) 갱신
+
 v4.1.1
 
 (fix) 프론트엔드 API 통신 헬퍼(api) 누락 바인딩 수정 및 fetchJson 별칭 연동
