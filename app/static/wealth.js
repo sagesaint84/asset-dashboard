@@ -809,6 +809,7 @@ function renderClassifications(items) {
   if (donutWrap) donutWrap.style.display = 'block';
   list.classList.add('sector-mode');
   list.style.display = 'flex';
+  list.style.flexDirection = 'column';
 
   if (currentAllocTab === 'sector') {
     const sectors = dashboard?.sector_classifications || [];

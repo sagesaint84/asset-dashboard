@@ -1045,27 +1045,53 @@
   flex-shrink: 0;
 }
 
-/* 섹터별/자산군별 상세 리스트 스크롤바 (5개 항목 완벽 표시 높이) */
-.classification-panel .classification-list.sector-mode {
-  max-height: 385px;
-  overflow-y: auto;
+/* 섹터별/자산군별 상세 세로 목록 및 스크롤바 */
+.overview-alloc-col .classification-list,
+.classification-panel .classification-list.sector-mode,
+.classification-list.sector-mode,
+#classificationList {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 280px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   padding-right: 6px;
   margin-top: 10px;
   gap: 0;
 }
-.classification-panel .classification-list.sector-mode .classification-row {
+.overview-alloc-col .classification-list .classification-row,
+.classification-panel .classification-list.sector-mode .classification-row,
+.classification-list.sector-mode .classification-row,
+#classificationList .classification-row {
+  display: block !important;
+  width: 100% !important;
   padding: 8px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
+.overview-alloc-col .classification-list .classification-row:last-child,
+.classification-list.sector-mode .classification-row:last-child,
+#classificationList .classification-row:last-child {
+  border-bottom: none;
+}
+.overview-alloc-col .classification-list::-webkit-scrollbar,
 .classification-panel .classification-list.sector-mode::-webkit-scrollbar,
+.classification-list.sector-mode::-webkit-scrollbar,
+#classificationList::-webkit-scrollbar,
 .sector-legend-list::-webkit-scrollbar {
   width: 5px;
 }
+.overview-alloc-col .classification-list::-webkit-scrollbar-thumb,
 .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb,
+.classification-list.sector-mode::-webkit-scrollbar-thumb,
+#classificationList::-webkit-scrollbar-thumb,
 .sector-legend-list::-webkit-scrollbar-thumb {
   background: rgba(142, 112, 250, 0.35);
   border-radius: 4px;
 }
+.overview-alloc-col .classification-list::-webkit-scrollbar-thumb:hover,
 .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb:hover,
+.classification-list.sector-mode::-webkit-scrollbar-thumb:hover,
+#classificationList::-webkit-scrollbar-thumb:hover,
 .sector-legend-list::-webkit-scrollbar-thumb:hover {
   background: rgba(142, 112, 250, 0.65);
 }
@@ -2309,14 +2335,25 @@ dialog.dialog .dialog-actions {
   border-color: #e2e8f0 !important;
 }
 
+[data-theme="white"] .overview-alloc-col .classification-list::-webkit-scrollbar-thumb,
 [data-theme="white"] .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb,
+[data-theme="white"] .classification-list.sector-mode::-webkit-scrollbar-thumb,
+[data-theme="white"] #classificationList::-webkit-scrollbar-thumb,
 [data-theme="white"] .sector-legend-list::-webkit-scrollbar-thumb {
   background: rgba(100, 116, 139, 0.35) !important;
 }
 
+[data-theme="white"] .overview-alloc-col .classification-list::-webkit-scrollbar-thumb:hover,
 [data-theme="white"] .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb:hover,
+[data-theme="white"] .classification-list.sector-mode::-webkit-scrollbar-thumb:hover,
+[data-theme="white"] #classificationList::-webkit-scrollbar-thumb:hover,
 [data-theme="white"] .sector-legend-list::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.65) !important;
+}
+
+[data-theme="white"] .overview-alloc-col .classification-list .classification-row,
+[data-theme="white"] #classificationList .classification-row {
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
 }
 
 [data-theme="oled"] .sector-donut-container {
@@ -2324,7 +2361,10 @@ dialog.dialog .dialog-actions {
   border-color: #1a1a24 !important;
 }
 
+[data-theme="oled"] .overview-alloc-col .classification-list::-webkit-scrollbar-thumb,
 [data-theme="oled"] .classification-panel .classification-list.sector-mode::-webkit-scrollbar-thumb,
+[data-theme="oled"] .classification-list.sector-mode::-webkit-scrollbar-thumb,
+[data-theme="oled"] #classificationList::-webkit-scrollbar-thumb,
 [data-theme="oled"] .sector-legend-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2) !important;
 }
