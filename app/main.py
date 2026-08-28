@@ -1427,8 +1427,24 @@ async def refresh_fx_rate(request: Request) -> dict:
 async def refresh_prices(request: Request) -> dict:
     username = get_current_username(request)
     data = read_portfolio(username=username)
-    if not data["holdings"]:
-        raise HTTPException(400, "갱신할 보유종목이 없습니다.")
+    now_str = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    # 보유종목이 없는 경우에도 지수 및 환율 정상 갱신
+    if not data.get("holdings"):
+        fx_rate = await fetch_fx_rate_usd_krw()
+        if fx_rate and fx_rate > 0:
+            data.setdefault("settings", {})
+            data["settings"].setdefault("exchange_rates", {})["USD"] = fx_rate
+            data["settings"]["fx_rates"] = {"KRW": 1.0, "USD": fx_rate}
+            data["settings"]["fx_info"] = {"source": "실시간 웹 환율", "rate": fx_rate, "updated_at": now_str}
+            data["settings"]["fx_updated_at"] = now_str
+            write_portfolio(data, username=username)
+        return {
+            "message": "지수 및 환율을 갱신했습니다.",
+            "count": 0,
+            "fx_rate": fx_rate,
+            "warnings": [],
+        }
 
     # 네이버페이 증권 & 야후 파이낸스 & 웹 실시간 환율 병렬 직접 갱신 (토큰 불필요)
     res = await refresh_all_holdings_prices(data["holdings"])
@@ -1438,7 +1454,6 @@ async def refresh_prices(request: Request) -> dict:
     fx_rate = res.get("fx_rate", 1385.0)
 
     # 포트폴리오 업데이트
-    now_str = datetime.now().astimezone().isoformat(timespec="seconds")
     for holding in data["holdings"]:
         hid = holding["id"]
         if hid in prices and prices[hid] > 0:
@@ -1453,7 +1468,7 @@ async def refresh_prices(request: Request) -> dict:
         data["settings"].setdefault("exchange_rates", {})["USD"] = fx_rate
         data["settings"]["fx_updated_at"] = now_str
 
-    write_portfolio(data)
+    write_portfolio(data, username=username)
     return {
         "message": f"전체 {len(prices)}개 종목 시세 및 환율({fx_rate:,.1f}원)을 갱신했습니다.",
         "count": len(prices),
