@@ -176,11 +176,11 @@
 .account-subrow-info { min-width: 0; }
 .account-subrow-info .account-name { display: block; font-weight: 600; color: #e4e9f7; font-size: 13px; }
 .account-subrow-detail { display: block; color: #8fa0c5; font-size: 11px; margin-top: 3px; }
-.account-group-cash { display: block; font-size: 12px; font-weight: 600; color: #c4b5fd; margin-top: 4px; }
+.account-group-cash { display: block; font-size: 12px; font-weight: 600; color: #38bdf8; margin-top: 4px; }
 .account-actions { display: flex; gap: 4px; align-items: center; }
 .account-actions .icon-button { font-size: 13px; padding: 2px 4px; border-radius: 4px; transition: background 0.15s; }
 .account-actions .icon-button:hover { background: #1f2c4d; }
-.account-cash-button { color: #c4b5fd; }
+.account-cash-button { color: #38bdf8; }
 
 /* 수치 증가: 붉은색(Red), 수치 감소: 파란색(Blue) */
 .up,
@@ -1208,7 +1208,7 @@
 
 .account-action-button:hover {
   background: #25355e;
-  border-color: #8e70fa;
+  border-color: #38bdf8;
   color: #fff;
   transform: translateY(-1px);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
@@ -1224,7 +1224,7 @@
 /* 8. 월별 자산 막대그래프 인터랙션 */
 .monthly-bar-group:hover rect {
   opacity: 1;
-  filter: brightness(1.25) drop-shadow(0 4px 12px rgba(142, 112, 250, 0.5));
+  filter: brightness(1.25) drop-shadow(0 4px 12px rgba(56, 189, 248, 0.5));
 }
 
 /* 9. 계좌 통합 현황 (스크롤 & 증권사 그룹 간격 & 세부계좌 들여쓰기) */
@@ -1240,12 +1240,12 @@
 }
 
 #accountList.account-list::-webkit-scrollbar-thumb {
-  background: rgba(142, 112, 250, 0.35);
+  background: rgba(148, 163, 184, 0.35);
   border-radius: 4px;
 }
 
 #accountList.account-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(142, 112, 250, 0.65);
+  background: rgba(148, 163, 184, 0.65);
 }
 
 #accountList.account-list::-webkit-scrollbar-track {
@@ -1277,7 +1277,7 @@
 .broker-head strong {
   font-size: 14.5px;
   font-weight: 700;
-  color: #c4b5fd;
+  color: #e2e8f0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1888,6 +1888,58 @@ dialog.dialog .dialog-actions {
   box-shadow: 0 3px 14px rgba(37, 99, 235, 0.45);
 }
 
+[data-theme="oled"] .family-tab.active,
+[data-theme="oled"] .heatmap-tab.active {
+  background: #2563eb !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.4) !important;
+}
+
+[data-theme="oled"] .button.secondary {
+  background: #111118 !important;
+  border-color: #222233 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="oled"] .button.secondary:hover {
+  background: #1c1c28 !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="oled"] .broker-head strong {
+  color: #f8fafc !important;
+}
+
+[data-theme="oled"] .broker-head span {
+  background: #111118 !important;
+  border-color: #222233 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="oled"] .account-row {
+  background: #0b0b10 !important;
+  border-color: #1a1a26 !important;
+}
+
+[data-theme="oled"] .account-row:hover {
+  background: #14141e !important;
+  border-color: #2e2e42 !important;
+}
+
+[data-theme="oled"] .account-action-button {
+  background: #111118 !important;
+  border-color: #222233 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="oled"] .account-action-button:hover {
+  background: #1c1c28 !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
 /* 2. CLEAN WHITE (모던 화이트 라이트 모드) */
 [data-theme="white"] {
   --bg: #f3f5f9;
@@ -2287,7 +2339,10 @@ dialog.dialog .dialog-actions {
 }
 
 [data-theme="oled"] #accountList.account-list::-webkit-scrollbar-thumb {
-  background: rgba(142, 112, 250, 0.35) !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+[data-theme="oled"] #accountList.account-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35) !important;
 }
 [data-theme="oled"] #accountList.account-list::-webkit-scrollbar-track {
   background: #070709 !important;
