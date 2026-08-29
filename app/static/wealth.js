@@ -1231,6 +1231,11 @@ function switchAccountCategory(category) {
     tab.classList.toggle('active', tab.dataset.cat === category);
   });
 
+  const accountsPanel = document.getElementById('accountsPanel');
+  if (accountsPanel && accountsPanel.classList.contains('is-collapsed')) {
+    toggleSection('accounts');
+  }
+
   const secPanel = document.getElementById('catPanelSecurities');
   const bnkPanel = document.getElementById('catPanelBanking');
   const insPanel = document.getElementById('catPanelInsurance');

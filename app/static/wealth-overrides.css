@@ -1746,6 +1746,10 @@ dialog.dialog .dialog-actions {
 .panel.is-collapsed #classificationList,
 .panel.is-collapsed .table-wrap,
 .panel.is-collapsed #accountList,
+.panel.is-collapsed .cat-panel,
+.panel.is-collapsed #catPanelSecurities,
+.panel.is-collapsed #catPanelBanking,
+.panel.is-collapsed #catPanelInsurance,
 .panel.is-collapsed #marketGrid {
   display: none !important;
 }
@@ -1756,6 +1760,7 @@ dialog.dialog .dialog-actions {
 .panel.is-collapsed #allocTabs,
 .panel.is-collapsed .toolbar,
 .panel.is-collapsed .family-tabs,
+.panel.is-collapsed .account-category-tabs,
 .panel.is-collapsed .dividend-head select,
 .panel.is-collapsed #dividendYearSelect,
 .panel.is-collapsed #pnlYearSelect,
