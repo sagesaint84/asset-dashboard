@@ -882,6 +882,7 @@ function renderClassifications(items) {
 // ── 4. 계좌 목록 렌더링 ──────────────────────────────────────────────────────
 function renderAccounts(items) {
   const container = $("#accountList");
+  if ($("#securitiesTabCount")) $("#securitiesTabCount").textContent = (items || []).length;
   if (!container) return;
   if (!items || !items.length) { container.innerHTML = '<div class="empty">동기화된 계좌가 없습니다.</div>'; return; }
   const groups = new Map();
@@ -934,6 +935,7 @@ function renderSavingsWithOwner(owner = '모두') {
 
   if ($("#savingsCount")) $("#savingsCount").textContent = filteredSavings.length;
   if ($("#banksCount")) $("#banksCount").textContent = filteredBanks.length;
+  if ($("#bankingTabCount")) $("#bankingTabCount").textContent = filteredSavings.length + filteredBanks.length;
 
   // 은행 계좌 매핑 사전 (출금/입금 통장 표시용)
   const bankMap = new Map();
@@ -1202,6 +1204,164 @@ function updateSavingTypeFields() {
       targetLabel.childNodes[0].nodeValue = "만기 목표 원금 (KRW)\n";
     }
   }
+}
+
+// ── 4-2. 통합 계좌 카테고리 탭 (증권 / 은행 / 보험) ─────────────────────────
+let rawInsuranceAccounts = [];
+let currentAccountCategory = 'securities'; // 'securities' | 'banking' | 'insurance'
+
+const INSURANCE_TYPE_LABELS = {
+  protection: "보장성보험",
+  savings: "저축성보험",
+  national_pension: "국민연금",
+  yellow_umbrella: "노란우산공제",
+  irp: "개인연금 / IRP",
+  etc: "기타 공제",
+};
+
+const PAYMENT_STATUS_LABELS = {
+  paying: "납입중",
+  completed: "납입완료",
+  deferred: "거치중",
+};
+
+function switchAccountCategory(category) {
+  currentAccountCategory = category;
+  document.querySelectorAll('.account-cat-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.cat === category);
+  });
+
+  const secPanel = document.getElementById('catPanelSecurities');
+  const bnkPanel = document.getElementById('catPanelBanking');
+  const insPanel = document.getElementById('catPanelInsurance');
+
+  if (secPanel) secPanel.style.display = category === 'securities' ? 'block' : 'none';
+  if (bnkPanel) bnkPanel.style.display = category === 'banking' ? 'block' : 'none';
+  if (insPanel) insPanel.style.display = category === 'insurance' ? 'block' : 'none';
+
+  const secActs = document.getElementById('securitiesActions');
+  const bnkActs = document.getElementById('bankingActions');
+  const insActs = document.getElementById('insuranceActions');
+
+  if (secActs) secActs.style.display = category === 'securities' ? 'flex' : 'none';
+  if (bnkActs) bnkActs.style.display = category === 'banking' ? 'flex' : 'none';
+  if (insActs) insActs.style.display = category === 'insurance' ? 'flex' : 'none';
+}
+
+function renderInsurance(insuranceList, owner = '모두') {
+  rawInsuranceAccounts = insuranceList || [];
+  renderInsuranceWithOwner(owner);
+}
+
+function renderInsuranceWithOwner(owner = '모두') {
+  const o = owner || currentOwner || '모두';
+  const filtered = o === '모두' 
+    ? rawInsuranceAccounts 
+    : rawInsuranceAccounts.filter(ins => (ins.owner || '모두') === o);
+
+  const totalMonthly = filtered.reduce((sum, i) => sum + (Number(i.monthly_premium) || 0), 0);
+  const totalPaid = filtered.reduce((sum, i) => sum + (Number(i.total_paid_amount) || 0), 0);
+  const totalExpected = filtered.reduce((sum, i) => sum + (Number(i.expected_amount) || 0), 0);
+
+  if ($("#totalInsuranceMonthlyVal")) $("#totalInsuranceMonthlyVal").textContent = `₩${number(totalMonthly, 0)}`;
+  if ($("#totalInsurancePaidVal")) $("#totalInsurancePaidVal").textContent = `₩${number(totalPaid, 0)}`;
+  if ($("#totalInsuranceExpectedVal")) $("#totalInsuranceExpectedVal").textContent = `₩${number(totalExpected, 0)}`;
+
+  if ($("#insuranceTabCount")) $("#insuranceTabCount").textContent = filtered.length;
+
+  const grid = $("#insuranceGrid");
+  if (!grid) return;
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">등록된 보험·연금·공제 상품이 없습니다. 상단 [+ 보험/연금 추가] 버튼을 눌러보세요.</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(ins => {
+    const typeKey = ins.insurance_type || 'protection';
+    const typeLabel = INSURANCE_TYPE_LABELS[typeKey] || '보험/공제';
+    const statusKey = ins.payment_status || 'paying';
+    const statusLabel = PAYMENT_STATUS_LABELS[statusKey] || '납입중';
+
+    const periodText = (ins.start_date || ins.maturity_date)
+      ? `${ins.start_date || '가입'} ~ ${ins.maturity_date || '만기'}`
+      : '기간 미지정';
+
+    return `
+      <div class="saving-card">
+        <div class="saving-card-header">
+          <div class="saving-card-title-group">
+            <div class="saving-badge-row">
+              <span class="insurance-type-badge ${typeKey}">${typeLabel}</span>
+              <span class="payment-status-badge ${statusKey}">${statusLabel}</span>
+              <span class="saving-owner-badge">${html(ins.owner || '모두')}</span>
+            </div>
+            <h3 class="saving-product-name">${html(ins.product_name)}</h3>
+            <span class="saving-bank-name">${html(ins.company_name)}</span>
+          </div>
+          <div class="account-row-actions saving-card-actions">
+            <button class="account-action-button" data-insurance-edit-id="${ins.id}" title="수정" type="button">✎</button>
+            <button class="mini-delete-button" data-insurance-del-id="${ins.id}" title="삭제" type="button">🗑️</button>
+          </div>
+        </div>
+
+        <div class="saving-card-details">
+          <div class="saving-detail-row">
+            <span class="saving-detail-label">월 납입액</span>
+            <span class="saving-detail-val" style="color:#38bdf8;">₩${number(ins.monthly_premium || 0, 0)}</span>
+          </div>
+          <div class="saving-detail-row">
+            <span class="saving-detail-label">누적 납입액</span>
+            <span class="saving-detail-val">₩${number(ins.total_paid_amount || 0, 0)}</span>
+          </div>
+          <div class="saving-detail-row" style="grid-column:1/-1;">
+            <span class="saving-detail-label">계약 기간</span>
+            <span class="saving-detail-val">${html(periodText)}</span>
+          </div>
+          ${ins.memo ? `
+            <div class="saving-detail-row" style="grid-column:1/-1;">
+              <span class="saving-detail-label">메모</span>
+              <span class="saving-detail-val" style="color:#94a3b8;font-size:11px;">${html(ins.memo)}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="saving-interest-box">
+          <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
+            <span>예상 수령액 / 해약환급금</span>
+            <span style="color:#42d5a3;font-size:14px;">₩${number(ins.expected_amount || 0, 0)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openInsuranceAccountDialog(item = null) {
+  const dialog = $("#insuranceAccountDialog");
+  const form = $("#insuranceAccountForm");
+  if (!dialog || !form) return;
+  form.reset();
+  form.querySelector("[name='id']").value = item ? item.id : "";
+  if ($("#insuranceAccountDialogTitle")) {
+    $("#insuranceAccountDialogTitle").textContent = item ? "보험 / 연금 / 공제 상품 수정" : "보험 / 연금 / 공제 상품 추가";
+  }
+  if (item) {
+    form.querySelector("[name='insurance_type']").value = item.insurance_type || "protection";
+    form.querySelector("[name='owner']").value = item.owner || "모두";
+    form.querySelector("[name='company_name']").value = item.company_name || "";
+    form.querySelector("[name='product_name']").value = item.product_name || "";
+    form.querySelector("[name='payment_status']").value = item.payment_status || "paying";
+    form.querySelector("[name='monthly_premium']").value = item.monthly_premium || "";
+    form.querySelector("[name='total_paid_amount']").value = item.total_paid_amount || "";
+    form.querySelector("[name='expected_amount']").value = item.expected_amount || "";
+    form.querySelector("[name='start_date']").value = item.start_date || "";
+    form.querySelector("[name='maturity_date']").value = item.maturity_date || "";
+    form.querySelector("[name='memo']").value = item.memo || "";
+  } else {
+    form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
+  }
+  dialog.showModal();
 }
 
 // ── 5. 자산 히트맵 (정통 Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────
@@ -2099,6 +2259,7 @@ function render(data) {
   renderClassifications(data.classifications || []);
   renderAccounts(data.accounts);
   renderSavings(data.savings_accounts || [], data.bank_accounts || [], currentOwner);
+  renderInsurance(data.insurance_accounts || [], currentOwner);
   renderHeatmaps(data);
   renderHoldings(data);
 }
@@ -2285,7 +2446,6 @@ const FAMILY_TAB_CONTAINER_IDS = [
   'pnlFamilyTabs',
   'holdingsFamilyTabs',
   'familyTabs',
-  'savingsFamilyTabs',
 ];
 
 function renderFamilyTabs(members) {
@@ -2339,13 +2499,21 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ⚙️ 가족 관리 모달 열기
-  if (e.target.closest('#manageFamilyBtn')) {
+  // 👨‍👩‍👧‍👦 가족 구성원 관리 모달 열기 (상단바 & 계좌 섹션)
+  if (e.target.closest('#topbarFamilyBtn, #manageFamilyBtn')) {
     await openFamilyManager();
     return;
   }
 
-  // ➕ 계좌 추가 모달 열기
+  // 🗂️ 계좌 3대 카테고리 (증권 / 은행 / 보험) 탭 전환
+  const catTab = e.target.closest('.account-cat-tab');
+  if (catTab) {
+    e.preventDefault();
+    switchAccountCategory(catTab.dataset.cat);
+    return;
+  }
+
+  // ➕ 계좌 추가 모달 열기 (증권 계좌)
   if (e.target.closest('#addAccountBtn')) {
     const form = document.getElementById("accountAddForm");
     if (form) {
@@ -2368,6 +2536,37 @@ document.addEventListener('click', async (e) => {
   // ➕ 예·적금 추가 모달 열기
   if (e.target.closest('#addSavingBtn')) {
     openSavingAccountDialog();
+    return;
+  }
+
+  // ➕ 보험/연금/공제 추가 모달 열기
+  if (e.target.closest('#addInsuranceBtn')) {
+    openInsuranceAccountDialog();
+    return;
+  }
+
+  // 보험/연금 수정
+  const insEditBtn = e.target.closest('[data-insurance-edit-id]');
+  if (insEditBtn) {
+    const iid = insEditBtn.dataset.insuranceEditId;
+    const ins = rawInsuranceAccounts.find(i => i.id === iid);
+    if (ins) openInsuranceAccountDialog(ins);
+    return;
+  }
+
+  // 보험/연금 삭제
+  const insDelBtn = e.target.closest('[data-insurance-del-id]');
+  if (insDelBtn) {
+    const iid = insDelBtn.dataset.insuranceDelId;
+    if (confirm('이 보험/연금 상품을 삭제하시겠습니까?')) {
+      try {
+        await api(`/api/insurance-accounts/${iid}`, { method: 'DELETE' });
+        toast('보험/연금 상품이 삭제되었습니다.');
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || '삭제 실패', true);
+      }
+    }
     return;
   }
 
@@ -5448,6 +5647,41 @@ function initSavingsListeners() {
         await loadDashboard();
       } catch (err) {
         toast(err.message || "은행 계좌 저장 실패", true);
+      }
+    });
+  }
+
+  const insForm = $("#insuranceAccountForm");
+  if (insForm) {
+    insForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(insForm);
+      const payload = {
+        id: fd.get("id") || undefined,
+        insurance_type: fd.get("insurance_type") || "protection",
+        owner: fd.get("owner") || "모두",
+        company_name: fd.get("company_name") || "",
+        product_name: fd.get("product_name") || "",
+        payment_status: fd.get("payment_status") || "paying",
+        monthly_premium: Number(fd.get("monthly_premium")) || 0,
+        total_paid_amount: Number(fd.get("total_paid_amount")) || 0,
+        expected_amount: Number(fd.get("expected_amount")) || 0,
+        start_date: fd.get("start_date") || "",
+        maturity_date: fd.get("maturity_date") || "",
+        memo: fd.get("memo") || "",
+      };
+
+      try {
+        await api("/api/insurance-accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast("보험/연금 상품이 저장되었습니다.");
+        closeDialog("insuranceAccountDialog");
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || "보험/연금 상품 저장 실패", true);
       }
     });
   }

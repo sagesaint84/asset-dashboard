@@ -109,16 +109,26 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
 
     total_bank_balance = sum(float(a.get("balance") or 0) for a in bank_accounts)
 
+    insurance_accounts = data.get("insurance_accounts", [])
+    total_insurance_monthly = sum(float(i.get("monthly_premium") or 0) for i in insurance_accounts)
+    total_insurance_paid = sum(float(i.get("total_paid_amount") or 0) for i in insurance_accounts)
+    total_insurance_expected = sum(float(i.get("expected_amount") or 0) for i in insurance_accounts)
+
     return {
         "bank_accounts": bank_accounts,
         "savings_accounts": enriched_savings,
+        "insurance_accounts": insurance_accounts,
         "summary": {
             "bank_account_count": len(bank_accounts),
             "savings_account_count": len(enriched_savings),
+            "insurance_account_count": len(insurance_accounts),
             "total_bank_balance": round(total_bank_balance),
             "total_savings_paid": round(total_savings_paid),
             "total_savings_maturity": round(total_savings_maturity),
             "total_cash_and_savings": round(total_bank_balance + total_savings_paid),
+            "total_insurance_monthly": round(total_insurance_monthly),
+            "total_insurance_paid": round(total_insurance_paid),
+            "total_insurance_expected": round(total_insurance_expected),
         },
     }
 
@@ -218,3 +228,50 @@ def delete_saving_account(saving_id: str, username: str | None = None) -> bool:
         return False
     write_portfolio(data, username)
     return True
+
+
+def save_insurance_account(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    """보험/연금/공제 계좌를 생성하거나 수정합니다."""
+    data = read_portfolio(username)
+    insurances = data.setdefault("insurance_accounts", [])
+
+    ins_id = payload.get("id") or f"ins-{uuid.uuid4().hex[:12]}"
+    existing_index = next((i for i, ins in enumerate(insurances) if ins.get("id") == ins_id), None)
+
+    record = {
+        "id": ins_id,
+        "insurance_type": (payload.get("insurance_type") or "protection").strip(),
+        "company_name": (payload.get("company_name") or "").strip() or "보험/기관",
+        "product_name": (payload.get("product_name") or "").strip() or "보험/공제 상품",
+        "owner": (payload.get("owner") or "모두").strip(),
+        "payment_status": (payload.get("payment_status") or "paying").strip(),
+        "monthly_premium": max(0.0, float(payload.get("monthly_premium") or 0.0)),
+        "total_paid_amount": max(0.0, float(payload.get("total_paid_amount") or 0.0)),
+        "expected_amount": max(0.0, float(payload.get("expected_amount") or 0.0)),
+        "start_date": (payload.get("start_date") or "").strip(),
+        "maturity_date": (payload.get("maturity_date") or "").strip(),
+        "memo": (payload.get("memo") or "").strip(),
+        "updated_at": datetime.now().astimezone().isoformat(),
+    }
+
+    if existing_index is not None:
+        insurances[existing_index] = record
+    else:
+        record["created_at"] = record["updated_at"]
+        insurances.append(record)
+
+    write_portfolio(data, username)
+    return record
+
+
+def delete_insurance_account(ins_id: str, username: str | None = None) -> bool:
+    """보험/연금/공제 계좌를 삭제합니다."""
+    data = read_portfolio(username)
+    insurances = data.get("insurance_accounts", [])
+    before = len(insurances)
+    data["insurance_accounts"] = [i for i in insurances if i.get("id") != ins_id]
+    if len(data["insurance_accounts"]) == before:
+        return False
+    write_portfolio(data, username)
+    return True
+

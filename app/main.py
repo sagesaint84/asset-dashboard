@@ -635,6 +635,7 @@ async def dashboard(request: Request) -> dict:
     data["bank_accounts"] = savings_info.get("bank_accounts", [])
     data["savings_accounts"] = savings_info.get("savings_accounts", [])
     data["savings_summary"] = savings_info.get("summary", {})
+    data["insurance_accounts"] = savings_info.get("insurance_accounts", [])
     auto_save_all_owner_snapshots(data, username=username)
     return data
 
@@ -1011,6 +1012,23 @@ async def calculate_saving_endpoint(request: Request) -> dict:
         tax_type=body.get("tax_type", "normal"),
     )
     return {"calc": calc}
+
+@app.post("/api/insurance-accounts")
+async def save_insurance_account_endpoint(request: Request) -> dict:
+    from app.services.savings import save_insurance_account
+    username = get_current_username(request)
+    body = await request.json()
+    record = save_insurance_account(body, username=username)
+    return {"message": "보험/연금 상품이 저장되었습니다.", "insurance": record}
+
+@app.delete("/api/insurance-accounts/{ins_id}")
+async def delete_insurance_account_endpoint(ins_id: str, request: Request) -> dict:
+    from app.services.savings import delete_insurance_account
+    username = get_current_username(request)
+    success = delete_insurance_account(ins_id, username=username)
+    if not success:
+        raise HTTPException(404, "보험/연금 상품을 찾을 수 없습니다.")
+    return {"message": "보험/연금 상품이 삭제되었습니다."}
 
 
 # ---------------------------------------------------------------------------

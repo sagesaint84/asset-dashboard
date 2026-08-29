@@ -30,6 +30,7 @@ EMPTY_PORTFOLIO: dict[str, Any] = {
     "holdings": [],
     "bank_accounts": [],
     "savings_accounts": [],
+    "insurance_accounts": [],
     "updated_at": None,
 }
 
