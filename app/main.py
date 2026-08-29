@@ -492,6 +492,129 @@ async def favicon() -> HTMLResponse:
     return HTMLResponse(status_code=204)
 
 
+DEFAULT_FAMILY_MEMBERS = ["아빠", "엄마", "자녀"]
+
+def get_family_members(data: dict) -> list:
+    return data.get("settings", {}).get("family_members", list(DEFAULT_FAMILY_MEMBERS))
+
+
+def auto_save_all_owner_snapshots(data: dict[str, Any], username: str | None = None) -> None:
+    """
+    대시보드 접속 또는 조회 시 '모두' 및 모든 가족 구성원('아빠', '엄마', '자녀' 등)의
+    당일 자산기록(스냅샷)을 실시간 평가액으로 자동 갱신 및 신규 생성합니다.
+    """
+    if not data or not data.get("summary"):
+        return
+
+    today = datetime.now().astimezone().date().isoformat()
+    usd_rate = float(data.get("fx_rates", {}).get("USD", 1385.0))
+    all_records = list_asset_records(username=username)
+
+    raw_members = get_family_members(data) or list(DEFAULT_FAMILY_MEMBERS)
+    account_owners = [
+        a.get("owner")
+        for a in data.get("accounts", [])
+        if a.get("owner") and a.get("owner") != "모두"
+    ]
+    target_owners = ["모두"] + list(dict.fromkeys(raw_members + account_owners))
+
+    for owner in target_owners:
+        if owner == "모두":
+            if data["summary"]["holding_count"] or data["summary"]["total_value_krw"]:
+                day = data.get("day_change") or {}
+                snapshot_all = {
+                    "date": today,
+                    "total_value_krw": data["summary"]["total_value_krw"],
+                    "total_cost_krw": data["summary"]["total_cost_krw"],
+                    "profit_krw": data["summary"]["profit_krw"],
+                    "return_rate": data["summary"]["return_rate"],
+                    "day_profit_krw": day.get("change_krw") or 0,
+                    "krw_value_krw": data.get("currency_summary", {}).get("KRW", {}).get("market_value_krw", 0),
+                    "usd_value_krw": data.get("currency_summary", {}).get("USD", {}).get("market_value_krw", 0),
+                    "holding_count": data["summary"]["holding_count"],
+                    "currency": "KRW",
+                    "source": "auto",
+                    "memo": "자동 기록",
+                    "owner": "모두",
+                }
+                upsert_asset_record(snapshot_all, by_date=True, username=username)
+        else:
+            owned_accounts = [a for a in data.get("accounts", []) if (a.get("owner") or "모두") == owner]
+            owned_acc_ids = {a["id"] for a in owned_accounts}
+            owned_holdings = [
+                h for h in data.get("holdings", [])
+                if h.get("account_id") in owned_acc_ids or h.get("owner") == owner
+            ]
+
+            if not owned_accounts and not owned_holdings:
+                continue
+
+            stock_value_krw = 0.0
+            stock_cost_krw = 0.0
+            krw_stock_krw = 0.0
+            usd_stock_usd = 0.0
+            holding_day_gain = 0.0
+
+            for h in owned_holdings:
+                m_val = float(h.get("market_value_krw") or 0.0)
+                c_val = float(h.get("cost_value_krw") or 0.0)
+                stock_value_krw += m_val
+                stock_cost_krw += c_val
+
+                curr = (h.get("currency") or "KRW").upper()
+                if curr == "KRW":
+                    krw_stock_krw += m_val
+                else:
+                    usd_stock_usd += float(h.get("market_value") or (m_val / usd_rate))
+
+                r = float(h.get("day_change_rate") or 0.0)
+                if r != 0 and (100 + r) > 0:
+                    holding_day_gain += m_val * (r / (100 + r))
+
+            cash_krw = sum(float(a.get("cash_krw") or 0.0) for a in owned_accounts)
+            cash_usd = sum(float(a.get("cash_usd") or 0.0) for a in owned_accounts)
+            cash_total_krw = cash_krw + (cash_usd * usd_rate)
+
+            total_value_krw = stock_value_krw + cash_total_krw
+            total_cost_krw = stock_cost_krw + cash_total_krw
+            profit_krw = stock_value_krw - stock_cost_krw
+            return_rate = (profit_krw / total_cost_krw * 100) if total_cost_krw > 0 else 0.0
+
+            krw_value_krw = krw_stock_krw + cash_krw
+            usd_value_krw = (usd_stock_usd + cash_usd) * usd_rate
+
+            past_records = [
+                r for r in all_records
+                if (r.get("owner") or "모두") == owner
+                and r.get("date") and r.get("date") < today
+                and float(r.get("total_value_krw") or 0) > 0
+            ]
+            if past_records:
+                past_records.sort(key=lambda x: str(x.get("date")))
+                last_rec = past_records[-1]
+                prev_val = float(last_rec.get("total_value_krw") or 0)
+                day_profit_krw = total_value_krw - prev_val
+            else:
+                day_profit_krw = holding_day_gain
+
+            snapshot_owner = {
+                "date": today,
+                "total_value_krw": round(total_value_krw, 2),
+                "total_cost_krw": round(total_cost_krw, 2),
+                "profit_krw": round(profit_krw, 2),
+                "return_rate": round(return_rate, 2),
+                "day_profit_krw": round(day_profit_krw, 2),
+                "krw_value_krw": round(krw_value_krw, 2),
+                "usd_value_krw": round(usd_value_krw, 2),
+                "holding_count": len(owned_holdings),
+                "currency": "KRW",
+                "source": "auto",
+                "memo": "자동 기록",
+                "owner": owner,
+            }
+            upsert_asset_record(snapshot_owner, by_date=True, username=username)
+
+
 @app.get("/api/dashboard")
 async def dashboard(request: Request) -> dict:
     username = get_current_username(request)
@@ -507,25 +630,7 @@ async def dashboard(request: Request) -> dict:
             "updated_at": datetime.now().astimezone().isoformat(),
         }
     data = get_dashboard(username=username)
-    day = data.get("day_change") or {}
-    today = datetime.now().astimezone().date().isoformat()
-    if data["summary"]["holding_count"]:
-        snapshot = {
-            "date": today,
-            "total_value_krw": data["summary"]["total_value_krw"],
-            "total_cost_krw": data["summary"]["total_cost_krw"],
-            "profit_krw": data["summary"]["profit_krw"],
-            "return_rate": data["summary"]["return_rate"],
-            "day_profit_krw": day.get("change_krw") or 0,
-            "krw_value_krw": data.get("currency_summary", {}).get("KRW", {}).get("market_value_krw", 0),
-            "usd_value_krw": data.get("currency_summary", {}).get("USD", {}).get("market_value_krw", 0),
-            "holding_count": data["summary"]["holding_count"],
-            "currency": "KRW",
-            "source": "auto",
-            "memo": "자동 기록",
-            "owner": "모두",
-        }
-        upsert_asset_record(snapshot, by_date=True, username=username)
+    auto_save_all_owner_snapshots(data, username=username)
     return data
 
 
@@ -848,10 +953,6 @@ async def create_account(request: Request) -> dict:
 # ---------------------------------------------------------------------------
 # Family members CRUD API
 # ---------------------------------------------------------------------------
-DEFAULT_FAMILY_MEMBERS = ["아빠", "엄마", "자녀"]
-
-def get_family_members(data: dict) -> list:
-    return data.get("settings", {}).get("family_members", list(DEFAULT_FAMILY_MEMBERS))
 
 @app.get("/api/family-members")
 async def list_family_members(request: Request) -> dict:

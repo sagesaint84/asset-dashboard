@@ -1802,13 +1802,13 @@ function render(data) {
 }
 
 async function loadDashboard() {
+  const data = await api("/api/dashboard");
+  rawDashboard = data;
+  dashboard = data;
   try {
     const allRes = await api('/api/asset-records');
     allAssetRecords = allRes.records || [];
   } catch (e) {}
-  const data = await api("/api/dashboard");
-  rawDashboard = data;
-  dashboard = data;
   renderWithOwner(data, currentOwner);
 }
 
@@ -4587,14 +4587,15 @@ async function applyUserRoleView(me) {
 }
 
 async function loadAssetDataForUser() {
+  const o = currentOwner || '모두';
   try { await loadFamilyMembers(); } catch (e) {}
   try { await loadDashboard(); } catch (e) { toast(e.message || "대시보드를 불러오지 못했습니다.", true); }
   try { await loadMarkets(); } catch (e) {}
-  try { await loadAssetRecords('모두'); } catch (e) {}
-  try { await loadDividends('모두'); } catch (e) {}
-  try { await loadActualDividends('모두', selectedDividendYear); } catch (e) {}
-  try { await loadRealizedPnl('모두', selectedPnlYear, currentPnlTradeType); } catch (e) {}
-  try { await updateOverviewCardsAllTime('모두'); } catch (e) {}
+  try { await loadAssetRecords(o); } catch (e) {}
+  try { await loadDividends(o); } catch (e) {}
+  try { await loadActualDividends(o, selectedDividendYear); } catch (e) {}
+  try { await loadRealizedPnl(o, selectedPnlYear, currentPnlTradeType); } catch (e) {}
+  try { await updateOverviewCardsAllTime(o); } catch (e) {}
 }
 
 async function handleForcePasswordSubmit(e) {
