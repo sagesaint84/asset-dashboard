@@ -903,6 +903,307 @@ function renderAccounts(items) {
   }).join("");
 }
 
+// ── 4-1. 예·적금 및 일반 은행 계좌 (SAVINGS & BANKING) ───────────────────────
+let rawBankAccounts = [];
+let rawSavingsAccounts = [];
+let currentSavingsSubtab = 'savings'; // 'savings' | 'banks'
+
+function renderSavings(savingsList, bankList, owner = '모두') {
+  rawSavingsAccounts = savingsList || [];
+  rawBankAccounts = bankList || [];
+  renderSavingsWithOwner(owner);
+}
+
+function renderSavingsWithOwner(owner = '모두') {
+  const o = owner || currentOwner || '모두';
+  const filteredSavings = o === '모두' 
+    ? rawSavingsAccounts 
+    : rawSavingsAccounts.filter(s => (s.owner || '모두') === o);
+  const filteredBanks = o === '모두' 
+    ? rawBankAccounts 
+    : rawBankAccounts.filter(b => (b.owner || '모두') === o);
+
+  // 상단 요약 카드 집계
+  const totalBank = filteredBanks.reduce((sum, b) => sum + (Number(b.balance) || 0), 0);
+  const totalPaid = filteredSavings.reduce((sum, s) => sum + (Number(s.current_value) || Number(s.current_paid_amount) || 0), 0);
+  const totalMaturity = filteredSavings.reduce((sum, s) => sum + (Number(s.calc?.maturity_total) || 0), 0);
+
+  if ($("#totalBankBalanceVal")) $("#totalBankBalanceVal").textContent = `₩${number(totalBank, 0)}`;
+  if ($("#totalSavingsPaidVal")) $("#totalSavingsPaidVal").textContent = `₩${number(totalPaid, 0)}`;
+  if ($("#totalSavingsMaturityVal")) $("#totalSavingsMaturityVal").textContent = `₩${number(totalMaturity, 0)}`;
+
+  if ($("#savingsCount")) $("#savingsCount").textContent = filteredSavings.length;
+  if ($("#banksCount")) $("#banksCount").textContent = filteredBanks.length;
+
+  // 은행 계좌 매핑 사전 (출금/입금 통장 표시용)
+  const bankMap = new Map();
+  rawBankAccounts.forEach(b => bankMap.set(b.id, `${b.bank_name} ${b.account_name}`));
+
+  // 1) 예·적금 카드 그리드 렌더링
+  const savingsGrid = $("#savingsGrid");
+  if (savingsGrid) {
+    if (!filteredSavings.length) {
+      savingsGrid.innerHTML = '<div class="empty" style="grid-column:1/-1;">등록된 예·적금 상품이 없습니다. 상단 [+ 예·적금 추가] 버튼을 눌러보세요.</div>';
+    } else {
+      savingsGrid.innerHTML = filteredSavings.map(s => {
+        const typeLabel = s.saving_type === 'deposit' ? '정기예금' : (s.saving_type === 'installment' ? '정기적금' : '자유적금');
+        const typeClass = s.saving_type || 'deposit';
+        const dDayText = s.d_day != null ? (s.d_day <= 0 ? '만기 달성' : `D-${s.d_day}`) : '';
+        const dDayClass = s.d_day != null && s.d_day <= 0 ? 'd-day-badge done' : 'd-day-badge';
+
+        const calc = s.calc || {};
+        const taxLabel = s.tax_type === 'preferential' ? '세금우대 (1.4%)' : (s.tax_type === 'tax_free' ? '비과세 (0%)' : '일반과세 (15.4%)');
+
+        const withdrawName = s.withdraw_account_id ? (bankMap.get(s.withdraw_account_id) || '연결통장') : '미설정';
+        const depositName = s.deposit_account_id ? (bankMap.get(s.deposit_account_id) || '연결통장') : '미설정';
+
+        const transferInfo = s.saving_type === 'deposit' 
+          ? `예치원금: ₩${number(s.target_amount || calc.total_principal || 0, 0)}`
+          : (s.auto_transfer_day ? `매월 ${s.auto_transfer_day}일 이체 · 월 ₩${number(s.monthly_amount || 0, 0)}` : `월 ₩${number(s.monthly_amount || 0, 0)}`);
+
+        return `
+          <div class="saving-card">
+            <div class="saving-card-header">
+              <div class="saving-card-title-group">
+                <div class="saving-badge-row">
+                  <span class="saving-type-badge ${typeClass}">${typeLabel}</span>
+                  <span class="saving-owner-badge">${html(s.owner || '모두')}</span>
+                  ${dDayText ? `<span class="${dDayClass}">${dDayText}</span>` : ''}
+                </div>
+                <h3 class="saving-product-name">${html(s.product_name)}</h3>
+                <span class="saving-bank-name">${html(s.bank_name)}</span>
+              </div>
+              <div class="account-row-actions saving-card-actions">
+                <button class="account-action-button" data-saving-edit-id="${s.id}" title="수정" type="button">✎</button>
+                <button class="mini-delete-button" data-saving-del-id="${s.id}" title="삭제" type="button">🗑️</button>
+              </div>
+            </div>
+
+            <!-- 진행률 프로그레스 바 -->
+            <div class="saving-progress-wrap">
+              <div class="saving-progress-meta">
+                <span>진행률 (${s.start_date || '가입'} ~ ${s.end_date || '만기'})</span>
+                <strong>${s.progress_percent || 0}%</strong>
+              </div>
+              <div class="saving-progress-track">
+                <div class="saving-progress-bar" style="width: ${Math.min(100, Math.max(0, s.progress_percent || 0))}%;"></div>
+              </div>
+            </div>
+
+            <!-- 세부 정보 그리드 -->
+            <div class="saving-card-details">
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">약정 금리</span>
+                <span class="saving-detail-val" style="color:#38bdf8;">연 ${s.interest_rate}%</span>
+              </div>
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">계약 기간</span>
+                <span class="saving-detail-val">${s.duration_months}개월</span>
+              </div>
+              <div class="saving-detail-row" style="grid-column:1/-1;">
+                <span class="saving-detail-label">납입 조건</span>
+                <span class="saving-detail-val">${transferInfo}</span>
+              </div>
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">출금 통장</span>
+                <span class="saving-detail-val" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${html(withdrawName)}">${html(withdrawName)}</span>
+              </div>
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">만기 입금</span>
+                <span class="saving-detail-val" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${html(depositName)}">${html(depositName)}</span>
+              </div>
+            </div>
+
+            <!-- 세전·세후 이자 하이라이트 박스 -->
+            <div class="saving-interest-box">
+              <div class="saving-interest-row">
+                <span style="color:#8fa0c5;">총 불입원금</span>
+                <span style="color:#e2e8f0;font-weight:600;">₩${number(calc.total_principal || 0, 0)}</span>
+              </div>
+              <div class="saving-interest-row">
+                <span style="color:#8fa0c5;">세전 이자</span>
+                <span style="color:#38bdf8;font-weight:600;">+₩${number(calc.pre_tax_interest || 0, 0)}</span>
+              </div>
+              <div class="saving-interest-row">
+                <span style="color:#8fa0c5;">소득세 (${taxLabel})</span>
+                <span style="color:#f43f5e;font-weight:600;">-₩${number(calc.tax_amount || 0, 0)}</span>
+              </div>
+              <div class="saving-interest-row maturity-row">
+                <span>만기 예상 실수령액</span>
+                <span style="color:#42d5a3;font-size:14px;">₩${number(calc.maturity_total || 0, 0)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // 2) 일반 은행 계좌 목록 테이블 렌더링
+  const banksWrap = $("#banksListWrap");
+  if (banksWrap) {
+    if (!filteredBanks.length) {
+      banksWrap.innerHTML = '<div class="empty">등록된 일반 은행 계좌가 없습니다. 상단 [🏦 은행 계좌 추가] 버튼을 눌러보세요.</div>';
+    } else {
+      banksWrap.innerHTML = `
+        <table class="banks-table">
+          <thead>
+            <tr>
+              <th>은행</th>
+              <th>계좌 이름</th>
+              <th>계좌 번호</th>
+              <th>소유자</th>
+              <th style="text-align:right;">잔고 (KRW)</th>
+              <th>메모</th>
+              <th style="text-align:center;">관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredBanks.map(b => `
+              <tr>
+                <td><strong>${html(b.bank_name)}</strong></td>
+                <td>${html(b.account_name)}</td>
+                <td style="color:#8fa0c5;font-family:monospace;">${html(b.account_number || '-')}</td>
+                <td><span class="saving-owner-badge">${html(b.owner || '모두')}</span></td>
+                <td style="text-align:right;font-weight:700;color:#38bdf8;">₩${number(b.balance, 0)}</td>
+                <td style="color:#8fa0c5;font-size:11.5px;">${html(b.memo || '')}</td>
+                <td style="text-align:center;">
+                  <div class="account-row-actions" style="justify-content:center;">
+                    <button class="account-action-button" data-bank-edit-id="${b.id}" title="계좌 수정" type="button">✎</button>
+                    <button class="mini-delete-button" data-bank-del-id="${b.id}" title="계좌 삭제" type="button">🗑️</button>
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+}
+
+function calcSavingInterestPreview() {
+  const type = $("#savingTypeSelect")?.value || "deposit";
+  const months = Number($("#savingDurationMonths")?.value) || 12;
+  const rate = (Number($("#savingInterestRate")?.value) || 0) / 100;
+  const taxType = $("#savingTaxType")?.value || "normal";
+
+  let principal = 0;
+  let preTax = 0;
+
+  if (type === "deposit") {
+    principal = Number($("#savingTargetAmount")?.value) || 0;
+    preTax = principal * rate * (months / 12);
+  } else {
+    const monthly = Number($("#savingMonthlyAmount")?.value) || 0;
+    principal = monthly * months;
+    preTax = monthly * rate * (months * (months + 1) / 24);
+  }
+
+  let taxRate = 0.154;
+  if (taxType === "preferential") taxRate = 0.014;
+  else if (taxType === "tax_free") taxRate = 0.0;
+
+  const tax = Math.floor(preTax * taxRate);
+  const afterTax = preTax - tax;
+  const maturity = principal + afterTax;
+
+  if ($("#prevTotalPrincipal")) $("#prevTotalPrincipal").textContent = `₩${number(principal, 0)}`;
+  if ($("#prevPreTaxInterest")) $("#prevPreTaxInterest").textContent = `₩${number(preTax, 0)}`;
+  if ($("#prevTaxAmount")) $("#prevTaxAmount").textContent = `₩${number(tax, 0)}`;
+  if ($("#prevMaturityTotal")) $("#prevMaturityTotal").textContent = `₩${number(maturity, 0)}`;
+}
+
+function openBankAccountDialog(account = null) {
+  const dialog = $("#bankAccountDialog");
+  const form = $("#bankAccountForm");
+  if (!dialog || !form) return;
+  form.reset();
+  form.querySelector("[name='id']").value = account ? account.id : "";
+  if ($("#bankAccountDialogTitle")) {
+    $("#bankAccountDialogTitle").textContent = account ? "일반 은행 계좌 수정" : "일반 은행 계좌 추가";
+  }
+  if (account) {
+    form.querySelector("[name='bank_name']").value = account.bank_name || "";
+    form.querySelector("[name='account_name']").value = account.account_name || "";
+    form.querySelector("[name='account_number']").value = account.account_number || "";
+    form.querySelector("[name='owner']").value = account.owner || "모두";
+    form.querySelector("[name='balance']").value = account.balance || 0;
+    form.querySelector("[name='memo']").value = account.memo || "";
+  } else {
+    form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
+  }
+  dialog.showModal();
+}
+
+function openSavingAccountDialog(saving = null) {
+  const dialog = $("#savingAccountDialog");
+  const form = $("#savingAccountForm");
+  if (!dialog || !form) return;
+  form.reset();
+  form.querySelector("[name='id']").value = saving ? saving.id : "";
+  if ($("#savingAccountDialogTitle")) {
+    $("#savingAccountDialogTitle").textContent = saving ? "예·적금 상품 수정" : "예·적금 상품 추가";
+  }
+
+  const withdrawSel = $("#savingWithdrawAccountSelect");
+  const depositSel = $("#savingDepositAccountSelect");
+  const bankOptions = '<option value="">-- 은행 계좌 선택 --</option>' + 
+    rawBankAccounts.map(b => `<option value="${b.id}">${b.bank_name} - ${b.account_name} (${b.owner || '모두'})</option>`).join('');
+
+  if (withdrawSel) withdrawSel.innerHTML = bankOptions;
+  if (depositSel) depositSel.innerHTML = bankOptions;
+
+  if (saving) {
+    form.querySelector("[name='saving_type']").value = saving.saving_type || "deposit";
+    form.querySelector("[name='owner']").value = saving.owner || "모두";
+    form.querySelector("[name='bank_name']").value = saving.bank_name || "";
+    form.querySelector("[name='product_name']").value = saving.product_name || "";
+    form.querySelector("[name='start_date']").value = saving.start_date || "";
+    form.querySelector("[name='end_date']").value = saving.end_date || "";
+    form.querySelector("[name='duration_months']").value = saving.duration_months || 12;
+    form.querySelector("[name='interest_rate']").value = saving.interest_rate || "";
+    form.querySelector("[name='monthly_amount']").value = saving.monthly_amount || "";
+    form.querySelector("[name='target_amount']").value = saving.target_amount || "";
+    form.querySelector("[name='current_paid_amount']").value = saving.current_paid_amount || "";
+    form.querySelector("[name='tax_type']").value = saving.tax_type || "normal";
+    form.querySelector("[name='auto_transfer_day']").value = saving.auto_transfer_day || "";
+    if (withdrawSel) withdrawSel.value = saving.withdraw_account_id || "";
+    if (depositSel) depositSel.value = saving.deposit_account_id || "";
+    form.querySelector("[name='memo']").value = saving.memo || "";
+  } else {
+    form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
+    const todayStr = new Date().toISOString().slice(0, 10);
+    form.querySelector("[name='start_date']").value = todayStr;
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    form.querySelector("[name='end_date']").value = nextYear.toISOString().slice(0, 10);
+  }
+
+  updateSavingTypeFields();
+  calcSavingInterestPreview();
+  dialog.showModal();
+}
+
+function updateSavingTypeFields() {
+  const type = $("#savingTypeSelect")?.value || "deposit";
+  const monthlyLabel = $("#monthlyAmountLabel");
+  const targetLabel = $("#targetAmountLabel");
+  if (type === "deposit") {
+    if (monthlyLabel) monthlyLabel.style.display = "none";
+    if (targetLabel) {
+      targetLabel.style.display = "";
+      targetLabel.childNodes[0].nodeValue = "총 예치 원금 (KRW)\n";
+    }
+  } else {
+    if (monthlyLabel) monthlyLabel.style.display = "";
+    if (targetLabel) {
+      targetLabel.style.display = "";
+      targetLabel.childNodes[0].nodeValue = "만기 목표 원금 (KRW)\n";
+    }
+  }
+}
+
 // ── 5. 자산 히트맵 (정통 Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────
 const PERIOD_LABELS = {
   "1D": "일간 (전일 대비)",
@@ -1797,6 +2098,7 @@ function render(data) {
   renderSummary(data);
   renderClassifications(data.classifications || []);
   renderAccounts(data.accounts);
+  renderSavings(data.savings_accounts || [], data.bank_accounts || [], currentOwner);
   renderHeatmaps(data);
   renderHoldings(data);
 }
@@ -1983,6 +2285,7 @@ const FAMILY_TAB_CONTAINER_IDS = [
   'pnlFamilyTabs',
   'holdingsFamilyTabs',
   'familyTabs',
+  'savingsFamilyTabs',
 ];
 
 function renderFamilyTabs(members) {
@@ -2053,6 +2356,80 @@ document.addEventListener('click', async (e) => {
       }
     }
     document.getElementById("accountAddDialog")?.showModal();
+    return;
+  }
+
+  // 🏦 일반 은행 계좌 추가 모달 열기
+  if (e.target.closest('#addBankAccountBtn')) {
+    openBankAccountDialog();
+    return;
+  }
+
+  // ➕ 예·적금 추가 모달 열기
+  if (e.target.closest('#addSavingBtn')) {
+    openSavingAccountDialog();
+    return;
+  }
+
+  // 🗂️ 예·적금 서브 탭 전환
+  const subtabBtn = e.target.closest('.savings-subtab');
+  if (subtabBtn) {
+    const subtab = subtabBtn.dataset.subtab;
+    currentSavingsSubtab = subtab;
+    document.querySelectorAll('.savings-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
+    const isSavings = subtab === 'savings';
+    if ($("#savingsGrid")) $("#savingsGrid").style.display = isSavings ? 'grid' : 'none';
+    if ($("#banksListWrap")) $("#banksListWrap").style.display = isSavings ? 'none' : 'block';
+    return;
+  }
+
+  // 예·적금 수정
+  const savingEditBtn = e.target.closest('[data-saving-edit-id]');
+  if (savingEditBtn) {
+    const sid = savingEditBtn.dataset.savingEditId;
+    const saving = rawSavingsAccounts.find(s => s.id === sid);
+    if (saving) openSavingAccountDialog(saving);
+    return;
+  }
+
+  // 예·적금 삭제
+  const savingDelBtn = e.target.closest('[data-saving-del-id]');
+  if (savingDelBtn) {
+    const sid = savingDelBtn.dataset.savingDelId;
+    if (confirm('이 예·적금 상품을 삭제하시겠습니까?')) {
+      try {
+        await api(`/api/savings-accounts/${sid}`, { method: 'DELETE' });
+        toast('예·적금 상품이 삭제되었습니다.');
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || '삭제 실패', true);
+      }
+    }
+    return;
+  }
+
+  // 은행 계좌 수정
+  const bankEditBtn = e.target.closest('[data-bank-edit-id]');
+  if (bankEditBtn) {
+    const bid = bankEditBtn.dataset.bankEditId;
+    const bank = rawBankAccounts.find(b => b.id === bid);
+    if (bank) openBankAccountDialog(bank);
+    return;
+  }
+
+  // 은행 계좌 삭제
+  const bankDelBtn = e.target.closest('[data-bank-del-id]');
+  if (bankDelBtn) {
+    const bid = bankDelBtn.dataset.bankDelId;
+    if (confirm('이 은행 계좌를 삭제하시겠습니까?')) {
+      try {
+        await api(`/api/bank-accounts/${bid}`, { method: 'DELETE' });
+        toast('은행 계좌가 삭제되었습니다.');
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || '삭제 실패', true);
+      }
+    }
     return;
   }
 
@@ -4994,10 +5371,93 @@ async function handleSaveUserOpenApi(e) {
 }
 window.handleSaveUserOpenApi = handleSaveUserOpenApi;
 
+function initSavingsListeners() {
+  const savingForm = $("#savingAccountForm");
+  if (savingForm) {
+    savingForm.addEventListener("input", () => {
+      updateSavingTypeFields();
+      calcSavingInterestPreview();
+    });
+    savingForm.addEventListener("change", () => {
+      updateSavingTypeFields();
+      calcSavingInterestPreview();
+    });
+
+    savingForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(savingForm);
+      const payload = {
+        id: fd.get("id") || undefined,
+        saving_type: fd.get("saving_type") || "deposit",
+        owner: fd.get("owner") || "모두",
+        bank_name: fd.get("bank_name") || "",
+        product_name: fd.get("product_name") || "",
+        start_date: fd.get("start_date") || "",
+        end_date: fd.get("end_date") || "",
+        duration_months: Number(fd.get("duration_months")) || 12,
+        interest_rate: Number(fd.get("interest_rate")) || 0,
+        monthly_amount: Number(fd.get("monthly_amount")) || 0,
+        target_amount: Number(fd.get("target_amount")) || 0,
+        current_paid_amount: Number(fd.get("current_paid_amount")) || 0,
+        tax_type: fd.get("tax_type") || "normal",
+        auto_transfer_day: Number(fd.get("auto_transfer_day")) || 0,
+        withdraw_account_id: fd.get("withdraw_account_id") || "",
+        deposit_account_id: fd.get("deposit_account_id") || "",
+        memo: fd.get("memo") || "",
+      };
+
+      try {
+        await api("/api/savings-accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast("예·적금 상품이 저장되었습니다.");
+        closeDialog("savingAccountDialog");
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || "예·적금 저장 실패", true);
+      }
+    });
+  }
+
+  const bankForm = $("#bankAccountForm");
+  if (bankForm) {
+    bankForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(bankForm);
+      const payload = {
+        id: fd.get("id") || undefined,
+        bank_name: fd.get("bank_name") || "",
+        account_name: fd.get("account_name") || "",
+        account_number: fd.get("account_number") || "",
+        owner: fd.get("owner") || "모두",
+        balance: Number(fd.get("balance")) || 0,
+        currency: "KRW",
+        memo: fd.get("memo") || "",
+      };
+
+      try {
+        await api("/api/bank-accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast("일반 은행 계좌가 저장되었습니다.");
+        closeDialog("bankAccountDialog");
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || "은행 계좌 저장 실패", true);
+      }
+    });
+  }
+}
+
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
 async function bootstrap() {
   initAppTheme();
   initCollapsedSections();
+  initSavingsListeners();
   await initAuthSession();
 }
 

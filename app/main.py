@@ -630,6 +630,11 @@ async def dashboard(request: Request) -> dict:
             "updated_at": datetime.now().astimezone().isoformat(),
         }
     data = get_dashboard(username=username)
+    from app.services.savings import get_savings_data
+    savings_info = get_savings_data(username=username)
+    data["bank_accounts"] = savings_info.get("bank_accounts", [])
+    data["savings_accounts"] = savings_info.get("savings_accounts", [])
+    data["savings_summary"] = savings_info.get("summary", {})
     auto_save_all_owner_snapshots(data, username=username)
     return data
 
@@ -948,6 +953,64 @@ async def create_account(request: Request) -> dict:
     data.setdefault("accounts", []).append(new_account)
     write_portfolio(data, username=username)
     return {"message": f"계좌 '{broker} - {account_name}'이(가) 추가되었습니다.", **new_account}
+
+
+# ---------------------------------------------------------------------------
+# Bank accounts & Savings accounts (예·적금 및 일반 은행 계좌) API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/savings")
+async def get_savings_endpoint(request: Request) -> dict:
+    from app.services.savings import get_savings_data
+    username = get_current_username(request)
+    return get_savings_data(username=username)
+
+@app.post("/api/bank-accounts")
+async def save_bank_account_endpoint(request: Request) -> dict:
+    from app.services.savings import save_bank_account
+    username = get_current_username(request)
+    body = await request.json()
+    record = save_bank_account(body, username=username)
+    return {"message": "은행 계좌가 저장되었습니다.", "account": record}
+
+@app.delete("/api/bank-accounts/{acc_id}")
+async def delete_bank_account_endpoint(acc_id: str, request: Request) -> dict:
+    from app.services.savings import delete_bank_account
+    username = get_current_username(request)
+    success = delete_bank_account(acc_id, username=username)
+    if not success:
+        raise HTTPException(404, "계좌를 찾을 수 없습니다.")
+    return {"message": "은행 계좌가 삭제되었습니다."}
+
+@app.post("/api/savings-accounts")
+async def save_saving_account_endpoint(request: Request) -> dict:
+    from app.services.savings import save_saving_account
+    username = get_current_username(request)
+    body = await request.json()
+    record = save_saving_account(body, username=username)
+    return {"message": "예·적금 상품이 저장되었습니다.", "saving": record}
+
+@app.delete("/api/savings-accounts/{saving_id}")
+async def delete_saving_account_endpoint(saving_id: str, request: Request) -> dict:
+    from app.services.savings import delete_saving_account
+    username = get_current_username(request)
+    success = delete_saving_account(saving_id, username=username)
+    if not success:
+        raise HTTPException(404, "예·적금 상품을 찾을 수 없습니다.")
+    return {"message": "예·적금 상품이 삭제되었습니다."}
+
+@app.post("/api/savings/calculate")
+async def calculate_saving_endpoint(request: Request) -> dict:
+    from app.services.savings import calculate_interest
+    body = await request.json()
+    calc = calculate_interest(
+        saving_type=body.get("saving_type", "deposit"),
+        principal_or_monthly=float(body.get("principal_or_monthly") or 0.0),
+        interest_rate=float(body.get("interest_rate") or 0.0),
+        duration_months=int(body.get("duration_months") or 12),
+        tax_type=body.get("tax_type", "normal"),
+    )
+    return {"calc": calc}
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+import json
+import math
+import uuid
+from copy import deepcopy
+from datetime import date, datetime
+from typing import Any
+
+from app.services.portfolio import read_portfolio, write_portfolio
+
+
+def calculate_interest(
+    saving_type: str,
+    principal_or_monthly: float,
+    interest_rate: float,
+    duration_months: int,
+    tax_type: str = "normal",
+    current_paid_amount: float | None = None,
+) -> dict[str, Any]:
+    """
+    정기예금 및 정기적금의 세전이자, 소득세, 세후이자, 만기지급액을 정밀 계산합니다.
+    """
+    rate = float(interest_rate or 0.0) / 100.0
+    months = max(1, int(duration_months or 12))
+    amt = float(principal_or_monthly or 0.0)
+
+    if saving_type == "deposit":
+        total_principal = amt
+        pre_tax_interest = total_principal * rate * (months / 12.0)
+    else:
+        total_principal = amt * months
+        pre_tax_interest = amt * rate * (months * (months + 1) / 24.0)
+
+    if tax_type == "preferential":
+        tax_rate = 0.014
+    elif tax_type == "tax_free":
+        tax_rate = 0.0
+    else:
+        tax_rate = 0.154
+
+    tax_amount = math.floor(pre_tax_interest * tax_rate)
+    after_tax_interest = pre_tax_interest - tax_amount
+    maturity_total = total_principal + after_tax_interest
+
+    return {
+        "saving_type": saving_type,
+        "total_principal": round(total_principal),
+        "pre_tax_interest": round(pre_tax_interest),
+        "tax_rate_percent": round(tax_rate * 100, 1),
+        "tax_amount": round(tax_amount),
+        "after_tax_interest": round(after_tax_interest),
+        "maturity_total": round(maturity_total),
+    }
+
+
+def get_savings_data(username: str | None = None) -> dict[str, Any]:
+    """사용자의 일반 은행 계좌 및 예·적금 목록을 조회하고 이자 및 진행률을 계산하여 반환합니다."""
+    data = read_portfolio(username)
+    bank_accounts = data.get("bank_accounts", [])
+    savings_accounts = data.get("savings_accounts", [])
+
+    today_dt = datetime.now().astimezone().date()
+
+    enriched_savings = []
+    total_savings_paid = 0.0
+    total_savings_maturity = 0.0
+
+    for s in savings_accounts:
+        item = deepcopy(s)
+        calc = calculate_interest(
+            saving_type=item.get("saving_type", "deposit"),
+            principal_or_monthly=float(item.get("monthly_amount" if item.get("saving_type") in ("installment", "free") else "target_amount") or 0),
+            interest_rate=float(item.get("interest_rate") or 0),
+            duration_months=int(item.get("duration_months") or 12),
+            tax_type=item.get("tax_type", "normal"),
+        )
+        item["calc"] = calc
+
+        start_date_str = item.get("start_date")
+        end_date_str = item.get("end_date")
+
+        d_day = None
+        progress_pct = 0.0
+
+        if end_date_str:
+            try:
+                end_dt = date.fromisoformat(end_date_str)
+                d_day = (end_dt - today_dt).days
+                if start_date_str:
+                    start_dt = date.fromisoformat(start_date_str)
+                    total_days = max(1, (end_dt - start_dt).days)
+                    passed_days = max(0, min(total_days, (today_dt - start_dt).days))
+                    progress_pct = round((passed_days / total_days) * 100, 1)
+            except Exception:
+                pass
+
+        item["d_day"] = d_day
+        item["progress_percent"] = progress_pct
+
+        cur_val = float(item.get("current_paid_amount") or 0)
+        if cur_val <= 0:
+            cur_val = calc["total_principal"] if item.get("saving_type") == "deposit" else 0
+
+        item["current_value"] = cur_val
+        total_savings_paid += cur_val
+        total_savings_maturity += calc["maturity_total"]
+        enriched_savings.append(item)
+
+    total_bank_balance = sum(float(a.get("balance") or 0) for a in bank_accounts)
+
+    return {
+        "bank_accounts": bank_accounts,
+        "savings_accounts": enriched_savings,
+        "summary": {
+            "bank_account_count": len(bank_accounts),
+            "savings_account_count": len(enriched_savings),
+            "total_bank_balance": round(total_bank_balance),
+            "total_savings_paid": round(total_savings_paid),
+            "total_savings_maturity": round(total_savings_maturity),
+            "total_cash_and_savings": round(total_bank_balance + total_savings_paid),
+        },
+    }
+
+
+def save_bank_account(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    """일반 은행 계좌를 생성하거나 수정합니다."""
+    data = read_portfolio(username)
+    accounts = data.setdefault("bank_accounts", [])
+
+    acc_id = payload.get("id") or f"bank-{uuid.uuid4().hex[:12]}"
+    existing_index = next((i for i, a in enumerate(accounts) if a.get("id") == acc_id), None)
+
+    record = {
+        "id": acc_id,
+        "bank_name": (payload.get("bank_name") or "").strip() or "일반은행",
+        "account_name": (payload.get("account_name") or "").strip() or "수시입출금",
+        "account_number": (payload.get("account_number") or "").strip(),
+        "owner": (payload.get("owner") or "모두").strip(),
+        "balance": max(0.0, float(payload.get("balance") or 0.0)),
+        "currency": (payload.get("currency") or "KRW").upper(),
+        "memo": (payload.get("memo") or "").strip(),
+        "updated_at": datetime.now().astimezone().isoformat(),
+    }
+
+    if existing_index is not None:
+        accounts[existing_index] = record
+    else:
+        record["created_at"] = record["updated_at"]
+        accounts.append(record)
+
+    write_portfolio(data, username)
+    return record
+
+
+def delete_bank_account(acc_id: str, username: str | None = None) -> bool:
+    """일반 은행 계좌를 삭제합니다."""
+    data = read_portfolio(username)
+    accounts = data.get("bank_accounts", [])
+    before = len(accounts)
+    data["bank_accounts"] = [a for a in accounts if a.get("id") != acc_id]
+    if len(data["bank_accounts"]) == before:
+        return False
+    write_portfolio(data, username)
+    return True
+
+
+def save_saving_account(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    """예·적금 상품 계좌를 생성하거나 수정합니다."""
+    data = read_portfolio(username)
+    savings = data.setdefault("savings_accounts", [])
+
+    sid = payload.get("id") or f"saving-{uuid.uuid4().hex[:12]}"
+    existing_index = next((i for i, s in enumerate(savings) if s.get("id") == sid), None)
+
+    saving_type = payload.get("saving_type") or "deposit"
+    duration = int(payload.get("duration_months") or 12)
+    rate = float(payload.get("interest_rate") or 0.0)
+
+    record = {
+        "id": sid,
+        "saving_type": saving_type,
+        "bank_name": (payload.get("bank_name") or "").strip() or "은행",
+        "product_name": (payload.get("product_name") or "").strip() or "정기예금/적금",
+        "owner": (payload.get("owner") or "모두").strip(),
+        "start_date": (payload.get("start_date") or "").strip(),
+        "end_date": (payload.get("end_date") or "").strip(),
+        "duration_months": duration,
+        "interest_rate": rate,
+        "tax_type": payload.get("tax_type") or "normal",
+        "auto_transfer_day": int(payload.get("auto_transfer_day") or 0),
+        "monthly_amount": float(payload.get("monthly_amount") or 0.0),
+        "target_amount": float(payload.get("target_amount") or 0.0),
+        "current_paid_amount": float(payload.get("current_paid_amount") or 0.0),
+        "withdraw_account_id": (payload.get("withdraw_account_id") or "").strip(),
+        "deposit_account_id": (payload.get("deposit_account_id") or "").strip(),
+        "memo": (payload.get("memo") or "").strip(),
+        "updated_at": datetime.now().astimezone().isoformat(),
+    }
+
+    if existing_index is not None:
+        savings[existing_index] = record
+    else:
+        record["created_at"] = record["updated_at"]
+        savings.append(record)
+
+    write_portfolio(data, username)
+    return record
+
+
+def delete_saving_account(saving_id: str, username: str | None = None) -> bool:
+    """예·적금 상품 계좌를 삭제합니다."""
+    data = read_portfolio(username)
+    savings = data.get("savings_accounts", [])
+    before = len(savings)
+    data["savings_accounts"] = [s for s in savings if s.get("id") != saving_id]
+    if len(data["savings_accounts"]) == before:
+        return False
+    write_portfolio(data, username)
+    return True

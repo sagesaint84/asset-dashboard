@@ -28,6 +28,8 @@ EMPTY_PORTFOLIO: dict[str, Any] = {
     "settings": {"fx_rates": {"KRW": 1.0}, "fx_info": {}, "daily_snapshot": {}, "cash_balances": {}},
     "accounts": [],
     "holdings": [],
+    "bank_accounts": [],
+    "savings_accounts": [],
     "updated_at": None,
 }
 

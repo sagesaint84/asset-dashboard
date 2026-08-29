@@ -2479,3 +2479,362 @@ dialog.dialog .dialog-actions {
   color: #f3f5ff !important;
 }
 
+/* ── 11. 예·적금 및 은행 계좌 (SAVINGS & BANKING) ────────────────────────── */
+.savings-panel {
+  margin-top: 14px;
+}
+
+.savings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.saving-stat-card {
+  padding: 14px 16px;
+  background: #0d1527;
+  border: 1px solid #1f2c4d;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saving-stat-card.highlight {
+  background: linear-gradient(135deg, rgba(13, 21, 39, 0.9), rgba(16, 42, 60, 0.9));
+  border-color: #0284c7;
+}
+
+.saving-stat-label {
+  font-size: 11.5px;
+  color: #8fa0c5;
+  font-weight: 600;
+}
+
+.saving-stat-card strong {
+  font-size: 17px;
+  font-weight: 700;
+  color: #f1f4fb;
+  letter-spacing: -0.3px;
+}
+
+.saving-stat-card.highlight strong {
+  color: #38bdf8;
+}
+
+.savings-subtabs {
+  display: flex;
+  gap: 8px;
+}
+
+.savings-subtab {
+  background: #111a33;
+  color: #98a6c8;
+  border: 1px solid #27365c;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.savings-subtab:hover {
+  background: #19274a;
+  color: #e2e8f0;
+}
+
+.savings-subtab.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #3b82f6;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+}
+
+.savings-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.saving-card {
+  background: #0d1527;
+  border: 1px solid #1f2c4d;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.saving-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+.saving-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.saving-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saving-badge-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.saving-type-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.saving-type-badge.deposit {
+  background: rgba(66, 213, 163, 0.15);
+  color: #42d5a3;
+  border-color: rgba(66, 213, 163, 0.3);
+}
+
+.saving-type-badge.installment {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.saving-owner-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1a2542;
+  color: #cbd5e1;
+  border: 1px solid #2d3e68;
+}
+
+.d-day-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.d-day-badge.done {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border-color: #475569;
+}
+
+.saving-product-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f1f4fb;
+  margin: 0;
+}
+
+.saving-bank-name {
+  font-size: 12px;
+  color: #8fa0c5;
+}
+
+.saving-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saving-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #8fa0c5;
+}
+
+.saving-progress-track {
+  height: 6px;
+  background: #17223e;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.saving-progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #38bdf8, #3b82f6);
+  transition: width 0.3s ease;
+}
+
+.saving-card-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 10px 12px;
+  background: #111a33;
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+
+.saving-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.saving-detail-label {
+  color: #788bab;
+}
+
+.saving-detail-val {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.saving-interest-box {
+  padding: 10px 12px;
+  background: rgba(14, 30, 56, 0.65);
+  border: 1px solid #1e3a66;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.saving-interest-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.saving-interest-row.maturity-row {
+  padding-top: 6px;
+  border-top: 1px dashed #264478;
+  font-size: 13px;
+  font-weight: 700;
+  color: #42d5a3;
+}
+
+.saving-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 일반 은행 계좌 테이블 */
+.banks-table-wrap {
+  background: #0d1527;
+  border: 1px solid #1f2c4d;
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.banks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.banks-table th {
+  padding: 10px 14px;
+  background: #121d36;
+  color: #8fa0c5;
+  text-align: left;
+  border-bottom: 1px solid #1f2c4d;
+  font-size: 11px;
+}
+
+.banks-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #172340;
+  color: #e2e8f0;
+}
+
+.banks-table tr:last-child td {
+  border-bottom: none;
+}
+
+.banks-table tr:hover td {
+  background: #111d38;
+}
+
+/* ── 테마별 스타일 오버라이드 ── */
+[data-theme="oled"] .saving-stat-card,
+[data-theme="oled"] .saving-card,
+[data-theme="oled"] .banks-table-wrap {
+  background: #08080c !important;
+  border-color: #1a1a24 !important;
+}
+
+[data-theme="oled"] .saving-stat-card.highlight {
+  background: #0c1018 !important;
+  border-color: #2563eb !important;
+}
+
+[data-theme="oled"] .saving-card-details,
+[data-theme="oled"] .banks-table th {
+  background: #0f0f16 !important;
+}
+
+[data-theme="oled"] .saving-interest-box {
+  background: #0d121c !important;
+  border-color: #1a2742 !important;
+}
+
+[data-theme="oled"] .savings-subtab {
+  background: #0f0f16 !important;
+  border-color: #1a1a26 !important;
+  color: #94a3b8 !important;
+}
+
+[data-theme="white"] .saving-stat-card,
+[data-theme="white"] .saving-card,
+[data-theme="white"] .banks-table-wrap {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+[data-theme="white"] .saving-stat-card strong,
+[data-theme="white"] .saving-product-name,
+[data-theme="white"] .banks-table td {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .saving-card-details,
+[data-theme="white"] .banks-table th {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .saving-interest-box {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+[data-theme="white"] .savings-subtab {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+[data-theme="white"] .savings-subtab.active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
