@@ -3128,6 +3128,12 @@ dialog.dialog .dialog-actions {
   font-family: inherit;
   letter-spacing: -0.2px;
 }
+.account-type-tag.non-deductible {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-weight: 600;
+}
 
 
 

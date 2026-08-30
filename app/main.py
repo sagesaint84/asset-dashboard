@@ -950,12 +950,15 @@ async def create_account(request: Request) -> dict:
     isa_tr = max(0.0, float(body.get("isa_transfer_amount") or 0.0))
     isa_year = str(body.get("isa_transfer_year") or "").strip()
 
+    tax_deductible = bool(body.get("tax_deductible", True))
+
     new_account = {
         "id": str(uuid.uuid4()),
         "broker": broker,
         "name": account_name,
         "owner": owner,
         "account_type": acc_type,
+        "tax_deductible": tax_deductible,
         "income_level": income_lvl,
         "annual_deposit": annual_dep,
         "isa_transfer_amount": isa_tr,
@@ -1329,6 +1332,8 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
         account["owner"] = owner_val
     if "account_type" in payload:
         account["account_type"] = str(payload.get("account_type") or "general").strip()
+    if "tax_deductible" in payload:
+        account["tax_deductible"] = bool(payload.get("tax_deductible"))
     if "income_level" in payload:
         account["income_level"] = str(payload.get("income_level") or "low").strip()
     if "annual_deposit" in payload:

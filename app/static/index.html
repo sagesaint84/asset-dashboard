@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v490" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v491" />
   </head>
   <body>
     <main class="shell">
@@ -891,8 +891,8 @@
           <label>계좌 유형
             <select name="account_type" class="account-type-select">
               <option value="general">일반 주식 / 위탁계좌</option>
-              <option value="pension_savings">💎 연금저축펀드 (세액공제 연 600만)</option>
-              <option value="irp">🛡️ 개인형 IRP (세액공제 합산 연 900만)</option>
+              <option value="pension_savings">💎 연금저축펀드 (연 최대 1,800만 납입)</option>
+              <option value="irp">🛡️ 개인형 IRP (연 최대 1,800만 납입)</option>
               <option value="isa">🔄 중개형 ISA (비과세 & 만기 연금전환)</option>
             </select>
           </label>
@@ -900,10 +900,17 @@
 
         <!-- 연금저축 / IRP 세액공제 및 ISA 전환 설정 구역 -->
         <div class="pension-tax-benefit-group" style="display:none;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:12px;margin-top:10px;">
-          <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:8px;">
-            <span>💎 연말정산 세액공제 & ISA 만기이전 설정</span>
+          <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+            <span>💎 연금계좌 세액공제 & ISA 만기이전 설정</span>
+            <span style="font-size:11px;color:#94a3b8;font-weight:normal;">(연간 납입한도 1,800만원)</span>
           </div>
           <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px;">
+            <label style="grid-column:1/-1;">세액공제 적용 여부
+              <select name="tax_deductible" class="pension-tax-deductible">
+                <option value="true" selected>🎯 세액공제 신청 (연말정산 공제 대상 - 연 600만/900만 한도)</option>
+                <option value="false">🌿 세액공제 제외 / 미신청 (비공제 납입 - 향후 원금 비과세 인출용)</option>
+              </select>
+            </label>
             <label>소득 구간 (공제율)
               <select name="income_level" class="pension-income-level">
                 <option value="low" selected>총급여 5,500만원 이하 (16.5% 환급)</option>
@@ -911,7 +918,7 @@
               </select>
             </label>
             <label>올해 연금 납입액 (KRW)
-              <input type="number" name="annual_deposit" class="pension-annual-deposit" placeholder="예: 6000000" min="0" step="any" data-korean-currency />
+              <input type="number" name="annual_deposit" class="pension-annual-deposit" placeholder="예: 6000000" min="0" max="18000000" step="any" data-korean-currency />
             </label>
             <label>🔄 ISA 만기 연금 전환 입금액
               <input type="number" name="isa_transfer_amount" class="pension-isa-transfer" placeholder="전환액 (10% 추가공제)" min="0" step="any" data-korean-currency />
@@ -956,8 +963,8 @@
           <label>계좌 유형
             <select name="account_type" class="account-type-select">
               <option value="general">일반 주식 / 위탁계좌</option>
-              <option value="pension_savings">💎 연금저축펀드 (세액공제 연 600만)</option>
-              <option value="irp">🛡️ 개인형 IRP (세액공제 합산 연 900만)</option>
+              <option value="pension_savings">💎 연금저축펀드 (연 최대 1,800만 납입)</option>
+              <option value="irp">🛡️ 개인형 IRP (연 최대 1,800만 납입)</option>
               <option value="isa">🔄 중개형 ISA (비과세 & 만기 연금전환)</option>
             </select>
           </label>
@@ -965,10 +972,17 @@
 
         <!-- 연금저축 / IRP 세액공제 및 ISA 전환 설정 구역 -->
         <div class="pension-tax-benefit-group" style="display:none;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:12px;margin-top:10px;">
-          <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:8px;">
-            <span>💎 연말정산 세액공제 & ISA 만기이전 설정</span>
+          <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+            <span>💎 연금계좌 세액공제 & ISA 만기이전 설정</span>
+            <span style="font-size:11px;color:#94a3b8;font-weight:normal;">(연간 납입한도 1,800만원)</span>
           </div>
           <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px;">
+            <label style="grid-column:1/-1;">세액공제 적용 여부
+              <select name="tax_deductible" class="pension-tax-deductible">
+                <option value="true" selected>🎯 세액공제 신청 (연말정산 공제 대상 - 연 600만/900만 한도)</option>
+                <option value="false">🌿 세액공제 제외 / 미신청 (비공제 납입 - 향후 원금 비과세 인출용)</option>
+              </select>
+            </label>
             <label>소득 구간 (공제율)
               <select name="income_level" class="pension-income-level">
                 <option value="low" selected>총급여 5,500만원 이하 (16.5% 환급)</option>
@@ -976,7 +990,7 @@
               </select>
             </label>
             <label>올해 연금 납입액 (KRW)
-              <input type="number" name="annual_deposit" class="pension-annual-deposit" placeholder="예: 6000000" min="0" step="any" data-korean-currency />
+              <input type="number" name="annual_deposit" class="pension-annual-deposit" placeholder="예: 6000000" min="0" max="18000000" step="any" data-korean-currency />
             </label>
             <label>🔄 ISA 만기 연금 전환 입금액
               <input type="number" name="isa_transfer_amount" class="pension-isa-transfer" placeholder="전환액 (10% 추가공제)" min="0" step="any" data-korean-currency />
@@ -1982,7 +1996,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260831-v490"></script>
+    <script src="/static/wealth.js?v=20260831-v491"></script>
   </body>
 </html>
 

@@ -1074,11 +1074,27 @@ function renderAccounts(items) {
 
       const aName = (account.name || "").toLowerCase();
       const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
+
+      let isTaxDeductible = account.tax_deductible !== undefined ? Boolean(account.tax_deductible) : true;
+      if (account.tax_deductible === undefined) {
+        if (aName.includes("공제x") || aName.includes("세액공제x") || aName.includes("비공제") || aName.includes("미공제") || aName.includes("공제제외") || aName.includes("공제 안") || aName.includes("공제안")) {
+          isTaxDeductible = false;
+        }
+      }
+
       let typeBadge = "";
       if (aType === "pension_savings") {
-        typeBadge = '<span class="account-type-tag pension" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);margin-right:4px;">연금저축</span>';
+        if (isTaxDeductible) {
+          typeBadge = '<span class="account-type-tag pension" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);margin-right:4px;">연금(공제O)</span>';
+        } else {
+          typeBadge = '<span class="account-type-tag non-deductible" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">연금(비공제)</span>';
+        }
       } else if (aType === "irp") {
-        typeBadge = '<span class="account-type-tag irp" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);margin-right:4px;">IRP</span>';
+        if (isTaxDeductible) {
+          typeBadge = '<span class="account-type-tag irp" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);margin-right:4px;">IRP(공제O)</span>';
+        } else {
+          typeBadge = '<span class="account-type-tag non-deductible" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">IRP(비공제)</span>';
+        }
       } else if (aType === "isa") {
         typeBadge = '<span class="account-type-tag isa" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">ISA</span>';
       }
@@ -1087,7 +1103,9 @@ function renderAccounts(items) {
       if (aType === "pension_savings" || aType === "irp") {
         const dep = Number(account.annual_deposit) || 0;
         const isaTr = Number(account.isa_transfer_amount) || 0;
-        if (dep > 0 || isaTr > 0) {
+        if (!isTaxDeductible) {
+          taxBenefitText = ` · <span style="color:#a7f3d0;font-size:11px;">🌿 비공제 (원금 비과세 인출)</span>`;
+        } else if (dep > 0 || isaTr > 0) {
           const rate = account.income_level === "high" ? 0.132 : 0.165;
           const baseTarget = Math.min(dep, aType === "pension_savings" ? 6000000 : 9000000);
           const isaTarget = Math.min(isaTr * 0.10, 3000000);
@@ -1995,10 +2013,16 @@ function renderInsuranceWithOwner(owner = '모두') {
     const aName = (a.name || '').toLowerCase();
     const aType = a.account_type || (aName.includes('연금') ? 'pension_savings' : (aName.includes('irp') ? 'irp' : 'general'));
     if (aType === 'pension_savings' || aType === 'irp') {
+      let isTaxDeductible = a.tax_deductible !== undefined ? Boolean(a.tax_deductible) : true;
+      if (a.tax_deductible === undefined) {
+        if (aName.includes("공제x") || aName.includes("세액공제x") || aName.includes("비공제") || aName.includes("미공제") || aName.includes("공제제외") || aName.includes("공제 안") || aName.includes("공제안")) {
+          isTaxDeductible = false;
+        }
+      }
       const dep = Number(a.annual_deposit) || 0;
       const isaTr = Number(a.isa_transfer_amount) || 0;
       const rate = a.income_level === 'high' ? 0.132 : 0.165;
-      const baseTarget = Math.min(dep, aType === 'pension_savings' ? 6000000 : 9000000);
+      const baseTarget = isTaxDeductible ? Math.min(dep, aType === 'pension_savings' ? 6000000 : 9000000) : 0;
       const isaTarget = Math.min(isaTr * 0.10, 3000000);
       return sum + Math.floor((baseTarget + isaTarget) * rate);
     }
@@ -3704,12 +3728,13 @@ function updateAccountTaxBenefitFields(form) {
   if (taxGroup) taxGroup.style.display = isPension ? "block" : "none";
 
   if (isPension) {
+    const isDeductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
     const annualDep = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
     const isaTr = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
     const incomeLvl = form.querySelector(".pension-income-level")?.value || "low";
     const rate = incomeLvl === "low" ? 16.5 : 13.2;
 
-    const baseLimit = accType === "pension_savings" ? 6000000 : 9000000;
+    const baseLimit = isDeductible ? (accType === "pension_savings" ? 6000000 : 9000000) : 0;
     const baseTarget = Math.min(annualDep, baseLimit);
     const isaTarget = Math.min(isaTr * 0.10, 3000000);
     const totalTarget = baseTarget + isaTarget;
@@ -3717,8 +3742,16 @@ function updateAccountTaxBenefitFields(form) {
 
     const targetEl = form.querySelector(".pension-deduction-target-text");
     const refundEl = form.querySelector(".pension-tax-refund-text");
-    if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
-    if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
+
+    if (!isDeductible) {
+      if (targetEl) targetEl.textContent = `₩${number(isaTarget, 0)}${isaTarget > 0 ? ' (ISA 추가공제만 적용)' : ' (세액공제 제외)'}`;
+      if (refundEl) refundEl.innerHTML = isaTarget > 0
+        ? `+₩${number(Math.floor(isaTarget * (rate / 100)), 0)} <span style="font-size:11px;color:#a7f3d0;">(원금 ₩${number(annualDep, 0)} 비과세 인출용)</span>`
+        : `<span style="color:#a7f3d0;font-size:12px;">₩0 (원금 100% 비과세 인출 대상)</span>`;
+    } else {
+      if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
+      if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
+    }
   }
 }
 
@@ -3735,6 +3768,15 @@ function openAccountEditDialog(account) {
   const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
   const typeSelect = form.querySelector(".account-type-select");
   if (typeSelect) typeSelect.value = aType;
+
+  let isTaxDeductible = account.tax_deductible !== undefined ? Boolean(account.tax_deductible) : true;
+  if (account.tax_deductible === undefined) {
+    if (aName.includes("공제x") || aName.includes("세액공제x") || aName.includes("비공제") || aName.includes("미공제") || aName.includes("공제제외") || aName.includes("공제 안") || aName.includes("공제안")) {
+      isTaxDeductible = false;
+    }
+  }
+  const dedSel = form.querySelector(".pension-tax-deductible");
+  if (dedSel) dedSel.value = isTaxDeductible ? "true" : "false";
 
   const incomeLvl = form.querySelector(".pension-income-level");
   if (incomeLvl) incomeLvl.value = account.income_level || "low";
@@ -4824,6 +4866,7 @@ $("#accountEditForm")?.addEventListener("submit", async (e) => {
   const name = form.name.value.trim();
   const owner = form.owner ? form.owner.value : "모두";
   const account_type = form.querySelector(".account-type-select")?.value || "general";
+  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
@@ -4838,6 +4881,7 @@ $("#accountEditForm")?.addEventListener("submit", async (e) => {
         name,
         owner,
         account_type,
+        tax_deductible,
         income_level,
         annual_deposit,
         isa_transfer_amount,
@@ -4861,6 +4905,7 @@ async function saveNewAccount() {
   const account_name = (form.querySelector("[name='account_name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
   const account_type = form.querySelector(".account-type-select")?.value || "general";
+  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
@@ -4882,6 +4927,7 @@ async function saveNewAccount() {
         name: account_name,
         owner,
         account_type,
+        tax_deductible,
         income_level,
         annual_deposit,
         isa_transfer_amount,

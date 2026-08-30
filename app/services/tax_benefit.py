@@ -53,24 +53,30 @@ def calculate_yellow_umbrella_benefit(
 
 def calculate_pension_irp_benefit(
     annual_deposit: float,
-    account_type: str = "pension_savings",  # "pension_savings" | "irp"
+    account_type: str = "pension_savings",  # "pension_savings" | "irp" | "pension_savings_non_deductible" | "irp_non_deductible"
     income_level: str = "low",               # "low" (<=5500만원: 16.5%) | "high" (>5500만원: 13.2%)
     isa_transfer_amount: float = 0.0,
+    tax_deductible: bool = True,
 ) -> dict[str, Any]:
     """
     개인연금(연금저축) 및 IRP의 세액공제 혜택과 ISA 만기 연금 전환 추가 공제액을 정밀 계산합니다.
-    - 연금저축 단독 한도: 600만 원
-    - 연금저축 + IRP 합산 한도: 900만 원
-    - ISA 만기 연금 전환: 전환금액의 10% (최대 300만 원 추가 한도)
+    - 세액공제 신청 계좌: 연금저축 600만원 / IRP 900만원 한도
+    - 세액공제 제외(미신청) 계좌: 기본 세액공제 대상액 0원 (인출 시 원금 비과세)
     """
+    is_non_deductible = (
+        not tax_deductible
+        or account_type in ("pension_savings_non_deductible", "irp_non_deductible")
+    )
     rate = 16.5 if income_level == "low" else 13.2
 
     dep = max(0.0, float(annual_deposit or 0.0))
     isa_tr = max(0.0, float(isa_transfer_amount or 0.0))
 
-    if account_type == "pension_savings":
+    if is_non_deductible:
+        base_deduction_target = 0.0
+    elif account_type in ("pension_savings",):
         base_deduction_target = min(dep, 6_000_000.0)
-    elif account_type == "irp":
+    elif account_type in ("irp",):
         base_deduction_target = min(dep, 9_000_000.0)
     else:
         base_deduction_target = 0.0
@@ -84,10 +90,12 @@ def calculate_pension_irp_benefit(
 
     return {
         "account_type": account_type,
+        "tax_deductible": not is_non_deductible,
         "income_level": income_level,
         "credit_rate": rate,
         "annual_deposit": round(dep),
-        "base_limit": 6_000_000 if account_type == "pension_savings" else 9_000_000,
+        "annual_max_deposit_limit": 18_000_000,
+        "base_limit": 0 if is_non_deductible else (6_000_000 if account_type == "pension_savings" else 9_000_000),
         "base_deduction_target": round(base_deduction_target),
         "base_tax_refund": round(base_tax_refund),
         "isa_transfer_amount": round(isa_tr),
@@ -142,25 +150,31 @@ def get_total_tax_benefits(portfolio_data: dict[str, Any], owner: str | None = N
         acc_name = (acc.get("account_name") or acc.get("name") or "").lower()
 
         if acc_type == "general":
-            if "연금저축" in acc_name or "개인연금" in acc_name:
+            if "연금" in acc_name or "pension" in acc_name:
                 acc_type = "pension_savings"
             elif "irp" in acc_name or "개인형퇴직" in acc_name:
                 acc_type = "irp"
             elif "isa" in acc_name:
                 acc_type = "isa"
 
-        if acc_type in ("pension_savings", "irp"):
+        is_tax_deductible = acc.get("tax_deductible", True)
+        if acc.get("tax_deductible") is None or "tax_deductible" not in acc:
+            if "공제x" in acc_name or "세액공제x" in acc_name or "비공제" in acc_name or "미공제" in acc_name or "공제제외" in acc_name or "공제 안" in acc_name or "공제안" in acc_name:
+                is_tax_deductible = False
+
+        if acc_type in ("pension_savings", "irp", "pension_savings_non_deductible", "irp_non_deductible"):
             deposit = float(acc.get("annual_deposit") or 0.0)
             income_lvl = acc.get("income_level") or "low"
             isa_tr = float(acc.get("isa_transfer_amount") or 0.0)
 
-            b = calculate_pension_irp_benefit(deposit, acc_type, income_lvl, isa_tr)
+            b = calculate_pension_irp_benefit(deposit, acc_type, income_lvl, isa_tr, tax_deductible=is_tax_deductible)
             pension_items.append({
                 "id": acc.get("id"),
                 "account_name": acc.get("name") or acc.get("account_name"),
                 "broker": acc.get("broker"),
                 "owner": acc.get("owner", "모두"),
                 "account_type": acc_type,
+                "tax_deductible": is_tax_deductible,
                 "benefit": b,
             })
             total_pension_deduction += b["base_deduction_target"]
