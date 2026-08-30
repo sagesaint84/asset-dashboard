@@ -458,9 +458,9 @@ function closeDialog(idOrEl) {
 }
 window.closeDialog = closeDialog;
 
-// 다이얼로그 닫기 버튼 위임 및 배경(백드롭) 클릭 시 닫기
+// 다이얼로그 닫기 버튼 위임 (※ 팝업 외 배경 클릭 시에는 닫히지 않도록 보호)
 document.addEventListener('click', (e) => {
-  // 1) 닫기 버튼 클릭 처리 (.close, [data-close-dialog], .dialog-close-btn, [aria-label="닫기"] 등)
+  // 닫기 버튼 클릭 처리 (.close, [data-close-dialog], .dialog-close-btn, [aria-label="닫기"] 등)
   const closeBtn = e.target.closest('[data-close-dialog], .close, .dialog-close-btn, [aria-label="닫기"]');
   if (closeBtn) {
     const targetId = closeBtn.getAttribute('data-close-dialog');
@@ -474,18 +474,33 @@ document.addEventListener('click', (e) => {
       return;
     }
   }
+});
 
-  // 2) 다이얼로그 바깥(배경 백드롭) 클릭 시 닫기
-  if (e.target && e.target.tagName === 'DIALOG' && e.target.open) {
-    // forcePasswordModal(강제 비번 변경 모달)은 바깥 클릭으로 닫히지 않음
-    if (e.target.id === 'forcePasswordModal') return;
-    const rect = e.target.getBoundingClientRect();
-    const isInDialog = (
-      rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
-      rect.left <= e.clientX && e.clientX <= rect.left + rect.width
-    );
-    if (!isInDialog) {
-      closeDialog(e.target);
+// 다이얼로그 내부 입력창에서 Enter 키 누를 때 화면이 닫히지 않고 [저장] 버튼 자동 실행
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (e.isComposing) return; // 한글 조합 중 엔터는 무시
+
+  // textarea 내에서의 줄바꿈은 허용
+  if (e.target && e.target.tagName === 'TEXTAREA') return;
+
+  const dialog = e.target?.closest?.('dialog');
+  if (!dialog || !dialog.open) return;
+
+  // input, select 등 다이얼로그 폼 입력 요소에서 Enter를 친 경우
+  if (e.target && ['INPUT', 'SELECT'].includes(e.target.tagName)) {
+    e.preventDefault(); // 기본 submit 또는 dialog 자동 닫기 방지
+
+    // 해당 다이얼로그 안의 [저장] 버튼 우선 탐색 후 클릭
+    const saveBtn = dialog.querySelector('#accountAddSaveBtn, button[type="submit"]:not([value="cancel"]), button.primary:not([value="cancel"])');
+    if (saveBtn) {
+      saveBtn.click();
+    } else {
+      const form = dialog.querySelector('form');
+      if (form) {
+        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+        else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
     }
   }
 });
