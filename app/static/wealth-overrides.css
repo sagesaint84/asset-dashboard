@@ -2969,4 +2969,52 @@ dialog.dialog .dialog-actions {
   border-color: #2563eb !important;
 }
 
+/* ── 대출·마이너스통장 및 부채 카드 스타일 ───────────────────────── */
+.savings-summary-grid.loan-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.saving-stat-card.danger {
+  background: rgba(244, 63, 94, 0.08);
+  border-color: rgba(244, 63, 94, 0.28);
+}
+
+.saving-card.loan-card {
+  border-color: rgba(244, 63, 94, 0.2);
+}
+
+.saving-type-badge.loan-minus {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.saving-type-badge.loan-credit {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+/* OLED 테마 오버라이드 */
+[data-theme="oled"] .saving-stat-card.danger {
+  background: #140508 !important;
+  border-color: #4c111a !important;
+}
+
+[data-theme="oled"] .saving-card.loan-card {
+  border-color: #3b111a !important;
+}
+
+/* 화이트 테마 오버라이드 */
+[data-theme="white"] .saving-stat-card.danger {
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
+
+[data-theme="white"] .saving-card.loan-card {
+  border-color: #ffe4e6 !important;
+  background: #ffffff !important;
+}
+
+
 

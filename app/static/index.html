@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v462" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v470" />
   </head>
   <body>
     <main class="shell">
@@ -187,6 +187,16 @@
                   <strong id="totalValue" class="value-highlight">₩0</strong>
                   <small id="holdingCaption">주식 ₩0</small>
                   <small id="totalCashBadge" class="cash-badge-inline" style="display:none;margin-top:2px;">예수금 ₩0</small>
+                </div>
+              </div>
+              <div class="summary-row featured" id="netWorthRow" style="background:rgba(56,189,248,0.06);border-left:3px solid #38bdf8;">
+                <div class="summary-row-label">
+                  <span class="card-icon mini" style="background:rgba(56,189,248,0.2);color:#38bdf8;">💎</span>
+                  <strong style="color:#e0f2fe;">순자산 (Net Worth)</strong>
+                </div>
+                <div class="summary-row-val">
+                  <strong id="summaryNetWorth" class="value-highlight" style="color:#38bdf8;">₩0</strong>
+                  <small id="summaryTotalDebtCaption" style="color:#fb7185;font-weight:600;">총 부채(대출·마통): ₩0</small>
                 </div>
               </div>
               <div class="summary-row">
@@ -534,8 +544,9 @@
                 <button id="addAccountBtn" class="button secondary compact" type="button" title="증권 계좌 추가">➕ 증권계좌 추가</button>
               </div>
               <div id="bankingActions" style="display:none;gap:6px;align-items:center;">
-                <button id="addBankAccountBtn" class="button secondary compact" type="button" title="일반 은행 계좌 추가">🏦 은행 계좌 추가</button>
+                <button id="addBankAccountBtn" class="button secondary compact" type="button" title="입출금 통장 추가">🏦 입출금통장 추가</button>
                 <button id="addSavingBtn" class="button secondary compact" type="button" title="예·적금 상품 추가">➕ 예·적금 추가</button>
+                <button id="addLoanBtn" class="button secondary compact" type="button" title="대출·마이너스통장 추가">💳 대출·마통 추가</button>
               </div>
               <div id="insuranceActions" style="display:none;gap:6px;align-items:center;">
                 <button id="addInsuranceBtn" class="button secondary compact" type="button" title="보험 / 연금 / 공제 추가">➕ 보험/연금 추가</button>
@@ -548,11 +559,11 @@
             <div id="accountList" class="account-list"></div>
           </div>
 
-          <!-- 2) 은행·예적금 탭 본문 -->
+          <!-- 2) 은행 탭 본문 -->
           <div id="catPanelBanking" class="cat-panel" style="display:none;margin-top:12px;">
-            <div class="savings-summary-grid" id="savingsSummaryCards">
+            <div class="savings-summary-grid loan-summary-grid" id="savingsSummaryCards">
               <div class="saving-stat-card">
-                <span class="saving-stat-label">🏦 일반 은행 잔고</span>
+                <span class="saving-stat-label">🏦 입출금 통장 잔고</span>
                 <strong id="totalBankBalanceVal">₩0</strong>
               </div>
               <div class="saving-stat-card">
@@ -560,18 +571,25 @@
                 <strong id="totalSavingsPaidVal">₩0</strong>
               </div>
               <div class="saving-stat-card highlight">
-                <span class="saving-stat-label">🎯 만기 예상 실수령액 (세후)</span>
+                <span class="saving-stat-label">🎯 만기 예상 실수령액</span>
                 <strong id="totalSavingsMaturityVal">₩0</strong>
+              </div>
+              <div class="saving-stat-card danger">
+                <span class="saving-stat-label" style="color:#fb7185;">🔴 총 대출·마통 부채</span>
+                <strong id="totalLoanBalanceVal" style="color:#fb7185;">₩0</strong>
+                <small id="totalLoanInterestSub" style="font-size:11px;color:#94a3b8;margin-top:2px;">월 예상 이자: ₩0</small>
               </div>
             </div>
 
             <div class="savings-subtabs" style="display:flex;gap:8px;margin-top:14px;">
-              <button type="button" class="savings-subtab active" data-subtab="savings">예·적금 상품 (<span id="savingsCount">0</span>)</button>
-              <button type="button" class="savings-subtab" data-subtab="banks">일반 은행 계좌 (<span id="banksCount">0</span>)</button>
+              <button type="button" class="savings-subtab active" data-subtab="savings">예·적금 (<span id="savingsCount">0</span>)</button>
+              <button type="button" class="savings-subtab" data-subtab="banks">입출금 통장 (<span id="banksCount">0</span>)</button>
+              <button type="button" class="savings-subtab" data-subtab="loans">대출·마이너스통장 (<span id="loansCount">0</span>)</button>
             </div>
 
             <div id="savingsGrid" class="savings-card-grid" style="margin-top:12px;"></div>
             <div id="banksListWrap" class="banks-table-wrap" style="display:none;margin-top:12px;"></div>
+            <div id="loansGrid" class="savings-card-grid" style="display:none;margin-top:12px;"></div>
           </div>
 
           <!-- 3) 보험·연금·공제 탭 본문 -->
@@ -1037,6 +1055,94 @@
       </form>
     </dialog>
 
+    <!-- 대출·마이너스통장 등록 및 수정 다이얼로그 -->
+    <dialog id="loanAccountDialog" class="dialog" style="max-width:640px;width:95vw;">
+      <div class="dialog-head">
+        <h2 id="loanAccountDialogTitle">대출 · 마이너스통장 추가</h2>
+        <button value="cancel" class="close" aria-label="닫기">×</button>
+      </div>
+      <form id="loanAccountForm" method="dialog" style="padding:16px 20px 20px;">
+        <input type="hidden" name="id" value="" />
+        <div class="form-grid">
+          <label>
+            대출 유형
+            <select name="loan_type" id="loanTypeSelect" required>
+              <option value="minus">마이너스통장 (한도대출)</option>
+              <option value="credit">일반 신용대출</option>
+              <option value="mortgage">담보대출 (부동산/예적금)</option>
+              <option value="etc">기타 대출</option>
+            </select>
+          </label>
+          <label>
+            소유자
+            <select name="owner" id="loanOwnerSelect">
+              <option value="모두">모두</option>
+              <option value="아빠">아빠</option>
+              <option value="엄마">엄마</option>
+              <option value="자녀">자녀</option>
+            </select>
+          </label>
+          <label>
+            금융기관 / 은행명
+            <input type="text" name="bank_name" placeholder="예: 카카오뱅크, 신한은행" required />
+          </label>
+          <label>
+            대출 상품명
+            <input type="text" name="product_name" placeholder="예: 직장인 마이너스통장, 전세대출" required />
+          </label>
+          <label id="loanLimitLabel">
+            설정 한도금액 (KRW)
+            <input type="number" name="limit_amount" id="loanLimitAmount" placeholder="마이너스통장 총 한도액" min="0" step="100000" />
+          </label>
+          <label>
+            현재 대출잔액 (갚아야 할 빚, KRW)
+            <input type="number" name="current_balance" id="loanCurrentBalance" placeholder="현재 실제 마이너스/대출금" min="0" step="10000" required />
+          </label>
+          <label>
+            약정 대출금리 (연 %)
+            <input type="number" name="interest_rate" id="loanInterestRate" placeholder="예: 4.85" min="0" max="30" step="0.01" required />
+          </label>
+          <label>
+            상환 방식
+            <select name="repayment_type" id="loanRepaymentType">
+              <option value="bullet">만기일시상환 (마통 / 만기 상환)</option>
+              <option value="amortizing">원리금균등분할상환 (원금+이자 균등)</option>
+              <option value="principal">원금균등분할상환</option>
+            </select>
+          </label>
+          <label>
+            이자 출금 통장 (연동)
+            <select name="linked_account_id" id="loanLinkedAccountSelect">
+              <option value="">-- 출금 은행 계좌 선택 --</option>
+            </select>
+          </label>
+          <label>
+            만기일 (약정 만기일)
+            <input type="date" name="maturity_date" id="loanMaturityDate" />
+          </label>
+          <label style="grid-column: 1 / -1;">
+            메모
+            <input type="text" name="memo" placeholder="예: 1년 만기 연장형, 급여이체 우대금리 적용 등" />
+          </label>
+        </div>
+
+        <!-- 실시간 월 예상 이자 시뮬레이션 박스 -->
+        <div id="loanCalcPreviewBox" style="margin:16px 0 8px;padding:12px 16px;background:rgba(30,15,25,0.7);border:1px solid #4a1d2e;border-radius:10px;">
+          <h4 style="margin:0 0 8px;font-size:13px;color:#fb7185;display:flex;align-items:center;gap:6px;">📊 실시간 월 상환액 및 이자 시뮬레이션</h4>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;">
+            <div><span style="color:#8fa0c5;display:block;">현재 대출원금</span><strong id="prevLoanBalance" style="font-size:13px;color:#f1f4fb;">₩0</strong></div>
+            <div><span style="color:#8fa0c5;display:block;">월 예상 이자 (연 <span id="prevLoanRateText">0</span>%)</span><strong id="prevLoanInterest" style="font-size:13px;color:#fb7185;">₩0</strong></div>
+            <div><span style="color:#8fa0c5;display:block;">월 총 예상 상환액</span><strong id="prevLoanMonthlyPayment" style="font-size:14px;color:#f43f5e;">₩0</strong></div>
+          </div>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:16px;">
+          <button class="button secondary" value="cancel" type="button">취소</button>
+          <button class="button primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1486,7 +1592,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v462"></script>
+    <script src="/static/wealth.js?v=20260830-v470"></script>
   </body>
 </html>
 

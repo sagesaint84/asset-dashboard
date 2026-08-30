@@ -636,6 +636,7 @@ async def dashboard(request: Request) -> dict:
     data["savings_accounts"] = savings_info.get("savings_accounts", [])
     data["savings_summary"] = savings_info.get("summary", {})
     data["insurance_accounts"] = savings_info.get("insurance_accounts", [])
+    data["loan_accounts"] = savings_info.get("loan_accounts", [])
     auto_save_all_owner_snapshots(data, username=username)
     return data
 
@@ -1029,6 +1030,36 @@ async def delete_insurance_account_endpoint(ins_id: str, request: Request) -> di
     if not success:
         raise HTTPException(404, "보험/연금 상품을 찾을 수 없습니다.")
     return {"message": "보험/연금 상품이 삭제되었습니다."}
+
+@app.post("/api/loan-accounts")
+async def save_loan_account_endpoint(request: Request) -> dict:
+    from app.services.savings import save_loan_account
+    username = get_current_username(request)
+    body = await request.json()
+    record = save_loan_account(body, username=username)
+    return {"message": "대출·마이너스통장이 저장되었습니다.", "loan": record}
+
+@app.delete("/api/loan-accounts/{loan_id}")
+async def delete_loan_account_endpoint(loan_id: str, request: Request) -> dict:
+    from app.services.savings import delete_loan_account
+    username = get_current_username(request)
+    success = delete_loan_account(loan_id, username=username)
+    if not success:
+        raise HTTPException(404, "대출·마이너스통장을 찾을 수 없습니다.")
+    return {"message": "대출·마이너스통장이 삭제되었습니다."}
+
+@app.post("/api/loans/calculate")
+async def calculate_loan_endpoint(request: Request) -> dict:
+    from app.services.savings import calculate_loan_interest
+    body = await request.json()
+    calc = calculate_loan_interest(
+        current_balance=float(body.get("current_balance") or 0.0),
+        interest_rate=float(body.get("interest_rate") or 0.0),
+        repayment_type=body.get("repayment_type", "bullet"),
+        remaining_months=int(body.get("remaining_months") or 12),
+    )
+    return {"calc": calc}
+
 
 
 # ---------------------------------------------------------------------------
