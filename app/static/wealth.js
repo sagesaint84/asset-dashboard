@@ -1107,6 +1107,7 @@ function renderSavingsWithOwner(owner = '모두') {
   // 1) 자유통장 잔고 분리
   const positiveBanks = filteredBanks.filter(b => (Number(b.balance) || 0) >= 0);
   const minusDebtBanks = filteredBanks.filter(b => (Number(b.balance) || 0) < 0);
+  const minusBanks = minusDebtBanks; // 하위 호환 참조 유지
 
   // 2) 대출 탭에 표시할 마통 계좌: 실제 음수 잔고이거나 약정 한도(limit_amount > 0)가 등록된 계좌
   const minusOrCreditLineBanks = filteredBanks.filter(b => (Number(b.balance) || 0) < 0 || (Number(b.limit_amount) || 0) > 0);
@@ -1174,7 +1175,7 @@ function renderSavingsWithOwner(owner = '모두') {
   }
   if (titleLoans) {
     titleLoans.style.display = isAll ? 'flex' : 'none';
-    titleLoans.innerHTML = `<span>💳 대출 · 마이너스통장 (${filteredLoans.length + minusBanks.length}건)</span>`;
+    titleLoans.innerHTML = `<span>💳 대출 · 마이너스통장 (${totalLoanListCount}건)</span>`;
   }
 
   if ($("#banksListWrap")) $("#banksListWrap").style.display = (isAll || isBanks) ? 'block' : 'none';
