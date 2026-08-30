@@ -3102,6 +3102,33 @@ dialog.dialog .dialog-actions {
   border-left: 3px solid #10b981;
 }
 
+/* 노란우산공제 전용 카드 및 뱃지 스타일 */
+.insurance-type-badge.yellow_umbrella {
+  background: rgba(234, 179, 8, 0.18);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  font-weight: 700;
+}
+.saving-card.yellow-umbrella-card {
+  border-left: 3px solid #eab308;
+}
+
+/* 절세 종합 요약 배너 스타일 */
+.tax-benefit-banner {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.tax-benefit-banner:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(234, 179, 8, 0.2);
+}
+
+/* 증권 계좌 태그 스타일 */
+.account-type-tag {
+  font-family: inherit;
+  letter-spacing: -0.2px;
+}
+
 
 
 

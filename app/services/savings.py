@@ -8,6 +8,7 @@ from datetime import date, datetime
 from typing import Any
 
 from app.services.portfolio import read_portfolio, write_portfolio
+from app.services.tax_benefit import calculate_yellow_umbrella_benefit, get_total_tax_benefits
 
 
 def calculate_interest(
@@ -205,9 +206,29 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
         enriched_banks.append(b_item)
 
     insurance_accounts = data.get("insurance_accounts", [])
-    total_insurance_monthly = sum(float(i.get("monthly_premium") or 0) for i in insurance_accounts)
-    total_insurance_paid = sum(float(i.get("total_paid_amount") or 0) for i in insurance_accounts)
-    total_insurance_expected = sum(float(i.get("expected_amount") or 0) for i in insurance_accounts)
+    enriched_insurances = []
+    total_insurance_monthly = 0.0
+    total_insurance_paid = 0.0
+    total_insurance_expected = 0.0
+
+    for ins in insurance_accounts:
+        item = deepcopy(ins)
+        monthly = float(item.get("monthly_premium") or 0.0)
+        paid = float(item.get("total_paid_amount") or 0.0)
+        expected = float(item.get("expected_amount") or 0.0)
+
+        total_insurance_monthly += monthly
+        total_insurance_paid += paid
+        total_insurance_expected += expected
+
+        ins_type = item.get("insurance_type") or "protection"
+        prod_name = (item.get("product_name") or "").lower()
+        if ins_type == "yellow_umbrella" or "노란우산" in prod_name:
+            bracket = item.get("income_bracket") or "40m_to_100m"
+            custom_rate = float(item.get("marginal_tax_rate") or 0.0) if item.get("marginal_tax_rate") else None
+            item["tax_benefit"] = calculate_yellow_umbrella_benefit(monthly, None, bracket, custom_rate)
+
+        enriched_insurances.append(item)
 
     loan_accounts = data.get("loan_accounts", [])
     enriched_loans = []
@@ -241,16 +262,18 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
         enriched_loans.append(item)
 
     total_combined_debt = total_loan_balance + total_minus_bank_debt
+    tax_benefits_summary = get_total_tax_benefits(data)
 
     return {
         "bank_accounts": enriched_banks,
         "savings_accounts": enriched_savings,
-        "insurance_accounts": insurance_accounts,
+        "insurance_accounts": enriched_insurances,
         "loan_accounts": enriched_loans,
+        "tax_benefits": tax_benefits_summary,
         "summary": {
             "bank_account_count": len(enriched_banks),
             "savings_account_count": len(enriched_savings),
-            "insurance_account_count": len(insurance_accounts),
+            "insurance_account_count": len(enriched_insurances),
             "loan_account_count": len(enriched_loans),
             "minus_account_count": minus_account_count,
             "total_bank_balance": round(total_bank_balance),
@@ -267,6 +290,7 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
             "total_insurance_monthly": round(total_insurance_monthly),
             "total_insurance_paid": round(total_insurance_paid),
             "total_insurance_expected": round(total_insurance_expected),
+            "total_tax_benefits": tax_benefits_summary.get("grand_total_tax_benefit", 0),
         },
     }
 
@@ -386,6 +410,8 @@ def save_insurance_account(payload: dict[str, Any], username: str | None = None)
         "product_name": (payload.get("product_name") or "").strip() or "보험/공제 상품",
         "owner": (payload.get("owner") or "모두").strip(),
         "payment_status": (payload.get("payment_status") or "paying").strip(),
+        "income_bracket": (payload.get("income_bracket") or "40m_to_100m").strip(),
+        "marginal_tax_rate": float(payload.get("marginal_tax_rate") or 0.0) if payload.get("marginal_tax_rate") else None,
         "monthly_premium": max(0.0, float(payload.get("monthly_premium") or 0.0)),
         "total_paid_amount": max(0.0, float(payload.get("total_paid_amount") or 0.0)),
         "expected_amount": max(0.0, float(payload.get("expected_amount") or 0.0)),

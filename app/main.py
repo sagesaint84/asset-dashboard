@@ -944,11 +944,22 @@ async def create_account(request: Request) -> dict:
     if not broker or not account_name:
         raise HTTPException(status_code=400, detail="증권사와 계좌 이름은 필수입니다.")
     data = read_portfolio(username=username)
+    acc_type = (body.get("account_type") or "general").strip()
+    income_lvl = (body.get("income_level") or "low").strip()
+    annual_dep = max(0.0, float(body.get("annual_deposit") or 0.0))
+    isa_tr = max(0.0, float(body.get("isa_transfer_amount") or 0.0))
+    isa_year = str(body.get("isa_transfer_year") or "").strip()
+
     new_account = {
         "id": str(uuid.uuid4()),
         "broker": broker,
         "name": account_name,
         "owner": owner,
+        "account_type": acc_type,
+        "income_level": income_lvl,
+        "annual_deposit": annual_dep,
+        "isa_transfer_amount": isa_tr,
+        "isa_transfer_year": isa_year,
         "family_group": "All",
         "market_value_krw": 0,
         "stock_value_krw": 0,
@@ -1302,7 +1313,7 @@ async def delete_account(account_id: str, request: Request) -> dict:
 @app.put("/api/accounts/{account_id}")
 async def rename_account(account_id: str, payload: dict, request: Request) -> dict:
     username = get_current_username(request)
-    name = str(payload.get("name") or "").strip()
+    name = str(payload.get("name") or payload.get("account_name") or "").strip()
     broker = str(payload.get("broker") or "").strip()
     if not name:
         raise HTTPException(400, "계좌 이름을 입력해 주세요.")
@@ -1316,6 +1327,17 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
     owner_val = str(payload.get("owner") or "").strip()
     if owner_val:
         account["owner"] = owner_val
+    if "account_type" in payload:
+        account["account_type"] = str(payload.get("account_type") or "general").strip()
+    if "income_level" in payload:
+        account["income_level"] = str(payload.get("income_level") or "low").strip()
+    if "annual_deposit" in payload:
+        account["annual_deposit"] = max(0.0, float(payload.get("annual_deposit") or 0.0))
+    if "isa_transfer_amount" in payload:
+        account["isa_transfer_amount"] = max(0.0, float(payload.get("isa_transfer_amount") or 0.0))
+    if "isa_transfer_year" in payload:
+        account["isa_transfer_year"] = str(payload.get("isa_transfer_year") or "").strip()
+
     for holding in data["holdings"]:
         if holding.get("account_id") == account_id:
             holding["account_name"] = name
@@ -1323,6 +1345,14 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
                 holding["broker"] = broker
     write_portfolio(data, username=username)
     return {"message": "증권사 및 계좌 정보를 수정했습니다."}
+
+
+@app.get("/api/tax-benefits")
+async def get_tax_benefits_endpoint(request: Request, owner: str | None = None) -> dict:
+    from app.services.tax_benefit import get_total_tax_benefits
+    username = get_current_username(request)
+    data = read_portfolio(username=username)
+    return get_total_tax_benefits(data, owner=owner)
 
 
 @app.put("/api/accounts/{account_id}/cash")

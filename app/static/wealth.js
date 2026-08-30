@@ -1071,7 +1071,32 @@ function renderAccounts(items) {
       if (account.cash_krw) parts.push(`₩${number(account.cash_krw)}`);
       if (account.cash_usd) parts.push(`$${number(account.cash_usd, 2)}`);
       const cashText = parts.length ? ` · 예수금 ${parts.join(" / ")}` : "";
-      return `<div class="account-row"><div class="account-row-info"><strong>${html(account.name)}</strong><span>${number(account.holding_count, 0)}종목${cashText}</span></div><div class="account-row-actions"><button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button><button class="account-action-button" data-account-id="${account.id}" title="계좌 정보 수정" type="button">✎</button><button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button></div></div>`;
+
+      const aName = (account.name || "").toLowerCase();
+      const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
+      let typeBadge = "";
+      if (aType === "pension_savings") {
+        typeBadge = '<span class="account-type-tag pension" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);margin-right:4px;">연금저축</span>';
+      } else if (aType === "irp") {
+        typeBadge = '<span class="account-type-tag irp" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);margin-right:4px;">IRP</span>';
+      } else if (aType === "isa") {
+        typeBadge = '<span class="account-type-tag isa" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">ISA</span>';
+      }
+
+      let taxBenefitText = "";
+      if (aType === "pension_savings" || aType === "irp") {
+        const dep = Number(account.annual_deposit) || 0;
+        const isaTr = Number(account.isa_transfer_amount) || 0;
+        if (dep > 0 || isaTr > 0) {
+          const rate = account.income_level === "high" ? 0.132 : 0.165;
+          const baseTarget = Math.min(dep, aType === "pension_savings" ? 6000000 : 9000000);
+          const isaTarget = Math.min(isaTr * 0.10, 3000000);
+          const refund = Math.floor((baseTarget + isaTarget) * rate);
+          taxBenefitText = ` · <span style="color:#4ade80;font-weight:600;">💎 세액공제 ₩${number(refund, 0)}${isaTarget > 0 ? ` (ISA이전 +₩${number(Math.floor(isaTarget * rate), 0)})` : ''}</span>`;
+        }
+      }
+
+      return `<div class="account-row"><div class="account-row-info"><strong>${typeBadge}${html(account.name)}</strong><span>${number(account.holding_count, 0)}종목${cashText}${taxBenefitText}</span></div><div class="account-row-actions"><button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button><button class="account-action-button" data-account-id="${account.id}" title="계좌 정보 수정" type="button">✎</button><button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button></div></div>`;
     }).join("");
     return `<section class="broker-group"><div class="broker-head"><strong>${html(group.broker)}</strong><span>${number(group.count, 0)}개 계좌</span></div><div class="broker-accounts">${accounts}</div></section>`;
   }).join("");
@@ -1953,6 +1978,38 @@ function renderInsuranceWithOwner(owner = '모두') {
     return;
   }
 
+  // 상단 절세 요약 배너 업데이트
+  const yuTaxSaved = filtered.filter(i => (i.insurance_type === 'yellow_umbrella' || (i.product_name || '').includes('노란우산'))).reduce((sum, i) => {
+    const monthly = Number(i.monthly_premium) || 0;
+    const bracket = i.income_bracket || '40m_to_100m';
+    const rate = Number(i.marginal_tax_rate) || 26.4;
+    const limits = { under_40m: 5000000, "40m_to_100m": 3000000, over_100m: 2000000 };
+    const limit = limits[bracket] || 3000000;
+    const deduction = Math.min(monthly * 12, limit);
+    return sum + Math.floor(deduction * (rate / 100));
+  }, 0);
+
+  // 증권 계좌 연금/IRP 절세액 합산
+  const secAccounts = (dashboard?.accounts || []).filter(a => o === '모두' || (a.owner || '모두') === o);
+  const pensionTaxSaved = secAccounts.reduce((sum, a) => {
+    const aName = (a.name || '').toLowerCase();
+    const aType = a.account_type || (aName.includes('연금') ? 'pension_savings' : (aName.includes('irp') ? 'irp' : 'general'));
+    if (aType === 'pension_savings' || aType === 'irp') {
+      const dep = Number(a.annual_deposit) || 0;
+      const isaTr = Number(a.isa_transfer_amount) || 0;
+      const rate = a.income_level === 'high' ? 0.132 : 0.165;
+      const baseTarget = Math.min(dep, aType === 'pension_savings' ? 6000000 : 9000000);
+      const isaTarget = Math.min(isaTr * 0.10, 3000000);
+      return sum + Math.floor((baseTarget + isaTarget) * rate);
+    }
+    return sum;
+  }, 0);
+
+  const grandTotalTax = yuTaxSaved + pensionTaxSaved;
+  if ($("#grandTotalTaxBenefitVal")) {
+    $("#grandTotalTaxBenefitVal").textContent = `₩${number(grandTotalTax, 0)}`;
+  }
+
   grid.innerHTML = filtered.map(ins => {
     const typeKey = ins.insurance_type || 'protection';
     const typeLabel = INSURANCE_TYPE_LABELS[typeKey] || '보험/공제';
@@ -1963,8 +2020,33 @@ function renderInsuranceWithOwner(owner = '모두') {
       ? `${ins.start_date || '가입'} ~ ${ins.maturity_date || '만기'}`
       : '기간 미지정';
 
+    const isYU = typeKey === 'yellow_umbrella' || (ins.product_name || '').includes('노란우산');
+    let yuTaxBox = '';
+    if (isYU) {
+      const monthly = Number(ins.monthly_premium) || 0;
+      const bracket = ins.income_bracket || '40m_to_100m';
+      const rate = Number(ins.marginal_tax_rate) || 26.4;
+      const limits = { under_40m: 5000000, "40m_to_100m": 3000000, over_100m: 2000000 };
+      const limit = limits[bracket] || 3000000;
+      const deduction = Math.min(monthly * 12, limit);
+      const taxSaved = Math.floor(deduction * (rate / 100));
+
+      yuTaxBox = `
+        <div class="saving-interest-box" style="background:rgba(234,179,8,0.08);border-color:rgba(234,179,8,0.35);margin-top:8px;">
+          <div class="saving-interest-row">
+            <span style="color:#facc15;">연간 소득공제 대상</span>
+            <span style="color:#e2e8f0;font-weight:600;">₩${number(deduction, 0)} (한도 ₩${number(limit, 0)})</span>
+          </div>
+          <div class="saving-interest-row maturity-row" style="border-top:1px dashed rgba(234,179,8,0.3);padding-top:4px;margin-top:4px;">
+            <span style="color:#facc15;">예상 세금 절감(환급)액</span>
+            <span style="color:#4ade80;font-size:14px;font-weight:700;">+₩${number(taxSaved, 0)} (${rate}%)</span>
+          </div>
+        </div>
+      `;
+    }
+
     return `
-      <div class="saving-card">
+      <div class="saving-card ${isYU ? 'yellow-umbrella-card' : ''}">
         <div class="saving-card-header">
           <div class="saving-card-title-group">
             <div class="saving-badge-row">
@@ -2002,7 +2084,9 @@ function renderInsuranceWithOwner(owner = '모두') {
           ` : ''}
         </div>
 
-        <div class="saving-interest-box">
+        ${yuTaxBox}
+
+        <div class="saving-interest-box" style="margin-top:${isYU ? '6px' : '10px'};">
           <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
             <span>예상 수령액 / 해약환급금</span>
             <span style="color:#42d5a3;font-size:14px;">₩${number(ins.expected_amount || 0, 0)}</span>
@@ -2011,6 +2095,28 @@ function renderInsuranceWithOwner(owner = '모두') {
       </div>
     `;
   }).join('');
+}
+
+function updateYellowUmbrellaFields() {
+  const type = $("#insuranceTypeSelect")?.value;
+  const taxGroup = $("#yellowUmbrellaTaxGroup");
+  const isYU = type === "yellow_umbrella";
+  if (taxGroup) taxGroup.style.display = isYU ? "block" : "none";
+
+  if (isYU) {
+    const monthly = Number($("#insuranceAccountForm [name='monthly_premium']")?.value) || 0;
+    const bracket = $("#yuIncomeBracket")?.value || "40m_to_100m";
+    const rate = Number($("#yuMarginalRate")?.value) || 26.4;
+
+    const limits = { under_40m: 5000000, "40m_to_100m": 3000000, over_100m: 2000000 };
+    const maxLimit = limits[bracket] || 3000000;
+    const annualPaid = monthly * 12;
+    const deduction = Math.min(annualPaid, maxLimit);
+    const taxSaved = Math.floor(deduction * (rate / 100));
+
+    if ($("#yuDeductionAmountText")) $("#yuDeductionAmountText").textContent = `₩${number(deduction, 0)} (한도 ₩${number(maxLimit, 0)})`;
+    if ($("#yuTaxSavedText")) $("#yuTaxSavedText").textContent = `₩${number(taxSaved, 0)} (${rate}%)`;
+  }
 }
 
 function openInsuranceAccountDialog(item = null) {
@@ -2028,6 +2134,10 @@ function openInsuranceAccountDialog(item = null) {
     form.querySelector("[name='company_name']").value = item.company_name || "";
     form.querySelector("[name='product_name']").value = item.product_name || "";
     form.querySelector("[name='payment_status']").value = item.payment_status || "paying";
+    form.querySelector("[name='income_bracket']").value = item.income_bracket || "40m_to_100m";
+    if (item.marginal_tax_rate) {
+      form.querySelector("[name='marginal_tax_rate']").value = String(item.marginal_tax_rate);
+    }
     form.querySelector("[name='monthly_premium']").value = item.monthly_premium || "";
     form.querySelector("[name='total_paid_amount']").value = item.total_paid_amount || "";
     form.querySelector("[name='expected_amount']").value = item.expected_amount || "";
@@ -2037,6 +2147,7 @@ function openInsuranceAccountDialog(item = null) {
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
   }
+  updateYellowUmbrellaFields();
   refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
@@ -3585,6 +3696,32 @@ function openAccountCashDialog(account) {
   $("#accountCashDialog")?.showModal();
 }
 
+function updateAccountTaxBenefitFields(form) {
+  if (!form) return;
+  const accType = form.querySelector(".account-type-select")?.value || "general";
+  const taxGroup = form.querySelector(".pension-tax-benefit-group");
+  const isPension = accType === "pension_savings" || accType === "irp";
+  if (taxGroup) taxGroup.style.display = isPension ? "block" : "none";
+
+  if (isPension) {
+    const annualDep = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
+    const isaTr = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
+    const incomeLvl = form.querySelector(".pension-income-level")?.value || "low";
+    const rate = incomeLvl === "low" ? 16.5 : 13.2;
+
+    const baseLimit = accType === "pension_savings" ? 6000000 : 9000000;
+    const baseTarget = Math.min(annualDep, baseLimit);
+    const isaTarget = Math.min(isaTr * 0.10, 3000000);
+    const totalTarget = baseTarget + isaTarget;
+    const totalRefund = Math.floor(totalTarget * (rate / 100));
+
+    const targetEl = form.querySelector(".pension-deduction-target-text");
+    const refundEl = form.querySelector(".pension-tax-refund-text");
+    if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
+    if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
+  }
+}
+
 function openAccountEditDialog(account) {
   const form = $("#accountEditForm");
   if (!form || !account) return;
@@ -3593,6 +3730,23 @@ function openAccountEditDialog(account) {
   form.broker.value = account.broker || "";
   form.name.value = account.name || "";
   if (form.owner) form.owner.value = account.owner || "모두";
+
+  const aName = (account.name || "").toLowerCase();
+  const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
+  const typeSelect = form.querySelector(".account-type-select");
+  if (typeSelect) typeSelect.value = aType;
+
+  const incomeLvl = form.querySelector(".pension-income-level");
+  if (incomeLvl) incomeLvl.value = account.income_level || "low";
+  const annualDep = form.querySelector(".pension-annual-deposit");
+  if (annualDep) annualDep.value = account.annual_deposit || "";
+  const isaTr = form.querySelector(".pension-isa-transfer");
+  if (isaTr) isaTr.value = account.isa_transfer_amount || "";
+  const isaYear = form.querySelector(".pension-isa-year");
+  if (isaYear) isaYear.value = account.isa_transfer_year || "2026";
+
+  updateAccountTaxBenefitFields(form);
+  refreshDialogKoreanHints($("#accountEditDialog"));
   $("#accountEditDialog")?.showModal();
 }
 
@@ -4669,11 +4823,26 @@ $("#accountEditForm")?.addEventListener("submit", async (e) => {
   const broker = form.broker.value.trim();
   const name = form.name.value.trim();
   const owner = form.owner ? form.owner.value : "모두";
+  const account_type = form.querySelector(".account-type-select")?.value || "general";
+  const income_level = form.querySelector(".pension-income-level")?.value || "low";
+  const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
+  const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
+  const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
+
   try {
     const res = await api(`/api/accounts/${accountId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ broker, name, owner })
+      body: JSON.stringify({
+        broker,
+        name,
+        owner,
+        account_type,
+        income_level,
+        annual_deposit,
+        isa_transfer_amount,
+        isa_transfer_year
+      })
     });
     form.closest("dialog")?.close();
     toast(res.message);
@@ -4691,6 +4860,11 @@ async function saveNewAccount() {
   const broker = (form.querySelector("[name='broker']")?.value || "").trim();
   const account_name = (form.querySelector("[name='account_name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
+  const account_type = form.querySelector(".account-type-select")?.value || "general";
+  const income_level = form.querySelector(".pension-income-level")?.value || "low";
+  const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
+  const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
+  const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
   if (!broker || !account_name) {
     toast("증권사와 계좌 이름을 모두 입력해 주세요.", true);
@@ -4702,7 +4876,17 @@ async function saveNewAccount() {
     const res = await api("/api/accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ broker, account_name, name: account_name, owner })
+      body: JSON.stringify({
+        broker,
+        account_name,
+        name: account_name,
+        owner,
+        account_type,
+        income_level,
+        annual_deposit,
+        isa_transfer_amount,
+        isa_transfer_year
+      })
     });
     document.getElementById("accountAddDialog")?.close();
     toast(res.message || "계좌가 추가되었습니다.");
@@ -6987,6 +7171,9 @@ function initSavingsListeners() {
 
   const insForm = $("#insuranceAccountForm");
   if (insForm) {
+    insForm.addEventListener("input", updateYellowUmbrellaFields);
+    insForm.addEventListener("change", updateYellowUmbrellaFields);
+
     insForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(insForm);
@@ -6997,6 +7184,8 @@ function initSavingsListeners() {
         company_name: fd.get("company_name") || "",
         product_name: fd.get("product_name") || "",
         payment_status: fd.get("payment_status") || "paying",
+        income_bracket: fd.get("income_bracket") || "40m_to_100m",
+        marginal_tax_rate: Number(fd.get("marginal_tax_rate")) || 26.4,
         monthly_premium: Number(fd.get("monthly_premium")) || 0,
         total_paid_amount: Number(fd.get("total_paid_amount")) || 0,
         expected_amount: Number(fd.get("expected_amount")) || 0,
@@ -7011,7 +7200,7 @@ function initSavingsListeners() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast("보험/연금 상품이 저장되었습니다.");
+        toast("보험/연금/공제 상품이 저장되었습니다.");
         closeDialog("insuranceAccountDialog");
         await loadDashboard();
       } catch (err) {
@@ -7019,6 +7208,15 @@ function initSavingsListeners() {
       }
     });
   }
+
+  // 증권 계좌 추가 및 수정 폼 실시간 절세 프리뷰 이벤트 바인딩
+  ["accountAddForm", "accountEditForm"].forEach(id => {
+    const f = document.getElementById(id);
+    if (f) {
+      f.addEventListener("input", () => updateAccountTaxBenefitFields(f));
+      f.addEventListener("change", () => updateAccountTaxBenefitFields(f));
+    }
+  });
 
   const loanForm = $("#loanAccountForm");
   if (loanForm) {

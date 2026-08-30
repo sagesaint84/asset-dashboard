@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v489" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v490" />
   </head>
   <body>
     <main class="shell">
@@ -615,6 +615,25 @@
 
           <!-- 3) 보험·연금·공제 탭 본문 -->
           <div id="catPanelInsurance" class="cat-panel" style="display:none;margin-top:12px;">
+            <!-- 🎯 연간 절세 혜택 종합 요약 배너 -->
+            <div id="taxBenefitSummaryBanner" class="tax-benefit-banner" style="background:linear-gradient(135deg, rgba(234,179,8,0.12) 0%, rgba(56,189,248,0.1) 100%);border:1px solid rgba(234,179,8,0.35);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:24px;">🎯</span>
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:#facc15;display:flex;align-items:center;gap:6px;">
+                    <span>2026 연간 절세 혜택 종합 요약 (연말정산 · 종합소득세)</span>
+                  </div>
+                  <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+                    노란우산 소득공제 + 연금저축/IRP 세액공제 + ISA 만기이전 추가공제
+                  </div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:11px;color:#94a3b8;">예상 총 세금 절감(환급)액</div>
+                <strong id="grandTotalTaxBenefitVal" style="font-size:19px;font-weight:800;color:#4ade80;">₩0</strong>
+              </div>
+            </div>
+
             <div class="savings-summary-grid" id="insuranceSummaryCards">
               <div class="saving-stat-card">
                 <span class="saving-stat-label">🛡️ 총 월 납입액</span>
@@ -846,14 +865,14 @@
       </form>
     </dialog>
 
-    <!-- 증권사 및 계좌 이름 수정 다이얼로그 -->
-    <dialog id="accountEditDialog" class="dialog">
+    <!-- 증권사 및 계좌 정보 수정 다이얼로그 -->
+    <dialog id="accountEditDialog" class="dialog" style="max-width:560px;width:95vw;">
       <form id="accountEditForm" method="dialog">
         <div class="dialog-head">
           <h2>증권사 및 계좌 정보 수정</h2>
           <button value="cancel" class="close" aria-label="닫기">×</button>
         </div>
-        <p class="dialog-description">증권사 이름과 계좌 이름을 수정합니다.</p>
+        <p class="dialog-description">계좌 유형과 연말정산 세액공제 설정을 관리합니다.</p>
         <div class="form-grid">
           <label>증권사 이름
             <input name="broker" placeholder="KB증권, 토스증권, 나무증권 등" required />
@@ -869,14 +888,57 @@
               <option value="자녀">자녀</option>
             </select>
           </label>
+          <label>계좌 유형
+            <select name="account_type" class="account-type-select">
+              <option value="general">일반 주식 / 위탁계좌</option>
+              <option value="pension_savings">💎 연금저축펀드 (세액공제 연 600만)</option>
+              <option value="irp">🛡️ 개인형 IRP (세액공제 합산 연 900만)</option>
+              <option value="isa">🔄 중개형 ISA (비과세 & 만기 연금전환)</option>
+            </select>
+          </label>
         </div>
-        <div class="dialog-actions">
+
+        <!-- 연금저축 / IRP 세액공제 및 ISA 전환 설정 구역 -->
+        <div class="pension-tax-benefit-group" style="display:none;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:12px;margin-top:10px;">
+          <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:8px;">
+            <span>💎 연말정산 세액공제 & ISA 만기이전 설정</span>
+          </div>
+          <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px;">
+            <label>소득 구간 (공제율)
+              <select name="income_level" class="pension-income-level">
+                <option value="low" selected>총급여 5,500만원 이하 (16.5% 환급)</option>
+                <option value="high">총급여 5,500만원 초과 (13.2% 환급)</option>
+              </select>
+            </label>
+            <label>올해 연금 납입액 (KRW)
+              <input type="number" name="annual_deposit" class="pension-annual-deposit" placeholder="예: 6000000" min="0" step="any" data-korean-currency />
+            </label>
+            <label>🔄 ISA 만기 연금 전환 입금액
+              <input type="number" name="isa_transfer_amount" class="pension-isa-transfer" placeholder="전환액 (10% 추가공제)" min="0" step="any" data-korean-currency />
+            </label>
+            <label>ISA 전환 연도
+              <input type="number" name="isa_transfer_year" class="pension-isa-year" placeholder="예: 2026" min="2020" max="2050" value="2026" />
+            </label>
+          </div>
+          <div class="pension-preview-box" style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px 12px;font-size:11.5px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <span>총 세액공제 대상: </span>
+              <strong class="pension-deduction-target-text" style="color:#38bdf8;">₩0</strong>
+            </div>
+            <div>
+              <span>예상 세액 환급액: </span>
+              <strong class="pension-tax-refund-text" style="color:#4ade80;font-size:13px;">₩0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:14px;">
           <button class="button secondary" value="cancel" type="button">취소</button>
           <button class="button primary" type="submit">저장</button>
         </div>
       </form>
     </dialog>
-    <dialog id="accountAddDialog" class="dialog">
+    <dialog id="accountAddDialog" class="dialog" style="max-width:560px;width:95vw;">
       <form id="accountAddForm" onsubmit="return false;">
         <div class="dialog-head">
           <h2>계좌 추가</h2>
@@ -891,8 +953,51 @@
             <option value="엄마">엄마</option>
             <option value="자녀">자녀</option>
           </select></label>
+          <label>계좌 유형
+            <select name="account_type" class="account-type-select">
+              <option value="general">일반 주식 / 위탁계좌</option>
+              <option value="pension_savings">💎 연금저축펀드 (세액공제 연 600만)</option>
+              <option value="irp">🛡️ 개인형 IRP (세액공제 합산 연 900만)</option>
+              <option value="isa">🔄 중개형 ISA (비과세 & 만기 연금전환)</option>
+            </select>
+          </label>
         </div>
-        <div class="dialog-actions">
+
+        <!-- 연금저축 / IRP 세액공제 및 ISA 전환 설정 구역 -->
+        <div class="pension-tax-benefit-group" style="display:none;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:12px;margin-top:10px;">
+          <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:8px;">
+            <span>💎 연말정산 세액공제 & ISA 만기이전 설정</span>
+          </div>
+          <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px;">
+            <label>소득 구간 (공제율)
+              <select name="income_level" class="pension-income-level">
+                <option value="low" selected>총급여 5,500만원 이하 (16.5% 환급)</option>
+                <option value="high">총급여 5,500만원 초과 (13.2% 환급)</option>
+              </select>
+            </label>
+            <label>올해 연금 납입액 (KRW)
+              <input type="number" name="annual_deposit" class="pension-annual-deposit" placeholder="예: 6000000" min="0" step="any" data-korean-currency />
+            </label>
+            <label>🔄 ISA 만기 연금 전환 입금액
+              <input type="number" name="isa_transfer_amount" class="pension-isa-transfer" placeholder="전환액 (10% 추가공제)" min="0" step="any" data-korean-currency />
+            </label>
+            <label>ISA 전환 연도
+              <input type="number" name="isa_transfer_year" class="pension-isa-year" placeholder="예: 2026" min="2020" max="2050" value="2026" />
+            </label>
+          </div>
+          <div class="pension-preview-box" style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px 12px;font-size:11.5px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <span>총 세액공제 대상: </span>
+              <strong class="pension-deduction-target-text" style="color:#38bdf8;">₩0</strong>
+            </div>
+            <div>
+              <span>예상 세액 환급액: </span>
+              <strong class="pension-tax-refund-text" style="color:#4ade80;font-size:13px;">₩0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:14px;">
           <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
           <button id="accountAddSaveBtn" class="button primary" type="button">저장</button>
         </div>
@@ -1148,6 +1253,44 @@
             만기일 (또는 연금개시일)
             <input type="date" name="maturity_date" />
           </label>
+          <!-- 노란우산공제 전용 소득공제 설정 구역 -->
+          <div id="yellowUmbrellaTaxGroup" style="display:none;grid-column:1/-1;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;padding:12px;margin-top:4px;">
+            <div style="font-size:12px;font-weight:700;color:#facc15;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
+              <span>🟡 노란우산공제 소득공제 & 절세 혜택 설정</span>
+            </div>
+            <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px;">
+              <label>사업소득 구간 (공제한도)
+                <select name="income_bracket" id="yuIncomeBracket">
+                  <option value="under_40m">4천만 원 이하 (연 최대 500만원 공제)</option>
+                  <option value="40m_to_100m" selected>4천만 ~ 1억 원 이하 (연 최대 300만원 공제)</option>
+                  <option value="over_100m">1억 원 초과 (연 최대 200만원 공제)</option>
+                </select>
+              </label>
+              <label>적용 한계세율 (지방세 포함)
+                <select name="marginal_tax_rate" id="yuMarginalRate">
+                  <option value="6.6">6.6% (과표 1,400만 이하)</option>
+                  <option value="16.5">16.5% (과표 1,400만~5,000만)</option>
+                  <option value="26.4" selected>26.4% (과표 5,000만~8,800만)</option>
+                  <option value="38.5">38.5% (과표 8,800만~1.5억)</option>
+                  <option value="41.8">41.8% (과표 1.5억~3억)</option>
+                  <option value="44.0">44.0% (과표 3억~5억)</option>
+                  <option value="46.2">46.2% (과표 5억~10억)</option>
+                  <option value="49.5">49.5% (과표 10억 초과)</option>
+                </select>
+              </label>
+            </div>
+            <div id="yuTaxBenefitPreview" style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px 12px;font-size:11.5px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <span>연간 소득공제 대상: </span>
+                <strong id="yuDeductionAmountText" style="color:#facc15;">₩3,000,000</strong>
+              </div>
+              <div>
+                <span>예상 세금 절감(환급)액: </span>
+                <strong id="yuTaxSavedText" style="color:#4ade80;font-size:13px;">₩792,000</strong>
+              </div>
+            </div>
+          </div>
+
           <label style="grid-column: 1 / -1;">
             메모
             <input type="text" name="memo" placeholder="예: 20년납 100세만기, 65세 연금수령 개시 등" />
@@ -1839,7 +1982,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260831-v489"></script>
+    <script src="/static/wealth.js?v=20260831-v490"></script>
   </body>
 </html>
 
