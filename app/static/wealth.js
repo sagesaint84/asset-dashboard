@@ -338,6 +338,105 @@ const money = (value, currency = "KRW") => {
   try { return new Intl.NumberFormat("ko-KR", { style: "currency", currency, maximumFractionDigits: currency === "KRW" ? 0 : 2 }).format(Number(value || 0)); }
   catch { return number(value); }
 };
+
+function formatKoreanMoneyFriendly(val) {
+  if (val === null || val === undefined || val === '') return '';
+  const num = Number(val);
+  if (isNaN(num) || num === 0) return '';
+
+  const isNegative = num < 0;
+  const rawNum = Math.abs(Math.round(num));
+  if (rawNum === 0) return '';
+
+  if (rawNum < 10000) {
+    return `${isNegative ? '-' : ''}${rawNum.toLocaleString()}원`;
+  }
+
+  const units = ['', '만', '억', '조', '경'];
+  const parts = [];
+  let unitIdx = 0;
+  let absNum = rawNum;
+
+  while (absNum > 0 && unitIdx < units.length) {
+    const chunk = absNum % 10000;
+    if (chunk > 0) {
+      const unit = units[unitIdx];
+      let chunkStr = '';
+      if (chunk >= 1000 && chunk % 1000 === 0) {
+        chunkStr = `${chunk / 1000}천`;
+      } else if (chunk >= 100 && chunk % 100 === 0 && chunk < 1000) {
+        chunkStr = `${chunk / 100}백`;
+      } else {
+        chunkStr = chunk.toLocaleString();
+      }
+      parts.unshift(`${chunkStr}${unit}`);
+    }
+    absNum = Math.floor(absNum / 10000);
+    unitIdx++;
+  }
+
+  let result = parts.join(' ') + ' 원';
+
+  // 1,000만 ~ 9,999만 또는 1억 ~ 9.9억일 때 상세 한글 독음 (예: "1,500만 원 (1천 5백만 원)")
+  if (rawNum >= 10000000 && rawNum < 100000000) {
+    const cheon = Math.floor(rawNum / 10000000);
+    const baek = Math.floor((rawNum % 10000000) / 1000000);
+    let spoken = `${cheon}천`;
+    if (baek > 0) spoken += ` ${baek}백`;
+    spoken += '만 원';
+    if (!result.includes(spoken)) {
+      result += ` (${spoken})`;
+    }
+  } else if (rawNum >= 100000000 && rawNum < 1000000000) {
+    const eok = Math.floor(rawNum / 100000000);
+    const cheon = Math.floor((rawNum % 100000000) / 10000000);
+    const baek = Math.floor((rawNum % 10000000) / 1000000);
+    let spoken = `${eok}억`;
+    if (cheon > 0) spoken += ` ${cheon}천`;
+    if (baek > 0) spoken += ` ${baek}백`;
+    spoken += '만 원';
+    if (!result.includes(spoken)) {
+      result += ` (${spoken})`;
+    }
+  }
+
+  return isNegative ? `-${result} (마이너스)` : result;
+}
+
+function updateKoreanCurrencyHint(input) {
+  if (!input) return;
+  let hintEl = input.parentElement?.querySelector('.korean-currency-hint');
+  if (!hintEl) {
+    hintEl = document.createElement('div');
+    hintEl.className = 'korean-currency-hint';
+    hintEl.style.cssText = 'font-size:11.5px;font-weight:700;color:#38bdf8;margin-top:3px;display:flex;align-items:center;gap:4px;line-height:1.3;transition:all 0.15s ease;';
+    input.parentElement?.appendChild(hintEl);
+  }
+
+  const val = input.value;
+  const formatted = formatKoreanMoneyFriendly(val);
+  if (formatted) {
+    const isMinus = Number(val) < 0;
+    hintEl.style.display = 'flex';
+    hintEl.style.color = isMinus ? '#fb7185' : '#38bdf8';
+    hintEl.innerHTML = `<span style="font-size:11px;">💬</span> <span>${formatted}</span>`;
+  } else {
+    hintEl.style.display = 'none';
+    hintEl.innerHTML = '';
+  }
+}
+
+function refreshDialogKoreanHints(dialogEl) {
+  if (!dialogEl) return;
+  dialogEl.querySelectorAll('[data-korean-currency]').forEach(inp => updateKoreanCurrencyHint(inp));
+}
+
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.hasAttribute('data-korean-currency')) {
+    updateKoreanCurrencyHint(e.target);
+  }
+});
+
 const html = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
 const escapeHtml = html;
 window.escapeHtml = html;
@@ -1473,6 +1572,7 @@ function openBankAccountDialog(account = null, fromLoan = false) {
   }
 
   calcBankMinusPreview();
+  refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
 
@@ -1528,6 +1628,7 @@ function openSavingAccountDialog(saving = null) {
 
   updateSavingTypeFields();
   calcSavingInterestPreview();
+  refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
 
@@ -1621,6 +1722,7 @@ function openLoanAccountDialog(loan = null) {
   }
 
   calcLoanPreview();
+  refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
 
@@ -1798,6 +1900,7 @@ function openInsuranceAccountDialog(item = null) {
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
   }
+  refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
 
@@ -2244,6 +2347,7 @@ function openRealEstateDialog(reItem = null) {
   if (kbBox) kbBox.style.display = "none";
 
   updateRealEstateTypeFields();
+  refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
 
@@ -2300,6 +2404,7 @@ async function fetchKbMarketPrice() {
       const currInput = $("#reCurrentPrice");
       if (currInput && (!currInput.value || Number(currInput.value) === 0 || confirm(`조회된 KB 일반평균가(₩${number(matched.deal_avg, 0)})를 현재 시세에 적용할까요?`))) {
         currInput.value = matched.deal_avg;
+        updateKoreanCurrencyHint(currInput);
         calcRealEstatePreview();
       }
     }
@@ -6892,6 +6997,7 @@ function initSavingsListeners() {
         const selType = currentKbTypes[selectedIdx];
         if (selType && selType.deal_avg > 0) {
           currInput.value = selType.deal_avg;
+          updateKoreanCurrencyHint(currInput);
           calcRealEstatePreview();
           toast(`KB시세(₩${number(selType.deal_avg, 0)})가 현재 시세에 적용되었습니다.`);
         }
