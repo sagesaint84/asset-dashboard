@@ -1095,9 +1095,92 @@ async def remove_real_estate(request: Request, re_id: str) -> dict:
     return {"message": "부동산 자산이 삭제되었습니다."}
 
 
+@app.get("/api/real-estates/kb-price")
+async def get_kb_price_api(
+    request: Request,
+    name: str = "",
+    area: float = 0.0,
+    complex_no: str = ""
+) -> dict:
+    get_current_username(request)
+    import re
+    from app.services.kb_land import search_kb_complex, get_kb_market_prices
+
+    c_no = complex_no.strip()
+    complex_info = None
+    complexes = []
+
+    if not c_no and name:
+        clean_name = re.sub(r'\s*\d+[-~_동호].*$', '', name).strip()
+        complexes = search_kb_complex(clean_name or name)
+        if complexes:
+            c_no = complexes[0]["complex_no"]
+            complex_info = complexes[0]
+
+    if not c_no:
+        return {"ok": False, "message": f"'{name}' 단지를 KB부동산에서 찾을 수 없습니다. 아파트명을 확인해 주세요.", "complexes": []}
+
+    price_data = get_kb_market_prices(c_no, target_area=area if area > 0 else None)
+    if "error" in price_data:
+        return {"ok": False, "message": price_data["error"], "complexes": complexes}
+
+    return {
+        "ok": True,
+        "complex_no": c_no,
+        "complex_info": complex_info,
+        "complexes": complexes,
+        "matched": price_data.get("matched"),
+        "types": price_data.get("types", []),
+    }
 
 
-# ---------------------------------------------------------------------------
+@app.post("/api/real-estates/{re_id}/refresh-kb-price")
+async def refresh_kb_price_api(request: Request, re_id: str) -> dict:
+    username = get_current_username(request)
+    data = read_portfolio(username)
+    real_estates = data.get("real_estates", [])
+    item = next((r for r in real_estates if r.get("id") == re_id), None)
+    if not item:
+        raise HTTPException(404, "부동산 항목을 찾을 수 없습니다.")
+
+    import re
+    from datetime import datetime
+    from app.services.kb_land import search_kb_complex, get_kb_market_prices
+    from app.services.portfolio import write_portfolio
+
+    c_no = (item.get("kb_complex_no") or "").strip()
+    if not c_no:
+        clean_name = re.sub(r'\s*\d+[-~_동호].*$', '', item.get("name") or "").strip()
+        complexes = search_kb_complex(clean_name or item.get("name") or "")
+        if complexes:
+            c_no = complexes[0]["complex_no"]
+            item["kb_complex_no"] = c_no
+
+    if not c_no:
+        raise HTTPException(404, f"'{item.get('name')}' 단지를 KB부동산에서 찾지 못했습니다.")
+
+    excl_area = float(item.get("exclusive_area") or 0.0)
+    price_data = get_kb_market_prices(c_no, target_area=excl_area if excl_area > 0 else None)
+    if "error" in price_data or not price_data.get("matched"):
+        raise HTTPException(400, price_data.get("error") or "KB시세 정보를 찾을 수 없습니다.")
+
+    matched = price_data["matched"]
+    new_price = matched.get("deal_avg") or matched.get("deal_high") or matched.get("deal_low") or 0
+    if new_price > 0:
+        item["current_price"] = float(new_price)
+        item["kb_complex_no"] = c_no
+        item["kb_matched_type"] = matched.get("type_display")
+        item["updated_at"] = datetime.now().astimezone().isoformat()
+        write_portfolio(data, username)
+        return {
+            "message": f"KB시세가 갱신되었습니다. (₩{new_price:,.0f})",
+            "new_price": new_price,
+            "matched_type": matched.get("type_display"),
+            "real_estate": item
+        }
+    else:
+        raise HTTPException(400, "조회된 KB시세 금액이 0원입니다.")
+
 # Family members CRUD API
 # ---------------------------------------------------------------------------
 

@@ -1928,6 +1928,7 @@ function renderRealEstateWithOwner(owner = '모두') {
             <span class="saving-bank-name">${html(re.address || '-')}</span>
           </div>
           <div class="account-row-actions saving-card-actions">
+            ${pType !== 'lease' ? `<button class="account-action-button" data-re-refresh-kb-id="${re.id}" title="KB부동산 공식 시세로 즉시 갱신" type="button" style="color:#facc15;font-size:12px;">🔄</button>` : ''}
             <a href="${naverLandUrl}" target="_blank" rel="noopener" class="account-action-button" title="네이버 부동산 '${cleanSearchKeyword}' 시세 확인" style="text-decoration:none;display:inline-flex;align-items:center;font-size:12px;">🔍</a>
             <button class="account-action-button" data-re-edit-id="${re.id}" title="수정" type="button">✎</button>
             <button class="mini-delete-button" data-re-del-id="${re.id}" title="삭제" type="button">🗑️</button>
@@ -2175,15 +2176,99 @@ function openRealEstateDialog(reItem = null) {
     form.querySelector("[name='expiry_date']").value = reItem.expiry_date || "";
     form.querySelector("[name='exclusive_area']").value = reItem.exclusive_area || "";
     form.querySelector("[name='memo']").value = reItem.memo || "";
+    form.querySelector("[name='kb_complex_no']").value = reItem.kb_complex_no || "";
 
     const linkedIds = reItem.linked_loan_ids || [];
     if (loanSelect) loanSelect.value = linkedIds[0] || "";
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
+    form.querySelector("[name='kb_complex_no']").value = "";
   }
+
+  const kbBox = $("#reKbResultBox");
+  if (kbBox) kbBox.style.display = "none";
 
   updateRealEstateTypeFields();
   dialog.showModal();
+}
+
+let currentKbTypes = [];
+
+async function fetchKbMarketPrice() {
+  const nameInput = $("#reNameInput");
+  const areaInput = $("#reExclusiveArea");
+  const complexNoInput = $("#reKbComplexNo");
+  const btn = $("#reFetchKbBtn");
+  const resultBox = $("#reKbResultBox");
+  const resultDetail = $("#reKbResultDetail");
+  const typeSelectWrap = $("#reKbTypeSelectWrap");
+  const typeSelect = $("#reKbTypeSelect");
+
+  const name = (nameInput?.value || "").trim();
+  if (!name) {
+    alert("단지명(아파트명)을 먼저 입력해 주세요.");
+    nameInput?.focus();
+    return;
+  }
+
+  const area = Number(areaInput?.value || 0);
+  const complexNo = (complexNoInput?.value || "").trim();
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ 조회 중...";
+  }
+
+  try {
+    const res = await api(`/api/real-estates/kb-price?name=${encodeURIComponent(name)}&area=${area}&complex_no=${encodeURIComponent(complexNo)}`);
+    if (!res.ok) {
+      alert(res.message || "KB시세를 찾을 수 없습니다.");
+      return;
+    }
+
+    if (complexNoInput) complexNoInput.value = res.complex_no;
+    currentKbTypes = res.types || [];
+
+    const matched = res.matched;
+    if (resultBox) resultBox.style.display = "block";
+
+    if (matched) {
+      if (resultDetail) {
+        resultDetail.innerHTML = `
+          <strong>단지</strong>: ${html(res.complex_info?.name || name)} 
+          <span style="color:#facc15;">[${html(matched.type_display)}]</span><br/>
+          <strong>KB 매매 일반평균가</strong>: <span style="font-size:13px;font-weight:700;color:#38bdf8;">₩${number(matched.deal_avg, 0)}</span><br/>
+          <small style="color:#94a3b8;">하한가 ₩${number(matched.deal_low, 0)} ~ 상한가 ₩${number(matched.deal_high, 0)} · 전세 ₩${number(matched.lease_avg, 0)}</small>
+        `;
+      }
+      // 현재 시세에 자동 적용
+      const currInput = $("#reCurrentPrice");
+      if (currInput && (!currInput.value || Number(currInput.value) === 0 || confirm(`조회된 KB 일반평균가(₩${number(matched.deal_avg, 0)})를 현재 시세에 적용할까요?`))) {
+        currInput.value = matched.deal_avg;
+        calcRealEstatePreview();
+      }
+    }
+
+    // 평형 선택 드롭다운 구성
+    if (typeSelect && currentKbTypes.length > 1) {
+      typeSelect.innerHTML = currentKbTypes.map((t, idx) => `
+        <option value="${idx}" ${t === matched ? 'selected' : ''}>
+          ${t.type_display} - 일반가 ₩${number(t.deal_avg, 0)}
+        </option>
+      `).join('');
+      if (typeSelectWrap) typeSelectWrap.style.display = "block";
+    } else if (typeSelectWrap) {
+      typeSelectWrap.style.display = "none";
+    }
+
+  } catch (err) {
+    alert("KB시세 조회 실패: " + (err.message || err));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "🔍 KB시세 조회";
+    }
+  }
 }
 
 
@@ -3450,6 +3535,25 @@ document.addEventListener('click', async (e) => {
     currentRealEstateSubtab = subtab;
     document.querySelectorAll('.real-estate-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
     renderRealEstateWithOwner(currentOwner);
+    return;
+  }
+
+  // 부동산 KB시세 즉시 갱신
+  const reKbRefreshBtn = e.target.closest('[data-re-refresh-kb-id]');
+  if (reKbRefreshBtn) {
+    const rid = reKbRefreshBtn.dataset.reRefreshKbId;
+    reKbRefreshBtn.disabled = true;
+    reKbRefreshBtn.textContent = '⏳';
+    try {
+      const res = await api(`/api/real-estates/${rid}/refresh-kb-price`, { method: 'POST' });
+      toast(res.message || 'KB시세가 갱신되었습니다.');
+      await loadDashboard();
+    } catch (err) {
+      toast(err.message || 'KB시세 갱신 실패', true);
+    } finally {
+      reKbRefreshBtn.disabled = false;
+      reKbRefreshBtn.textContent = '🔄';
+    }
     return;
   }
 
@@ -6675,6 +6779,7 @@ function initSavingsListeners() {
         contract_date: fd.get("contract_date") || "",
         expiry_date: fd.get("expiry_date") || "",
         exclusive_area: Number(fd.get("exclusive_area")) || 0,
+        kb_complex_no: fd.get("kb_complex_no") || "",
         linked_loan_ids: linkedLoanIds,
         memo: fd.get("memo") || "",
       };
@@ -6697,6 +6802,40 @@ function initSavingsListeners() {
     ["rePurchasePrice", "reCurrentPrice", "reDepositAmount", "reLinkedLoansSelect"].forEach(id => {
       document.getElementById(id)?.addEventListener("input", calcRealEstatePreview);
       document.getElementById(id)?.addEventListener("change", calcRealEstatePreview);
+    });
+
+    // KB시세 조회 버튼 리스너
+    document.getElementById("reFetchKbBtn")?.addEventListener("click", fetchKbMarketPrice);
+
+    // KB시세 적용 버튼 리스너
+    document.getElementById("reApplyKbPriceBtn")?.addEventListener("click", () => {
+      const typeSelect = document.getElementById("reKbTypeSelect");
+      const currInput = document.getElementById("reCurrentPrice");
+      if (typeSelect && currentKbTypes.length && currInput) {
+        const selectedIdx = Number(typeSelect.value || 0);
+        const selType = currentKbTypes[selectedIdx];
+        if (selType && selType.deal_avg > 0) {
+          currInput.value = selType.deal_avg;
+          calcRealEstatePreview();
+          toast(`KB시세(₩${number(selType.deal_avg, 0)})가 현재 시세에 적용되었습니다.`);
+        }
+      }
+    });
+
+    // KB 평형 선택 변경 리스너
+    document.getElementById("reKbTypeSelect")?.addEventListener("change", (e) => {
+      const idx = Number(e.target.value || 0);
+      const selType = currentKbTypes[idx];
+      const resultDetail = document.getElementById("reKbResultDetail");
+      const name = document.getElementById("reNameInput")?.value || "";
+      if (selType && resultDetail) {
+        resultDetail.innerHTML = `
+          <strong>단지</strong>: ${html(name)} 
+          <span style="color:#facc15;">[${html(selType.type_display)}]</span><br/>
+          <strong>KB 매매 일반평균가</strong>: <span style="font-size:13px;font-weight:700;color:#38bdf8;">₩${number(selType.deal_avg, 0)}</span><br/>
+          <small style="color:#94a3b8;">하한가 ₩${number(selType.deal_low, 0)} ~ 상한가 ₩${number(selType.deal_high, 0)} · 전세 ₩${number(selType.lease_avg, 0)}</small>
+        `;
+      }
     });
 
     // 공동명의 체크박스 토글 리스너

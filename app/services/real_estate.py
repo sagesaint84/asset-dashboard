@@ -63,6 +63,8 @@ def save_real_estate(payload: dict[str, Any], username: str | None = None) -> di
         "expiry_date": (payload.get("expiry_date") or "").strip(),
         "exclusive_area": max(0.0, float(payload.get("exclusive_area") or 0.0)),
         "linked_loan_ids": linked_loan_ids,
+        "kb_complex_no": (payload.get("kb_complex_no") or "").strip(),
+        "kb_matched_type": (payload.get("kb_matched_type") or "").strip(),
         "memo": (payload.get("memo") or "").strip(),
         "updated_at": datetime.now().astimezone().isoformat(),
     }

@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v481" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v482" />
   </head>
   <body>
     <main class="shell">
@@ -1215,6 +1215,7 @@
         </div>
         <p class="dialog-description">자가(보유), 임대(전세/월세 준 주택 - 갭투자), 임차(전월세 거주) 부동산과 연결 대출을 기록합니다.</p>
         <input type="hidden" name="id" />
+        <input type="hidden" name="kb_complex_no" id="reKbComplexNo" />
 
         <div class="form-grid" style="grid-template-columns:repeat(2,1fr);gap:12px;">
           <label>부동산 유형
@@ -1269,7 +1270,22 @@
             <input name="purchase_price" id="rePurchasePrice" type="number" step="any" placeholder="예: 1200000000 (12억)" />
           </label>
           <label id="reCurrentPriceLabel">현재 시세 / 평가액 (KRW)
-            <input name="current_price" id="reCurrentPrice" type="number" step="any" placeholder="예: 1450000000 (14.5억)" />
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input name="current_price" id="reCurrentPrice" type="number" step="any" placeholder="예: 1450000000 (14.5억)" style="flex:1;" />
+              <button type="button" id="reFetchKbBtn" class="button secondary compact" style="white-space:nowrap;padding:7px 10px;font-size:11.5px;font-weight:700;background:rgba(234,179,8,0.12);border-color:#eab308;color:#facc15;" title="KB부동산 공식 시세 자동 조회">🔍 KB시세 조회</button>
+            </div>
+            <div id="reKbResultBox" style="display:none;margin-top:6px;padding:8px 10px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:6px;font-size:11.5px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span id="reKbResultTitle" style="font-weight:700;color:#facc15;">KB부동산 시세</span>
+                <button type="button" id="reApplyKbPriceBtn" class="button primary compact" style="font-size:10.5px;padding:2px 8px;background:#eab308;border-color:#eab308;color:#000;font-weight:700;">시세 적용</button>
+              </div>
+              <div id="reKbResultDetail" style="margin-top:4px;color:#e2e8f0;line-height:1.4;"></div>
+              <div id="reKbTypeSelectWrap" style="display:none;margin-top:6px;">
+                <label style="font-size:11px;color:#94a3b8;margin-bottom:2px;display:block;">평형 직접 선택:
+                  <select id="reKbTypeSelect" style="font-size:11.5px;padding:4px;margin-top:2px;"></select>
+                </label>
+              </div>
+            </div>
           </label>
 
           <!-- 임대/임차용 보증금 필드 -->
@@ -1771,7 +1787,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v481"></script>
+    <script src="/static/wealth.js?v=20260830-v482"></script>
   </body>
 </html>
 
