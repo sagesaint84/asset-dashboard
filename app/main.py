@@ -637,6 +637,12 @@ async def dashboard(request: Request) -> dict:
     data["savings_summary"] = savings_info.get("summary", {})
     data["insurance_accounts"] = savings_info.get("insurance_accounts", [])
     data["loan_accounts"] = savings_info.get("loan_accounts", [])
+
+    from app.services.real_estate import get_real_estate_data
+    re_info = get_real_estate_data(username=username)
+    data["real_estates"] = re_info.get("real_estates", [])
+    data["real_estate_summary"] = re_info.get("summary", {})
+
     auto_save_all_owner_snapshots(data, username=username)
     return data
 
@@ -1059,6 +1065,35 @@ async def calculate_loan_endpoint(request: Request) -> dict:
         remaining_months=int(body.get("remaining_months") or 12),
     )
     return {"calc": calc}
+
+
+# ---------------------------------------------------------------------------
+# Real Estate CRUD API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/real-estates")
+async def list_real_estates(request: Request) -> dict:
+    username = get_current_username(request)
+    from app.services.real_estate import get_real_estate_data
+    return get_real_estate_data(username=username)
+
+@app.post("/api/real-estates")
+async def create_or_update_real_estate(request: Request) -> dict:
+    username = get_current_username(request)
+    body = await request.json()
+    from app.services.real_estate import save_real_estate
+    item = save_real_estate(body, username=username)
+    return {"message": "부동산 자산이 저장되었습니다.", "real_estate": item}
+
+@app.delete("/api/real-estates/{re_id}")
+async def remove_real_estate(request: Request, re_id: str) -> dict:
+    username = get_current_username(request)
+    from app.services.real_estate import delete_real_estate
+    ok = delete_real_estate(re_id, username=username)
+    if not ok:
+        raise HTTPException(404, "해당 부동산 항목을 찾을 수 없습니다.")
+    return {"message": "부동산 자산이 삭제되었습니다."}
+
 
 
 

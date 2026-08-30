@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v472" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v480" />
   </head>
   <body>
     <main class="shell">
@@ -536,6 +536,7 @@
               <button type="button" class="account-cat-tab active" data-cat="securities">📈 증권 (<span id="securitiesTabCount">0</span>)</button>
               <button type="button" class="account-cat-tab" data-cat="banking">🏦 은행 (<span id="bankingTabCount">0</span>)</button>
               <button type="button" class="account-cat-tab" data-cat="insurance">🛡️ 보험 (<span id="insuranceTabCount">0</span>)</button>
+              <button type="button" class="account-cat-tab" data-cat="real_estate">🏠 부동산 (<span id="realEstateTabCount">0</span>)</button>
             </div>
 
             <!-- 툴바 액션 버튼 (현재 카테고리 탭에 따라 스위칭) -->
@@ -550,6 +551,9 @@
               </div>
               <div id="insuranceActions" style="display:none;gap:6px;align-items:center;">
                 <button id="addInsuranceBtn" class="button secondary compact" type="button" title="보험 / 연금 / 공제 추가">➕ 보험/연금 추가</button>
+              </div>
+              <div id="realEstateActions" style="display:none;gap:6px;align-items:center;">
+                <button id="addRealEstateBtn" class="button secondary compact" type="button" title="부동산 자산 추가">🏠 부동산 추가</button>
               </div>
             </div>
           </div>
@@ -611,6 +615,41 @@
 
             <div id="insuranceGrid" class="savings-card-grid" style="margin-top:14px;"></div>
           </div>
+
+          <!-- 4) 부동산 탭 본문 -->
+          <div id="catPanelRealEstate" class="cat-panel" style="display:none;margin-top:12px;">
+            <div class="savings-summary-grid loan-summary-grid" id="realEstateSummaryCards">
+              <div class="saving-stat-card">
+                <span class="saving-stat-label">🏢 총 부동산 평가액</span>
+                <strong id="totalRealEstateVal">₩0</strong>
+                <small id="totalRealEstateCountSub" style="font-size:11px;color:#94a3b8;margin-top:2px;">보유: 0건 (자가 0 · 임대 0)</small>
+              </div>
+              <div class="saving-stat-card">
+                <span class="saving-stat-label">💰 총 매입금액 (취득원가)</span>
+                <strong id="totalPurchaseVal">₩0</strong>
+                <small id="totalTenantDepositSub" style="font-size:11px;color:#38bdf8;margin-top:2px;">임차 전세보증금: ₩0</small>
+              </div>
+              <div class="saving-stat-card highlight">
+                <span class="saving-stat-label">📈 평가손익 (시세차익)</span>
+                <strong id="totalRealEstateProfitVal">₩0</strong>
+                <small id="totalRealEstateRateSub" style="font-size:11px;color:#94a3b8;margin-top:2px;">수익률: 0.0%</small>
+              </div>
+              <div class="saving-stat-card danger">
+                <span class="saving-stat-label" style="color:#fb7185;">🔴 부동산 연결 부채</span>
+                <strong id="totalRealEstateDebtVal" style="color:#fb7185;">₩0</strong>
+                <small id="totalRealEstateDebtSub" style="font-size:11px;color:#94a3b8;margin-top:2px;">담보대출: ₩0 · 전세보증금: ₩0</small>
+              </div>
+            </div>
+
+            <div class="savings-subtabs real-estate-subtabs" style="display:flex;gap:8px;margin-top:14px;">
+              <button type="button" class="real-estate-subtab active" data-subtab="all">전체 (<span id="reAllCount">0</span>)</button>
+              <button type="button" class="real-estate-subtab" data-subtab="own">자가/보유 (<span id="reOwnCount">0</span>)</button>
+              <button type="button" class="real-estate-subtab" data-subtab="rental">임대/임차 (<span id="reRentalCount">0</span>)</button>
+            </div>
+
+            <div id="realEstateGrid" class="savings-card-grid" style="margin-top:12px;"></div>
+          </div>
+
 
         </div>
       </section>
@@ -1166,6 +1205,97 @@
       </form>
     </dialog>
 
+    <!-- 부동산 자산 등록/수정 다이얼로그 -->
+    <dialog id="realEstateDialog" class="dialog" style="max-width:680px;width:95vw;">
+      <form id="realEstateForm" method="dialog">
+        <div class="dialog-head">
+          <h2 id="realEstateDialogTitle">부동산 자산 추가</h2>
+          <button value="cancel" class="close" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-description">자가(보유), 임대(전세/월세 준 주택 - 갭투자), 임차(전월세 거주) 부동산과 연결 대출을 기록합니다.</p>
+        <input type="hidden" name="id" />
+
+        <div class="form-grid" style="grid-template-columns:repeat(2,1fr);gap:12px;">
+          <label>부동산 유형
+            <select name="property_type" id="reTypeSelect" required>
+              <option value="own">🏠 자가 (직접 거주 / 보유)</option>
+              <option value="rental">🏢 임대 (전세 / 월세 준 주택 - 갭투자)</option>
+              <option value="lease">🔑 임차 (전세 / 월세 거주 중)</option>
+            </select>
+          </label>
+          <label>소유자
+            <select name="owner" id="reOwnerSelect">
+              <option value="모두">모두</option>
+              <option value="아빠">아빠</option>
+              <option value="엄마">엄마</option>
+              <option value="자녀">자녀</option>
+            </select>
+          </label>
+          <label style="grid-column:1/-1;">부동산 이름 (단지명 / 동호수)
+            <input name="name" id="reNameInput" placeholder="예: 마포 래미안 푸르지오 105동 또는 강남 오피스텔 302호" required />
+          </label>
+          <label style="grid-column:1/-1;">소재지 주소 (선택)
+            <input name="address" id="reAddressInput" placeholder="예: 서울시 마포구 아현동 777" />
+          </label>
+
+          <!-- 자가/임대용 금액 필드 -->
+          <label id="rePurchasePriceLabel">매수금액 (취득가, KRW)
+            <input name="purchase_price" id="rePurchasePrice" type="number" step="any" placeholder="예: 1200000000 (12억)" />
+          </label>
+          <label id="reCurrentPriceLabel">현재 시세 / 평가액 (KRW)
+            <input name="current_price" id="reCurrentPrice" type="number" step="any" placeholder="예: 1450000000 (14.5억)" />
+          </label>
+
+          <!-- 임대/임차용 보증금 필드 -->
+          <label id="reDepositLabel" style="display:none;">임대차 보증금 (KRW)
+            <input name="deposit_amount" id="reDepositAmount" type="number" step="any" placeholder="예: 700000000 (전세금 7억)" />
+            <small id="reDepositHint" style="font-size:11px;color:#94a3b8;margin-top:2px;">임대 시 만기 상환 부채, 임차 시 돌려받을 자산</small>
+          </label>
+          <label id="reMonthlyRentLabel" style="display:none;">월세 (KRW, 전세면 0)
+            <input name="monthly_rent" id="reMonthlyRent" type="number" step="any" placeholder="0" />
+          </label>
+
+          <label>취득일 / 계약일
+            <input name="contract_date" id="reContractDate" type="date" />
+          </label>
+          <label id="reExpiryDateLabel">만기일 (임대차인 경우)
+            <input name="expiry_date" id="reExpiryDate" type="date" />
+          </label>
+
+          <label>전용면적 (㎡, 선택)
+            <input name="exclusive_area" id="reExclusiveArea" type="number" step="0.1" placeholder="예: 84.9" />
+          </label>
+          <label>연결 대출 (주택담보대출 / 전세대출)
+            <select name="linked_loan_ids" id="reLinkedLoansSelect">
+              <option value="">-- 연결 대출 없음 --</option>
+            </select>
+          </label>
+
+          <label style="grid-column:1/-1;">메모
+            <input name="memo" id="reMemoInput" placeholder="예: 주담대 고정금리 적용, 2년 뒤 갱신 예정 등" />
+          </label>
+        </div>
+
+        <!-- 실시간 시뮬레이션 박스 -->
+        <div id="rePreviewBox" style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div>
+            <span style="font-size:11.5px;color:#94a3b8;">부동산 순에퀴티(순자산): </span>
+            <strong id="rePreviewEquity" style="font-size:14px;color:#38bdf8;">₩0</strong>
+          </div>
+          <div id="rePreviewProfitWrap">
+            <span style="font-size:11.5px;color:#94a3b8;">예상 시세차익: </span>
+            <strong id="rePreviewProfit" style="font-size:14px;color:#42d5a3;">+₩0 (0.0%)</strong>
+          </div>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:16px;">
+          <button class="button secondary" value="cancel" type="button">취소</button>
+          <button class="button primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
+
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1615,7 +1745,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v472"></script>
+    <script src="/static/wealth.js?v=20260830-v480"></script>
   </body>
 </html>
 

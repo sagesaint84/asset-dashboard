@@ -706,6 +706,7 @@ function renderSummary(data) {
   const curLoans = filterByOwner(data.loan_accounts || rawLoanAccounts || []);
   const curBanks = filterByOwner(data.bank_accounts || rawBankAccounts || []);
   const curSavings = filterByOwner(data.savings_accounts || rawSavingsAccounts || []);
+  const curRealEstates = filterByOwner(data.real_estates || rawRealEstates || []);
 
   const posBanks = curBanks.filter(b => (Number(b.balance) || 0) >= 0);
   const negBanks = curBanks.filter(b => (Number(b.balance) || 0) < 0);
@@ -715,15 +716,26 @@ function renderSummary(data) {
   const totalSavingVal = curSavings.reduce((acc, sv) => acc + (Number(sv.current_value) || Number(sv.current_paid_amount) || 0), 0);
   const totalMinusBankDebt = negBanks.reduce((acc, b) => acc + Math.abs(Number(b.balance) || 0), 0);
   const totalPureDebt = curLoans.reduce((acc, l) => acc + (Number(l.current_balance) || 0), 0);
-  const totalAllDebt = totalPureDebt + totalMinusBankDebt;
 
-  const grossAssets = totalInvestVal + totalPositiveBankVal + totalSavingVal;
+  // 부동산 자산 및 부채 합산
+  const totalREVal = curRealEstates
+    .filter(r => (r.property_type || 'own') !== 'lease')
+    .reduce((acc, r) => acc + (Number(r.current_price) || 0), 0);
+  const totalTenantDepositVal = curRealEstates
+    .filter(r => r.property_type === 'lease')
+    .reduce((acc, r) => acc + (Number(r.deposit_amount) || 0), 0);
+  const totalLandlordDepositDebt = curRealEstates
+    .filter(r => r.property_type === 'rental')
+    .reduce((acc, r) => acc + (Number(r.deposit_amount) || 0), 0);
+
+  const totalAllDebt = totalPureDebt + totalMinusBankDebt + totalLandlordDepositDebt;
+  const grossAssets = totalInvestVal + totalPositiveBankVal + totalSavingVal + totalREVal + totalTenantDepositVal;
   const netWorth = grossAssets - totalAllDebt;
 
   if ($("#summaryNetWorth")) $("#summaryNetWorth").textContent = money(netWorth);
   if ($("#summaryTotalDebtCaption")) {
     $("#summaryTotalDebtCaption").textContent = totalAllDebt > 0 
-      ? `총 부채(대출·마통) ₩${number(totalAllDebt, 0)} 차감` 
+      ? `총 부채(대출·마통·전세보증금) ₩${number(totalAllDebt, 0)} 차감` 
       : `부채 ₩0 (무부채)`;
   }
 
@@ -1581,18 +1593,22 @@ function switchAccountCategory(category) {
   const secPanel = document.getElementById('catPanelSecurities');
   const bnkPanel = document.getElementById('catPanelBanking');
   const insPanel = document.getElementById('catPanelInsurance');
+  const rePanel = document.getElementById('catPanelRealEstate');
 
   if (secPanel) secPanel.style.display = category === 'securities' ? 'block' : 'none';
   if (bnkPanel) bnkPanel.style.display = category === 'banking' ? 'block' : 'none';
   if (insPanel) insPanel.style.display = category === 'insurance' ? 'block' : 'none';
+  if (rePanel) rePanel.style.display = category === 'real_estate' ? 'block' : 'none';
 
   const secActs = document.getElementById('securitiesActions');
   const bnkActs = document.getElementById('bankingActions');
   const insActs = document.getElementById('insuranceActions');
+  const reActs = document.getElementById('realEstateActions');
 
   if (secActs) secActs.style.display = category === 'securities' ? 'flex' : 'none';
   if (bnkActs) bnkActs.style.display = category === 'banking' ? 'flex' : 'none';
   if (insActs) insActs.style.display = category === 'insurance' ? 'flex' : 'none';
+  if (reActs) reActs.style.display = category === 'real_estate' ? 'flex' : 'none';
 }
 
 function renderInsurance(insuranceList, owner = '모두') {
@@ -1710,6 +1726,358 @@ function openInsuranceAccountDialog(item = null) {
   }
   dialog.showModal();
 }
+
+// ── 4-3. 부동산 (자가 / 임대 / 임차) 자산 관리 ──────────────────────────────
+let rawRealEstates = [];
+let currentRealEstateSubtab = 'all'; // 'all' | 'own' | 'rental'
+
+const PROPERTY_TYPE_LABELS = {
+  own: "🏠 자가",
+  rental: "🏢 임대",
+  lease: "🔑 임차",
+};
+
+function renderRealEstate(reList, owner = '모두') {
+  rawRealEstates = reList || [];
+  renderRealEstateWithOwner(owner);
+}
+
+function renderRealEstateWithOwner(owner = '모두') {
+  const o = owner || currentOwner || '모두';
+  const filtered = o === '모두' 
+    ? rawRealEstates 
+    : rawRealEstates.filter(r => (r.owner || '모두') === o);
+
+  const ownList = filtered.filter(r => (r.property_type || 'own') === 'own');
+  const rentalList = filtered.filter(r => r.property_type === 'rental');
+  const leaseList = filtered.filter(r => r.property_type === 'lease');
+
+  const totalREVal = ownList.concat(rentalList).reduce((sum, r) => sum + (Number(r.current_price) || 0), 0);
+  const totalPurchaseVal = ownList.concat(rentalList).reduce((sum, r) => sum + (Number(r.purchase_price) || 0), 0);
+  const totalProfit = totalPurchaseVal > 0 ? (totalREVal - totalPurchaseVal) : 0;
+  const totalProfitRate = totalPurchaseVal > 0 ? ((totalProfit / totalPurchaseVal) * 100).toFixed(1) : "0.0";
+
+  const totalTenantDeposit = leaseList.reduce((sum, r) => sum + (Number(r.deposit_amount) || 0), 0);
+  const totalLandlordDeposit = rentalList.reduce((sum, r) => sum + (Number(r.deposit_amount) || 0), 0);
+  
+  let totalLinkedLoanBalance = 0;
+  const loanMap = new Map();
+  rawLoanAccounts.forEach(l => loanMap.set(l.id, l));
+
+  filtered.forEach(r => {
+    (r.linked_loan_ids || []).forEach(lid => {
+      const l = loanMap.get(lid);
+      if (l) totalLinkedLoanBalance += Number(l.current_balance || 0);
+    });
+  });
+
+  const totalREDebt = totalLandlordDeposit + totalLinkedLoanBalance;
+
+  if ($("#totalRealEstateVal")) $("#totalRealEstateVal").textContent = `₩${number(totalREVal, 0)}`;
+  if ($("#totalRealEstateCountSub")) {
+    $("#totalRealEstateCountSub").textContent = `보유: ${ownList.length + rentalList.length}건 (자가 ${ownList.length} · 임대 ${rentalList.length})`;
+  }
+  if ($("#totalPurchaseVal")) $("#totalPurchaseVal").textContent = `₩${number(totalPurchaseVal, 0)}`;
+  if ($("#totalTenantDepositSub")) {
+    $("#totalTenantDepositSub").textContent = `임차 전세보증금: ₩${number(totalTenantDeposit, 0)}`;
+  }
+  if ($("#totalRealEstateProfitVal")) {
+    const pSign = totalProfit >= 0 ? "+" : "";
+    $("#totalRealEstateProfitVal").textContent = `${pSign}₩${number(totalProfit, 0)}`;
+    $("#totalRealEstateProfitVal").style.color = totalProfit >= 0 ? "#42d5a3" : "#f43f5e";
+  }
+  if ($("#totalRealEstateRateSub")) {
+    const rSign = Number(totalProfitRate) >= 0 ? "+" : "";
+    $("#totalRealEstateRateSub").textContent = `수익률: ${rSign}${totalProfitRate}%`;
+  }
+  if ($("#totalRealEstateDebtVal")) $("#totalRealEstateDebtVal").textContent = `₩${number(totalREDebt, 0)}`;
+  if ($("#totalRealEstateDebtSub")) {
+    $("#totalRealEstateDebtSub").textContent = `담보·전세대출: ₩${number(totalLinkedLoanBalance, 0)} · 임대보증금: ₩${number(totalLandlordDeposit, 0)}`;
+  }
+
+  if ($("#reAllCount")) $("#reAllCount").textContent = filtered.length;
+  if ($("#reOwnCount")) $("#reOwnCount").textContent = ownList.length;
+  if ($("#reRentalCount")) $("#reRentalCount").textContent = rentalList.length + leaseList.length;
+  if ($("#realEstateTabCount")) $("#realEstateTabCount").textContent = filtered.length;
+
+  let displayList = filtered;
+  if (currentRealEstateSubtab === 'own') {
+    displayList = ownList;
+  } else if (currentRealEstateSubtab === 'rental') {
+    displayList = rentalList.concat(leaseList);
+  }
+
+  const grid = $("#realEstateGrid");
+  if (!grid) return;
+
+  if (!displayList.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">등록된 부동산 자산이 없습니다. 상단 [🏠 부동산 추가] 버튼을 눌러보세요.</div>';
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  grid.innerHTML = displayList.map(re => {
+    const pType = re.property_type || 'own';
+    const typeLabel = PROPERTY_TYPE_LABELS[pType] || "부동산";
+    const typeBadgeClass = pType === 'own' ? 'badge-own' : (pType === 'rental' ? 'badge-rental' : 'badge-lease');
+
+    const purch = Number(re.purchase_price || 0);
+    const curr = Number(re.current_price || 0);
+    const dep = Number(re.deposit_amount || 0);
+    const rent = Number(re.monthly_rent || 0);
+
+    const profit = (pType !== 'lease' && purch > 0) ? (curr - purch) : 0;
+    const profitRate = (pType !== 'lease' && purch > 0) ? ((profit / purch) * 100).toFixed(1) : "0.0";
+    const profitSign = profit >= 0 ? "+" : "";
+    const profitColor = profit >= 0 ? "#42d5a3" : "#f43f5e";
+
+    let dDayText = "";
+    if (re.expiry_date) {
+      try {
+        const expDt = new Date(re.expiry_date.substring(0, 10));
+        const diffDays = Math.round((expDt - today) / (1000 * 60 * 60 * 24));
+        dDayText = diffDays <= 0 ? "만기 경과" : `만기 D-${diffDays}`;
+      } catch (e) {}
+    }
+
+    const connectedLoanItems = (re.linked_loan_ids || []).map(lid => loanMap.get(lid)).filter(Boolean);
+    const linkedLoanTotalBal = connectedLoanItems.reduce((acc, l) => acc + Number(l.current_balance || 0), 0);
+    const linkedLoanTotalInterest = connectedLoanItems.reduce((acc, l) => acc + (Number(l.monthly_interest) || Number(l.calc?.monthly_interest) || 0), 0);
+
+    let netEquity = 0;
+    if (pType === 'own') {
+      netEquity = curr - linkedLoanTotalBal;
+    } else if (pType === 'rental') {
+      netEquity = curr - (dep + linkedLoanTotalBal);
+    } else {
+      netEquity = dep - linkedLoanTotalBal;
+    }
+
+    const pyungText = re.exclusive_area > 0 ? ` (약 ${(re.exclusive_area / 3.3058).toFixed(1)}평)` : '';
+    const naverLandUrl = `https://m.land.naver.com/search/result/${encodeURIComponent(re.name || re.address || '')}`;
+
+    return `
+      <div class="saving-card real-estate-card ${typeBadgeClass}">
+        <div class="saving-card-header">
+          <div class="saving-card-title-group">
+            <div class="saving-badge-row">
+              <span class="saving-type-badge ${typeBadgeClass}">${typeLabel}</span>
+              <span class="saving-owner-badge">${html(re.owner || '모두')}</span>
+              ${dDayText ? `<span class="d-day-badge">${dDayText}</span>` : ''}
+            </div>
+            <h3 class="saving-product-name">${html(re.name)}</h3>
+            <span class="saving-bank-name">${html(re.address || '-')}</span>
+          </div>
+          <div class="account-row-actions saving-card-actions">
+            <a href="${naverLandUrl}" target="_blank" rel="noopener" class="account-action-button" title="네이버 부동산 시세 확인" style="text-decoration:none;display:inline-flex;align-items:center;font-size:12px;">🔍</a>
+            <button class="account-action-button" data-re-edit-id="${re.id}" title="수정" type="button">✎</button>
+            <button class="mini-delete-button" data-re-del-id="${re.id}" title="삭제" type="button">🗑️</button>
+          </div>
+        </div>
+
+        <div class="saving-card-details">
+          ${pType !== 'lease' ? `
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">매수가 (취득가)</span>
+              <span class="saving-detail-val">₩${number(purch, 0)}</span>
+            </div>
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">현재 시세</span>
+              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;">₩${number(curr, 0)}</span>
+            </div>
+            <div class="saving-detail-row" style="grid-column:1/-1;">
+              <span class="saving-detail-label">시세 차익 (수익률)</span>
+              <span class="saving-detail-val" style="color:${profitColor};font-weight:700;">${profitSign}₩${number(profit, 0)} (${profitSign}${profitRate}%)</span>
+            </div>
+          ` : `
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">임차 전세보증금</span>
+              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;">₩${number(dep, 0)}</span>
+            </div>
+            ${rent > 0 ? `
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">월세 지출</span>
+                <span class="saving-detail-val" style="color:#fb7185;">-₩${number(rent, 0)}</span>
+              </div>
+            ` : '<div class="saving-detail-row"><span class="saving-detail-label">계약 형태</span><span class="saving-detail-val">올전세</span></div>'}
+          `}
+
+          ${pType === 'rental' ? `
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">임대 전세금 (부채)</span>
+              <span class="saving-detail-val" style="color:#fb7185;font-weight:700;">-₩${number(dep, 0)}</span>
+            </div>
+            ${rent > 0 ? `
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">월세 수입</span>
+                <span class="saving-detail-val" style="color:#42d5a3;font-weight:700;">+₩${number(rent, 0)}</span>
+              </div>
+            ` : '<div class="saving-detail-row"><span class="saving-detail-label">임대 형태</span><span class="saving-detail-val">전세 임대</span></div>'}
+          ` : ''}
+
+          ${re.exclusive_area > 0 ? `
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">전용면적</span>
+              <span class="saving-detail-val">${re.exclusive_area}㎡${pyungText}</span>
+            </div>
+          ` : ''}
+
+          ${re.contract_date ? `
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">취득/계약일</span>
+              <span class="saving-detail-val">${html(re.contract_date)}</span>
+            </div>
+          ` : ''}
+
+          ${re.expiry_date ? `
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">만기일</span>
+              <span class="saving-detail-val">${html(re.expiry_date)}</span>
+            </div>
+          ` : ''}
+
+          ${connectedLoanItems.length > 0 ? `
+            <div class="saving-detail-row" style="grid-column:1/-1;background:rgba(244,63,94,0.06);padding:6px 8px;border-radius:6px;margin-top:2px;">
+              <span class="saving-detail-label" style="color:#fb7185;">연결 대출 (${connectedLoanItems.length}건)</span>
+              <span class="saving-detail-val" style="color:#fb7185;font-size:12px;">잔액: -₩${number(linkedLoanTotalBal, 0)} (월이자: ₩${number(linkedLoanTotalInterest, 0)})</span>
+            </div>
+          ` : ''}
+
+          ${re.memo ? `
+            <div class="saving-detail-row" style="grid-column:1/-1;">
+              <span class="saving-detail-label">메모</span>
+              <span class="saving-detail-val" style="color:#94a3b8;font-size:11px;">${html(re.memo)}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="saving-interest-box" style="background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.25);">
+          <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
+            <span style="color:#93c5fd;font-weight:600;">부동산 순에퀴티(순자산)</span>
+            <span style="color:#60a5fa;font-size:15px;font-weight:700;">₩${number(netEquity, 0)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function calcRealEstatePreview() {
+  const pType = $("#reTypeSelect")?.value || "own";
+  const purch = Number($("#rePurchasePrice")?.value || 0);
+  const curr = Number($("#reCurrentPrice")?.value || 0);
+  const dep = Number($("#reDepositAmount")?.value || 0);
+
+  const selectedLoanId = $("#reLinkedLoansSelect")?.value || "";
+  let loanBal = 0;
+  if (selectedLoanId) {
+    const l = rawLoanAccounts.find(x => x.id === selectedLoanId);
+    if (l) loanBal = Number(l.current_balance || 0);
+  }
+
+  let netEquity = 0;
+  let profit = 0;
+  let profitRate = "0.0";
+
+  if (pType === 'own') {
+    netEquity = curr - loanBal;
+    if (purch > 0) {
+      profit = curr - purch;
+      profitRate = ((profit / purch) * 100).toFixed(1);
+    }
+  } else if (pType === 'rental') {
+    netEquity = curr - (dep + loanBal);
+    if (purch > 0) {
+      profit = curr - purch;
+      profitRate = ((profit / purch) * 100).toFixed(1);
+    }
+  } else {
+    netEquity = dep - loanBal;
+  }
+
+  if ($("#rePreviewEquity")) $("#rePreviewEquity").textContent = `₩${number(netEquity, 0)}`;
+  if ($("#rePreviewProfitWrap")) {
+    $("#rePreviewProfitWrap").style.display = pType !== 'lease' ? "block" : "none";
+    if (pType !== 'lease') {
+      const pSign = profit >= 0 ? "+" : "";
+      if ($("#rePreviewProfit")) {
+        $("#rePreviewProfit").textContent = `${pSign}₩${number(profit, 0)} (${pSign}${profitRate}%)`;
+        $("#rePreviewProfit").style.color = profit >= 0 ? "#42d5a3" : "#f43f5e";
+      }
+    }
+  }
+}
+
+function updateRealEstateTypeFields() {
+  const pType = $("#reTypeSelect")?.value || "own";
+  const isLease = pType === "lease";
+  const isRental = pType === "rental";
+
+  const purchLabel = $("#rePurchasePriceLabel");
+  const currLabel = $("#reCurrentPriceLabel");
+  const depLabel = $("#reDepositLabel");
+  const rentLabel = $("#reMonthlyRentLabel");
+  const depHint = $("#reDepositHint");
+
+  if (purchLabel) purchLabel.style.display = isLease ? "none" : "";
+  if (currLabel) currLabel.style.display = isLease ? "none" : "";
+  if (depLabel) depLabel.style.display = (isRental || isLease) ? "" : "none";
+  if (rentLabel) rentLabel.style.display = (isRental || isLease) ? "" : "none";
+
+  if (depHint) {
+    depHint.textContent = isRental ? "세입자에게 받은 전세보증금 (추후 상환할 부채)" : "집주인에게 맡긴 전세보증금 (만기 시 돌려받을 내 자산)";
+  }
+
+  calcRealEstatePreview();
+}
+
+function openRealEstateDialog(reItem = null) {
+  const dialog = $("#realEstateDialog");
+  const form = $("#realEstateForm");
+  if (!dialog || !form) return;
+  form.reset();
+  form.querySelector("[name='id']").value = reItem ? reItem.id : "";
+
+  if ($("#realEstateDialogTitle")) {
+    $("#realEstateDialogTitle").textContent = reItem ? "부동산 자산 수정" : "부동산 자산 추가";
+  }
+
+  const loanSelect = $("#reLinkedLoansSelect");
+  if (loanSelect) {
+    let opts = '<option value="">-- 연결 대출 없음 --</option>';
+    rawLoanAccounts.forEach(l => {
+      const typeStr = LOAN_TYPE_LABELS[l.loan_type] || "대출";
+      opts += `<option value="${l.id}">${l.bank_name} - ${l.product_name} (${typeStr}, 잔액 ₩${number(l.current_balance, 0)})</option>`;
+    });
+    loanSelect.innerHTML = opts;
+  }
+
+  if (reItem) {
+    form.querySelector("[name='property_type']").value = reItem.property_type || "own";
+    form.querySelector("[name='owner']").value = reItem.owner || "모두";
+    form.querySelector("[name='name']").value = reItem.name || "";
+    form.querySelector("[name='address']").value = reItem.address || "";
+    form.querySelector("[name='purchase_price']").value = reItem.purchase_price || "";
+    form.querySelector("[name='current_price']").value = reItem.current_price || "";
+    form.querySelector("[name='deposit_amount']").value = reItem.deposit_amount || "";
+    form.querySelector("[name='monthly_rent']").value = reItem.monthly_rent || "";
+    form.querySelector("[name='contract_date']").value = reItem.contract_date || "";
+    form.querySelector("[name='expiry_date']").value = reItem.expiry_date || "";
+    form.querySelector("[name='exclusive_area']").value = reItem.exclusive_area || "";
+    form.querySelector("[name='memo']").value = reItem.memo || "";
+
+    const linkedIds = reItem.linked_loan_ids || [];
+    if (loanSelect) loanSelect.value = linkedIds[0] || "";
+  } else {
+    form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
+  }
+
+  updateRealEstateTypeFields();
+  dialog.showModal();
+}
+
 
 // ── 5. 자산 히트맵 (정통 Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────
 const PERIOD_LABELS = {
@@ -2607,6 +2975,7 @@ function render(data) {
   renderAccounts(data.accounts);
   renderSavings(data.savings_accounts || [], data.bank_accounts || [], data.loan_accounts || [], currentOwner);
   renderInsurance(data.insurance_accounts || [], currentOwner);
+  renderRealEstate(data.real_estates || [], currentOwner);
   renderHeatmaps(data);
   renderHoldings(data);
 }
@@ -2898,6 +3267,12 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 🏠 부동산 자산 추가 모달 열기
+  if (e.target.closest('#addRealEstateBtn')) {
+    openRealEstateDialog();
+    return;
+  }
+
   // 보험/연금 수정
   const insEditBtn = e.target.closest('[data-insurance-edit-id]');
   if (insEditBtn) {
@@ -2959,6 +3334,44 @@ document.addEventListener('click', async (e) => {
     if ($("#loansGrid")) $("#loansGrid").style.display = subtab === 'loans' ? 'grid' : 'none';
     return;
   }
+
+  // 🗂️ 부동산 서브 탭 전환 (전체 / 자가보유 / 임대임차)
+  const reSubtabBtn = e.target.closest('.real-estate-subtab');
+  if (reSubtabBtn) {
+    const subtab = reSubtabBtn.dataset.subtab;
+    currentRealEstateSubtab = subtab;
+    document.querySelectorAll('.real-estate-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
+    renderRealEstateWithOwner(currentOwner);
+    return;
+  }
+
+  // 부동산 수정
+  const reEditBtn = e.target.closest('[data-re-edit-id]');
+  if (reEditBtn) {
+    const rid = reEditBtn.dataset.reEditId;
+    const reItem = rawRealEstates.find(r => r.id === rid);
+    if (reItem) openRealEstateDialog(reItem);
+    return;
+  }
+
+  // 부동산 삭제
+  const reDelBtn = e.target.closest('[data-re-del-id]');
+  if (reDelBtn) {
+    const rid = reDelBtn.dataset.reDelId;
+    const reItem = rawRealEstates.find(r => r.id === rid);
+    const reName = reItem ? reItem.name : '이 부동산 자산';
+    if (confirm(`'${reName}'을(를) 삭제하시겠습니까?\n(연결된 대출과의 링크도 함께 해제됩니다.)`)) {
+      try {
+        await api(`/api/real-estates/${rid}`, { method: 'DELETE' });
+        toast('부동산 자산이 삭제되었습니다.');
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || '삭제 실패', true);
+      }
+    }
+    return;
+  }
+
 
   // 예·적금 수정
   const savingEditBtn = e.target.closest('[data-saving-edit-id]');
@@ -6115,6 +6528,52 @@ function initSavingsListeners() {
       const isMinus = e.target.value === "minus";
       const limitLabel = document.getElementById("loanLimitLabel");
       if (limitLabel) limitLabel.style.display = isMinus ? "" : "none";
+    });
+  }
+
+  const reForm = $("#realEstateForm");
+  if (reForm) {
+    reForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(reForm);
+      const linkedLoanId = fd.get("linked_loan_ids");
+      const linkedLoanIds = linkedLoanId ? [linkedLoanId] : [];
+
+      const payload = {
+        id: fd.get("id") || undefined,
+        property_type: fd.get("property_type") || "own",
+        owner: fd.get("owner") || "모두",
+        name: fd.get("name") || "",
+        address: fd.get("address") || "",
+        purchase_price: Number(fd.get("purchase_price")) || 0,
+        current_price: Number(fd.get("current_price")) || 0,
+        deposit_amount: Number(fd.get("deposit_amount")) || 0,
+        monthly_rent: Number(fd.get("monthly_rent")) || 0,
+        contract_date: fd.get("contract_date") || "",
+        expiry_date: fd.get("expiry_date") || "",
+        exclusive_area: Number(fd.get("exclusive_area")) || 0,
+        linked_loan_ids: linkedLoanIds,
+        memo: fd.get("memo") || "",
+      };
+
+      try {
+        await api("/api/real-estates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast("부동산 자산 정보가 저장되었습니다.");
+        closeDialog("realEstateDialog");
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message || "부동산 자산 저장 실패", true);
+      }
+    });
+
+    $("#reTypeSelect")?.addEventListener("change", updateRealEstateTypeFields);
+    ["rePurchasePrice", "reCurrentPrice", "reDepositAmount", "reLinkedLoansSelect"].forEach(id => {
+      document.getElementById(id)?.addEventListener("input", calcRealEstatePreview);
+      document.getElementById(id)?.addEventListener("change", calcRealEstatePreview);
     });
   }
 }

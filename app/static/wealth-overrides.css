@@ -3021,5 +3021,76 @@ dialog.dialog .dialog-actions {
   background: #ffffff !important;
 }
 
+/* ── 부동산 (Real Estate) 카드 & 뱃지 스타일 ── */
+.badge-own {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+}
+
+.badge-rental {
+  background: rgba(168, 85, 247, 0.15) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+}
+
+.badge-lease {
+  background: rgba(251, 191, 36, 0.15) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(251, 191, 36, 0.3) !important;
+}
+
+.real-estate-card {
+  border-left: 3px solid #38bdf8;
+}
+
+.real-estate-card.badge-rental {
+  border-left: 3px solid #a855f7 !important;
+}
+
+.real-estate-card.badge-lease {
+  border-left: 3px solid #f59e0b !important;
+}
+
+.real-estate-subtab {
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.real-estate-subtab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.real-estate-subtab.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+/* 화이트 테마 오버라이드 */
+[data-theme="white"] .real-estate-card {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="white"] .real-estate-subtab {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+[data-theme="white"] .real-estate-subtab.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+
 
 
