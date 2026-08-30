@@ -1104,20 +1104,23 @@ function renderSavingsWithOwner(owner = '모두') {
     ? rawLoanAccounts 
     : rawLoanAccounts.filter(l => (l.owner || '모두') === o);
 
-  // 자유통장 중 양수 잔고 및 음수 마이너스통장 분리
+  // 1) 자유통장 잔고 분리
   const positiveBanks = filteredBanks.filter(b => (Number(b.balance) || 0) >= 0);
-  const minusBanks = filteredBanks.filter(b => (Number(b.balance) || 0) < 0);
+  const minusDebtBanks = filteredBanks.filter(b => (Number(b.balance) || 0) < 0);
+
+  // 2) 대출 탭에 표시할 마통 계좌: 실제 음수 잔고이거나 약정 한도(limit_amount > 0)가 등록된 계좌
+  const minusOrCreditLineBanks = filteredBanks.filter(b => (Number(b.balance) || 0) < 0 || (Number(b.limit_amount) || 0) > 0);
 
   const totalPositiveBank = positiveBanks.reduce((sum, b) => sum + (Number(b.balance) || 0), 0);
-  const totalMinusDebt = minusBanks.reduce((sum, b) => sum + Math.abs(Number(b.balance) || 0), 0);
+  const totalMinusDebt = minusDebtBanks.reduce((sum, b) => sum + Math.abs(Number(b.balance) || 0), 0);
 
   const totalPaid = filteredSavings.reduce((sum, s) => sum + (Number(s.current_value) || Number(s.current_paid_amount) || 0), 0);
   const totalMaturity = filteredSavings.reduce((sum, s) => sum + (Number(s.calc?.maturity_total) || 0), 0);
   const totalPureLoan = filteredLoans.reduce((sum, l) => sum + (Number(l.current_balance) || 0), 0);
   const totalCombinedDebt = totalPureLoan + totalMinusDebt;
 
-  // 순수 대출 이자 + 자유연동 마통 월 예상 이자 합산
-  const totalMinusInterest = minusBanks.reduce((sum, b) => {
+  // 순수 대출 이자 + 자유연동 마통 월 예상 이자 합산 (실제 음수 잔고일 때만 이자 발생)
+  const totalMinusInterest = minusDebtBanks.reduce((sum, b) => {
     const debt = Math.abs(Number(b.balance || 0));
     const rate = Number(b.interest_rate || 0);
     return sum + (rate > 0 ? Math.round(debt * (rate / 100) / 12) : 0);
@@ -1131,15 +1134,17 @@ function renderSavingsWithOwner(owner = '모두') {
   if ($("#totalSavingsMaturityVal")) $("#totalSavingsMaturityVal").textContent = `₩${number(totalMaturity, 0)}`;
   if ($("#totalLoanBalanceVal")) $("#totalLoanBalanceVal").textContent = `₩${number(totalCombinedDebt, 0)}`;
   if ($("#totalLoanInterestSub")) {
-    const minusNote = minusBanks.length > 0 ? ` (마통 ${minusBanks.length}건 포함)` : '';
+    const activeMinusCount = minusDebtBanks.length;
+    const minusNote = activeMinusCount > 0 ? ` (마통 ${activeMinusCount}건 사용 중)` : '';
     $("#totalLoanInterestSub").textContent = `월 예상 이자: ₩${number(totalLoanInterest, 0)}${minusNote}`;
   }
 
-  const totalBankAllCount = filteredBanks.length + filteredSavings.length + filteredLoans.length + minusBanks.length;
+  const totalLoanListCount = filteredLoans.length + minusOrCreditLineBanks.length;
+  const totalBankAllCount = filteredBanks.length + filteredSavings.length + totalLoanListCount;
   if ($("#allBankCount")) $("#allBankCount").textContent = totalBankAllCount;
   if ($("#banksCount")) $("#banksCount").textContent = filteredBanks.length;
   if ($("#savingsCount")) $("#savingsCount").textContent = filteredSavings.length;
-  if ($("#loansCount")) $("#loansCount").textContent = filteredLoans.length + minusBanks.length;
+  if ($("#loansCount")) $("#loansCount").textContent = totalLoanListCount;
   if ($("#bankingTabCount")) $("#bankingTabCount").textContent = totalBankAllCount;
 
   // 서브탭 표시 상태 동기화
@@ -1335,12 +1340,14 @@ function renderSavingsWithOwner(owner = '모두') {
   const loansGrid = $("#loansGrid");
   if (loansGrid) {
     const allLoanItems = [...filteredLoans];
-    // 자유입출금 계좌 중 음수 잔고인 마이너스통장도 대출 탭에 함께 연동 표시
-    minusBanks.forEach(mb => {
-      const curBal = Math.abs(Number(mb.balance || 0));
+    // 자유입출금 계좌 중 음수 잔고 부채이거나 마통 약정한도(limit_amount > 0)가 있는 계좌도 대출 탭에 연동 표시
+    minusOrCreditLineBanks.forEach(mb => {
+      const rawBal = Number(mb.balance || 0);
+      const isMinus = rawBal < 0;
+      const curBal = isMinus ? Math.abs(rawBal) : 0;
       const limitAmt = Number(mb.limit_amount || 0);
       const rate = Number(mb.interest_rate || 0);
-      const monthlyInt = rate > 0 ? Math.round(curBal * (rate / 100) / 12) : 0;
+      const monthlyInt = (curBal > 0 && rate > 0) ? Math.round(curBal * (rate / 100) / 12) : 0;
       let dDay = null;
       if (mb.maturity_date) {
         try {
@@ -1359,6 +1366,7 @@ function renderSavingsWithOwner(owner = '모두') {
         product_name: `${mb.account_name} (자유통장 연동)`,
         owner: mb.owner,
         current_balance: curBal,
+        raw_balance: rawBal,
         limit_amount: limitAmt,
         interest_rate: rate,
         monthly_interest: monthlyInt,
@@ -1366,7 +1374,7 @@ function renderSavingsWithOwner(owner = '모두') {
         maturity_date: mb.maturity_date || "",
         d_day: dDay,
         linked_account_id: mb.id,
-        memo: mb.memo || "자유입출금 마이너스 잔고 부채",
+        memo: mb.memo || (isMinus ? "자유입출금 마이너스 잔고 부채" : "자유입출금 연동 마이너스통장 (한도 대기)"),
       });
     });
 
@@ -1393,12 +1401,18 @@ function renderSavingsWithOwner(owner = '모두') {
         const editAttr = l.is_from_bank ? `data-bank-edit-id="${l.id}"` : `data-loan-edit-id="${l.id}"`;
         const delAttr = l.is_from_bank ? `data-bank-del-id="${l.id}"` : `data-loan-del-id="${l.id}"`;
 
+        const isUnusedMinus = l.is_from_bank && curBal === 0;
+
         return `
-          <div class="saving-card loan-card">
+          <div class="saving-card loan-card ${isUnusedMinus ? 'unused-minus-card' : ''}">
             <div class="saving-card-header">
               <div class="saving-card-title-group">
                 <div class="saving-badge-row">
-                  <span class="saving-type-badge ${l.loan_type === 'minus' ? 'loan-minus' : 'loan-credit'}">${typeLabel}</span>
+                  ${isUnusedMinus ? `
+                    <span class="saving-type-badge loan-credit" style="background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);">🟢 자유연동 마통 (미사용)</span>
+                  ` : `
+                    <span class="saving-type-badge ${l.loan_type === 'minus' ? 'loan-minus' : 'loan-credit'}">${typeLabel}</span>
+                  `}
                   <span class="saving-owner-badge">${html(l.owner || '모두')}</span>
                   ${dDayText ? `<span class="${dDayClass}">${dDayText}</span>` : ''}
                 </div>
@@ -1415,7 +1429,7 @@ function renderSavingsWithOwner(owner = '모두') {
               <div class="saving-progress-wrap">
                 <div class="saving-progress-meta">
                   <span>한도 소진율 (한도: ₩${number(limitAmt, 0)})</span>
-                  <strong style="color:${utilPercent >= 80 ? '#fb7185' : '#38bdf8'};">${utilPercent}%</strong>
+                  <strong style="color:${utilPercent >= 80 ? '#fb7185' : '#38bdf8'};">${utilPercent}% ${isUnusedMinus ? '(전액 잔여)' : ''}</strong>
                 </div>
                 <div class="saving-progress-track">
                   <div class="saving-progress-bar" style="width: ${utilPercent}%; background: ${utilPercent >= 80 ? '#fb7185' : '#38bdf8'};"></div>
@@ -1431,14 +1445,19 @@ function renderSavingsWithOwner(owner = '모두') {
             <div class="saving-card-details">
               <div class="saving-detail-row">
                 <span class="saving-detail-label">약정 금리</span>
-                <span class="saving-detail-val" style="${l.interest_rate > 0 ? 'color:#fb7185;font-weight:700;' : 'color:#94a3b8;font-size:11px;'}">${l.interest_rate > 0 ? `연 ${l.interest_rate}%` : (l.is_from_bank ? '미설정 (✎ 수정)' : '-')}</span>
+                <span class="saving-detail-val" style="${l.interest_rate > 0 ? (isUnusedMinus ? 'color:#38bdf8;font-weight:700;' : 'color:#fb7185;font-weight:700;') : 'color:#94a3b8;font-size:11px;'}">${l.interest_rate > 0 ? `연 ${l.interest_rate}%` : (l.is_from_bank ? '미설정 (✎ 수정)' : '-')}</span>
               </div>
               ${monthlyInt > 0 ? `
                 <div class="saving-detail-row">
                   <span class="saving-detail-label">월 예상 이자</span>
                   <span class="saving-detail-val" style="color:#fb7185;font-weight:700;">₩${number(monthlyInt, 0)}</span>
                 </div>
-              ` : ''}
+              ` : (isUnusedMinus ? `
+                <div class="saving-detail-row">
+                  <span class="saving-detail-label">월 예상 이자</span>
+                  <span class="saving-detail-val" style="color:#38bdf8;font-weight:700;">₩0 (미발생)</span>
+                </div>
+              ` : '')}
               <div class="saving-detail-row">
                 <span class="saving-detail-label">상환 방식</span>
                 <span class="saving-detail-val">${l.is_from_bank ? '자유잔고 차감' : repayLabel}</span>
@@ -1463,18 +1482,31 @@ function renderSavingsWithOwner(owner = '모두') {
               ` : ''}
             </div>
 
-            <div class="saving-interest-box" style="background:rgba(244,63,94,0.06);border-color:rgba(244,63,94,0.2);">
-              <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
-                <span style="color:#fb7185;font-weight:600;">현재 대출 잔액 (부채)</span>
-                <span style="color:#fb7185;font-size:15px;font-weight:700;">₩${number(curBal, 0)}</span>
-              </div>
-              ${l.repayment_type === 'amortizing' ? `
-                <div class="saving-interest-row" style="padding-top:4px;font-size:11px;color:#94a3b8;">
-                  <span>월 총 상환액 (원금+이자)</span>
-                  <span>₩${number(monthlyPay, 0)}</span>
+            ${isUnusedMinus ? `
+              <div class="saving-interest-box" style="background:rgba(56,189,248,0.06);border-color:rgba(56,189,248,0.25);">
+                <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
+                  <span style="color:#38bdf8;font-weight:600;">현재 대출 잔액</span>
+                  <span style="color:#38bdf8;font-size:15px;font-weight:700;">₩0 (대출 미사용)</span>
                 </div>
-              ` : ''}
-            </div>
+                <div class="saving-interest-row" style="padding-top:4px;font-size:11px;color:#94a3b8;">
+                  <span>자유통장 잔고 유지중</span>
+                  <span style="color:#38bdf8;font-weight:600;">+₩${number(l.raw_balance || 0, 0)}</span>
+                </div>
+              </div>
+            ` : `
+              <div class="saving-interest-box" style="background:rgba(244,63,94,0.06);border-color:rgba(244,63,94,0.2);">
+                <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
+                  <span style="color:#fb7185;font-weight:600;">현재 대출 잔액 (부채)</span>
+                  <span style="color:#fb7185;font-size:15px;font-weight:700;">₩${number(curBal, 0)}</span>
+                </div>
+                ${l.repayment_type === 'amortizing' ? `
+                  <div class="saving-interest-row" style="padding-top:4px;font-size:11px;color:#94a3b8;">
+                    <span>월 총 상환액 (원금+이자)</span>
+                    <span>₩${number(monthlyPay, 0)}</span>
+                  </div>
+                ` : ''}
+              </div>
+            `}
           </div>
         `;
       }).join("");
@@ -1525,12 +1557,38 @@ function calcBankMinusPreview() {
   const isMinus = balInput < 0;
   if (isMinus || limitInput > 0 || rateInput > 0) {
     previewBox.style.display = "flex";
-    const debt = Math.abs(balInput);
-    const monthlyInt = rateInput > 0 ? Math.round(debt * (rateInput / 100) / 12) : 0;
-    const utilPercent = limitInput > 0 ? Math.min(100, Math.round((debt / limitInput) * 100)) : 0;
+    // 잔고가 음수일 때만 실제 대출 사용액(부채)
+    const debt = isMinus ? Math.abs(balInput) : 0;
+    const monthlyInt = (debt > 0 && rateInput > 0) ? Math.round(debt * (rateInput / 100) / 12) : 0;
+    const utilPercent = (debt > 0 && limitInput > 0) ? Math.min(100, Math.round((debt / limitInput) * 100)) : 0;
 
-    if ($("#bankMinusMonthlyInterest")) $("#bankMinusMonthlyInterest").textContent = `₩${number(monthlyInt, 0)}`;
-    if ($("#bankMinusUtilPercent")) $("#bankMinusUtilPercent").textContent = `${utilPercent}% (한도 ₩${number(limitInput, 0)})`;
+    const intEl = $("#bankMinusMonthlyInterest");
+    const utilEl = $("#bankMinusUtilPercent");
+
+    if (intEl) {
+      if (debt > 0) {
+        intEl.textContent = `₩${number(monthlyInt, 0)}`;
+        intEl.style.color = "#fb7185";
+      } else {
+        intEl.textContent = `₩0 (대출 미사용)`;
+        intEl.style.color = "#38bdf8";
+      }
+    }
+
+    if (utilEl) {
+      if (limitInput > 0) {
+        if (debt > 0) {
+          utilEl.textContent = `${utilPercent}% (사용 ₩${number(debt, 0)} / 한도 ₩${number(limitInput, 0)})`;
+          utilEl.style.color = utilPercent >= 80 ? "#fb7185" : "#38bdf8";
+        } else {
+          utilEl.textContent = `0% (한도 ₩${number(limitInput, 0)} 전액 잔여)`;
+          utilEl.style.color = "#38bdf8";
+        }
+      } else {
+        utilEl.textContent = `한도 미설정`;
+        utilEl.style.color = "#94a3b8";
+      }
+    }
   } else {
     previewBox.style.display = "none";
   }
