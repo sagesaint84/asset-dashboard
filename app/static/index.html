@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v487" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v488" />
   </head>
   <body>
     <main class="shell">
@@ -996,6 +996,7 @@
               <option value="deposit">정기예금 (목돈 굴리기)</option>
               <option value="installment">정기적금 (매월 목돈 모으기)</option>
               <option value="free">자유적금 (자유 납입)</option>
+              <option value="housing">🏠 주택청약종합저축 (만기 없음)</option>
             </select>
           </label>
           <label>소유자
@@ -1010,16 +1011,23 @@
             <input name="bank_name" placeholder="KB국민, 토스뱅크, 신한 등" required />
           </label>
           <label>상품명
-            <input name="product_name" placeholder="정기예금, 청년희망적금 등" required />
+            <input name="product_name" placeholder="주택청약종합저축, 정기예금 등" required />
           </label>
           <label>가입일
             <input name="start_date" type="date" id="savingStartDate" required />
           </label>
-          <label>만기일
+          <label id="savingEndDateLabel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+              <span>만기일</span>
+              <label style="font-size:11px;color:#38bdf8;cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:400;">
+                <input type="checkbox" id="savingNoMaturityCheck" style="cursor:pointer;" />
+                <span>만기 없음 (주택청약)</span>
+              </label>
+            </div>
             <input name="end_date" type="date" id="savingEndDate" required />
           </label>
-          <label>약정 기간 (개월)
-            <input name="duration_months" type="number" min="1" max="120" value="12" id="savingDurationMonths" required />
+          <label id="savingDurationLabel">약정 기간 (개월)
+            <input name="duration_months" type="number" min="0" max="120" value="12" id="savingDurationMonths" required />
           </label>
           <label>약정 금리 (연이율 %)
             <input name="interest_rate" type="number" step="0.01" min="0" max="30" placeholder="예: 4.2" id="savingInterestRate" required />
@@ -1831,7 +1839,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v487"></script>
+    <script src="/static/wealth.js?v=20260830-v488"></script>
   </body>
 </html>
 

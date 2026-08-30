@@ -1209,10 +1209,11 @@ function renderSavingsWithOwner(owner = '모두') {
       savingsGrid.innerHTML = '<div class="empty" style="grid-column:1/-1;">등록된 예·적금 상품이 없습니다. 상단 [+ 예·적금 추가] 버튼을 눌러보세요.</div>';
     } else {
       savingsGrid.innerHTML = filteredSavings.map(s => {
-        const typeLabel = s.saving_type === 'deposit' ? '정기예금' : (s.saving_type === 'installment' ? '정기적금' : '자유적금');
-        const typeClass = s.saving_type || 'deposit';
-        const dDayText = s.d_day != null ? (s.d_day <= 0 ? '만기 달성' : `D-${s.d_day}`) : '';
-        const dDayClass = s.d_day != null && s.d_day <= 0 ? 'd-day-badge done' : 'd-day-badge';
+        const isHousing = s.saving_type === 'housing' || !s.end_date;
+        const typeLabel = s.saving_type === 'housing' ? '주택청약' : (s.saving_type === 'deposit' ? '정기예금' : (s.saving_type === 'installment' ? '정기적금' : '자유적금'));
+        const typeClass = s.saving_type === 'housing' ? 'housing' : (s.saving_type || 'deposit');
+        const dDayText = isHousing ? '만기 없음' : (s.d_day != null ? (s.d_day <= 0 ? '만기 달성' : `D-${s.d_day}`) : '자유적립');
+        const dDayClass = isHousing ? 'd-day-badge' : (s.d_day != null && s.d_day <= 0 ? 'd-day-badge done' : 'd-day-badge');
 
         const calc = s.calc || {};
         const taxLabel = s.tax_type === 'preferential' ? '세금우대 (1.4%)' : (s.tax_type === 'tax_free' ? '비과세 (0%)' : '일반과세 (15.4%)');
@@ -1220,12 +1221,15 @@ function renderSavingsWithOwner(owner = '모두') {
         const withdrawName = s.withdraw_account_id ? (bankMap.get(s.withdraw_account_id) || '연결통장') : '미설정';
         const depositName = s.deposit_account_id ? (bankMap.get(s.deposit_account_id) || '연결통장') : '미설정';
 
-        const transferInfo = s.saving_type === 'deposit' 
-          ? `예치원금: ₩${number(s.target_amount || calc.total_principal || 0, 0)}`
-          : (s.auto_transfer_day ? `매월 ${s.auto_transfer_day}일 이체 · 월 ₩${number(s.monthly_amount || 0, 0)}` : `월 ₩${number(s.monthly_amount || 0, 0)}`);
+        const curVal = Number(s.current_value || s.current_paid_amount || 0);
+        const transferInfo = isHousing
+          ? (s.monthly_amount > 0 ? (s.auto_transfer_day ? `매월 ${s.auto_transfer_day}일 이체 · 월 ₩${number(s.monthly_amount, 0)}` : `월 ₩${number(s.monthly_amount, 0)} 납입`) : '자유 납입')
+          : (s.saving_type === 'deposit' 
+              ? `예치원금: ₩${number(s.target_amount || calc.total_principal || 0, 0)}`
+              : (s.auto_transfer_day ? `매월 ${s.auto_transfer_day}일 이체 · 월 ₩${number(s.monthly_amount || 0, 0)}` : `월 ₩${number(s.monthly_amount || 0, 0)}`));
 
         return `
-          <div class="saving-card">
+          <div class="saving-card ${isHousing ? 'housing-card' : ''}">
             <div class="saving-card-header">
               <div class="saving-card-title-group">
                 <div class="saving-badge-row">
@@ -1245,11 +1249,11 @@ function renderSavingsWithOwner(owner = '모두') {
             <!-- 진행률 프로그레스 바 -->
             <div class="saving-progress-wrap">
               <div class="saving-progress-meta">
-                <span>진행률 (${s.start_date || '가입'} ~ ${s.end_date || '만기'})</span>
-                <strong>${s.progress_percent || 0}%</strong>
+                <span>${isHousing ? `불입 현황 (${s.start_date || '가입일'} ~ 만기 없음${s.elapsed_months ? ` · ${s.elapsed_months}개월 경과` : ''})` : `진행률 (${s.start_date || '가입'} ~ ${s.end_date || '만기'})`}</span>
+                <strong>${isHousing ? '진행중' : `${s.progress_percent || 0}%`}</strong>
               </div>
               <div class="saving-progress-track">
-                <div class="saving-progress-bar" style="width: ${Math.min(100, Math.max(0, s.progress_percent || 0))}%;"></div>
+                <div class="saving-progress-bar" style="width: ${isHousing ? 100 : Math.min(100, Math.max(0, s.progress_percent || 0))}%;"></div>
               </div>
             </div>
 
@@ -1261,7 +1265,7 @@ function renderSavingsWithOwner(owner = '모두') {
               </div>
               <div class="saving-detail-row">
                 <span class="saving-detail-label">계약 기간</span>
-                <span class="saving-detail-val">${s.duration_months}개월</span>
+                <span class="saving-detail-val">${isHousing ? '자유 / 무기한' : `${s.duration_months}개월`}</span>
               </div>
               <div class="saving-detail-row" style="grid-column:1/-1;">
                 <span class="saving-detail-label">납입 조건</span>
@@ -1278,13 +1282,13 @@ function renderSavingsWithOwner(owner = '모두') {
             </div>
 
             <!-- 세전·세후 이자 하이라이트 박스 -->
-            <div class="saving-interest-box">
+            <div class="saving-interest-box" style="${isHousing ? 'background:rgba(56,189,248,0.06);border-color:rgba(56,189,248,0.25);' : ''}">
               <div class="saving-interest-row">
-                <span style="color:#8fa0c5;">총 불입원금</span>
-                <span style="color:#e2e8f0;font-weight:600;">₩${number(calc.total_principal || 0, 0)}</span>
+                <span style="color:#8fa0c5;">${isHousing ? '현재 누적 납입원금' : '총 불입원금'}</span>
+                <span style="color:#e2e8f0;font-weight:600;">₩${number(isHousing ? curVal : (calc.total_principal || 0), 0)}</span>
               </div>
               <div class="saving-interest-row">
-                <span style="color:#8fa0c5;">세전 이자</span>
+                <span style="color:#8fa0c5;">${isHousing ? '연간 예상 이자' : '세전 이자'}</span>
                 <span style="color:#38bdf8;font-weight:600;">+₩${number(calc.pre_tax_interest || 0, 0)}</span>
               </div>
               <div class="saving-interest-row">
@@ -1292,8 +1296,8 @@ function renderSavingsWithOwner(owner = '모두') {
                 <span style="color:#f43f5e;font-weight:600;">-₩${number(calc.tax_amount || 0, 0)}</span>
               </div>
               <div class="saving-interest-row maturity-row">
-                <span>만기 예상 실수령액</span>
-                <span style="color:#42d5a3;font-size:14px;">₩${number(calc.maturity_total || 0, 0)}</span>
+                <span>${isHousing ? '현재 평가액 (원금+세후이자)' : '만기 예상 실수령액'}</span>
+                <span style="color:#42d5a3;font-size:14px;">₩${number(isHousing ? (curVal + (calc.after_tax_interest || 0)) : (calc.maturity_total || 0), 0)}</span>
               </div>
             </div>
           </div>
@@ -1542,6 +1546,11 @@ function calcSavingInterestPreview() {
   if (type === "deposit") {
     principal = Number($("#savingTargetAmount")?.value) || 0;
     preTax = principal * rate * (months / 12);
+  } else if (type === "housing") {
+    const curPaid = Number($("#savingCurrentPaid")?.value) || 0;
+    const monthly = Number($("#savingMonthlyAmount")?.value) || 0;
+    principal = curPaid > 0 ? curPaid : monthly;
+    preTax = principal * rate;
   } else {
     const monthly = Number($("#savingMonthlyAmount")?.value) || 0;
     principal = monthly * months;
@@ -1674,14 +1683,18 @@ function openSavingAccountDialog(saving = null) {
   if (withdrawSel) withdrawSel.innerHTML = bankOptions;
   if (depositSel) depositSel.innerHTML = bankOptions;
 
+  const isHousing = saving ? (saving.saving_type === 'housing' || !saving.end_date) : false;
+  const noMaturityCheck = $("#savingNoMaturityCheck");
+  if (noMaturityCheck) noMaturityCheck.checked = isHousing;
+
   if (saving) {
-    form.querySelector("[name='saving_type']").value = saving.saving_type || "deposit";
+    form.querySelector("[name='saving_type']").value = saving.saving_type || (isHousing ? "housing" : "deposit");
     form.querySelector("[name='owner']").value = saving.owner || "모두";
     form.querySelector("[name='bank_name']").value = saving.bank_name || "";
     form.querySelector("[name='product_name']").value = saving.product_name || "";
     form.querySelector("[name='start_date']").value = saving.start_date || "";
     form.querySelector("[name='end_date']").value = saving.end_date || "";
-    form.querySelector("[name='duration_months']").value = saving.duration_months || 12;
+    form.querySelector("[name='duration_months']").value = isHousing ? 0 : (saving.duration_months || 12);
     form.querySelector("[name='interest_rate']").value = saving.interest_rate || "";
     form.querySelector("[name='monthly_amount']").value = saving.monthly_amount || "";
     form.querySelector("[name='target_amount']").value = saving.target_amount || "";
@@ -1710,14 +1723,64 @@ function updateSavingTypeFields() {
   const type = $("#savingTypeSelect")?.value || "deposit";
   const monthlyLabel = $("#monthlyAmountLabel");
   const targetLabel = $("#targetAmountLabel");
+  const noMaturityCheck = $("#savingNoMaturityCheck");
+  const endDateInput = $("#savingEndDate");
+  const durationInput = $("#savingDurationMonths");
+  const durationLabel = $("#savingDurationLabel");
+
+  const isHousing = type === "housing";
+  if (isHousing && noMaturityCheck) {
+    noMaturityCheck.checked = true;
+  }
+  const isNoMaturity = isHousing || Boolean(noMaturityCheck?.checked);
+
+  if (endDateInput) {
+    if (isNoMaturity) {
+      endDateInput.value = "";
+      endDateInput.removeAttribute("required");
+      endDateInput.disabled = true;
+      endDateInput.style.opacity = "0.4";
+    } else {
+      endDateInput.disabled = false;
+      endDateInput.style.opacity = "1";
+      endDateInput.setAttribute("required", "");
+      if (!endDateInput.value) {
+        const nextYear = new Date();
+        nextYear.setFullYear(nextYear.getFullYear() + 1);
+        endDateInput.value = nextYear.toISOString().slice(0, 10);
+      }
+    }
+  }
+
+  if (durationLabel && durationInput) {
+    if (isNoMaturity) {
+      durationLabel.style.display = "none";
+      durationInput.removeAttribute("required");
+      durationInput.value = "0";
+    } else {
+      durationLabel.style.display = "";
+      durationInput.setAttribute("required", "");
+      if (Number(durationInput.value) <= 0) durationInput.value = "12";
+    }
+  }
+
   if (type === "deposit") {
     if (monthlyLabel) monthlyLabel.style.display = "none";
     if (targetLabel) {
       targetLabel.style.display = "";
       targetLabel.childNodes[0].nodeValue = "총 예치 원금 (KRW)\n";
     }
+  } else if (type === "housing") {
+    if (monthlyLabel) {
+      monthlyLabel.style.display = "";
+      monthlyLabel.childNodes[0].nodeValue = "월 납입 금액 (선택)\n";
+    }
+    if (targetLabel) targetLabel.style.display = "none";
   } else {
-    if (monthlyLabel) monthlyLabel.style.display = "";
+    if (monthlyLabel) {
+      monthlyLabel.style.display = "";
+      monthlyLabel.childNodes[0].nodeValue = "월 납입 금액 (KRW)\n";
+    }
     if (targetLabel) {
       targetLabel.style.display = "";
       targetLabel.childNodes[0].nodeValue = "만기 목표 원금 (KRW)\n";
@@ -6839,10 +6902,15 @@ function initSavingsListeners() {
       updateSavingTypeFields();
       calcSavingInterestPreview();
     });
+    $("#savingNoMaturityCheck")?.addEventListener("change", () => {
+      updateSavingTypeFields();
+      calcSavingInterestPreview();
+    });
 
     savingForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(savingForm);
+      const isNoMaturity = fd.get("saving_type") === "housing" || Boolean($("#savingNoMaturityCheck")?.checked);
       const payload = {
         id: fd.get("id") || undefined,
         saving_type: fd.get("saving_type") || "deposit",
@@ -6850,8 +6918,8 @@ function initSavingsListeners() {
         bank_name: fd.get("bank_name") || "",
         product_name: fd.get("product_name") || "",
         start_date: fd.get("start_date") || "",
-        end_date: fd.get("end_date") || "",
-        duration_months: Number(fd.get("duration_months")) || 12,
+        end_date: isNoMaturity ? "" : (fd.get("end_date") || ""),
+        duration_months: isNoMaturity ? 0 : (Number(fd.get("duration_months")) || 12),
         interest_rate: Number(fd.get("interest_rate")) || 0,
         monthly_amount: Number(fd.get("monthly_amount")) || 0,
         target_amount: Number(fd.get("target_amount")) || 0,

@@ -3091,6 +3091,17 @@ dialog.dialog .dialog-actions {
   color: #ffffff;
 }
 
+/* 주택청약종합저축 전용 뱃지 및 카드 스타일 */
+.saving-type-badge.housing {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-weight: 700;
+}
+.saving-card.housing-card {
+  border-left: 3px solid #10b981;
+}
+
 
 
 

@@ -25,7 +25,11 @@ def calculate_interest(
     months = max(1, int(duration_months or 12))
     amt = float(principal_or_monthly or 0.0)
 
-    if saving_type == "deposit":
+    if saving_type == "housing":
+        cur_amt = float(current_paid_amount or 0.0) if current_paid_amount is not None and current_paid_amount > 0 else amt
+        total_principal = cur_amt
+        pre_tax_interest = total_principal * rate
+    elif saving_type == "deposit":
         total_principal = amt
         pre_tax_interest = total_principal * rate * (months / 12.0)
     else:
@@ -107,13 +111,18 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
         months = int(item.get("duration_months") or 12)
         tax = item.get("tax_type") or "normal"
 
-        amount = float(item.get("target_amount") or 0.0) if s_type == "deposit" else float(item.get("monthly_amount") or 0.0)
-        calc = calculate_interest(s_type, amount, rate, months, tax)
+        cur_val = float(item.get("current_paid_amount") or 0)
+        if s_type == "housing":
+            amount = float(item.get("monthly_amount") or 0.0)
+            calc = calculate_interest(s_type, amount, rate, months, tax, current_paid_amount=cur_val)
+        else:
+            amount = float(item.get("target_amount") or 0.0) if s_type == "deposit" else float(item.get("monthly_amount") or 0.0)
+            calc = calculate_interest(s_type, amount, rate, months, tax)
         item["calc"] = calc
 
         end_date_str = item.get("end_date") or ""
         d_day = None
-        if end_date_str:
+        if end_date_str and s_type != "housing":
             try:
                 end_dt = datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
                 d_day = (end_dt - today_dt).days
@@ -123,7 +132,16 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
 
         start_date_str = item.get("start_date") or ""
         progress = 0
-        if start_date_str and end_date_str:
+        if s_type == "housing" or not end_date_str:
+            if start_date_str:
+                try:
+                    st_dt = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
+                    elapsed_months = max(1, (today_dt.year - st_dt.year) * 12 + today_dt.month - st_dt.month)
+                    item["elapsed_months"] = elapsed_months
+                except ValueError:
+                    pass
+            progress = 100
+        elif start_date_str and end_date_str:
             try:
                 st_dt = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
                 end_dt = datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
@@ -135,13 +153,12 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
                 pass
         item["progress_percent"] = progress
 
-        cur_val = float(item.get("current_paid_amount") or 0)
         if cur_val <= 0:
             cur_val = calc["total_principal"] if item.get("saving_type") == "deposit" else 0
 
         item["current_value"] = cur_val
         total_savings_paid += cur_val
-        total_savings_maturity += calc["maturity_total"]
+        total_savings_maturity += cur_val if s_type == "housing" else calc["maturity_total"]
         enriched_savings.append(item)
 
     enriched_banks = []
