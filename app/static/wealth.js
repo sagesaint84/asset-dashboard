@@ -967,7 +967,7 @@ function renderAccounts(items) {
 let rawBankAccounts = [];
 let rawSavingsAccounts = [];
 let rawLoanAccounts = [];
-let currentSavingsSubtab = 'banks'; // 'banks' (자유) | 'savings' (예·적금) | 'loans' (대출)
+let currentSavingsSubtab = 'all'; // 'all' (전체) | 'banks' (자유) | 'savings' (예·적금) | 'loans' (대출)
 
 const LOAN_TYPE_LABELS = {
   minus: "마이너스통장",
@@ -1036,18 +1036,46 @@ function renderSavingsWithOwner(owner = '모두') {
     $("#totalLoanInterestSub").textContent = `월 예상 이자: ₩${number(totalLoanInterest, 0)}${minusNote}`;
   }
 
+  const totalBankAllCount = filteredBanks.length + filteredSavings.length + filteredLoans.length + minusBanks.length;
+  if ($("#allBankCount")) $("#allBankCount").textContent = totalBankAllCount;
   if ($("#banksCount")) $("#banksCount").textContent = filteredBanks.length;
   if ($("#savingsCount")) $("#savingsCount").textContent = filteredSavings.length;
   if ($("#loansCount")) $("#loansCount").textContent = filteredLoans.length + minusBanks.length;
-  if ($("#bankingTabCount")) $("#bankingTabCount").textContent = filteredSavings.length + filteredBanks.length + filteredLoans.length;
+  if ($("#bankingTabCount")) $("#bankingTabCount").textContent = totalBankAllCount;
 
   // 서브탭 표시 상태 동기화
+  const isAll = currentSavingsSubtab === 'all';
   const isBanks = currentSavingsSubtab === 'banks';
   const isSavings = currentSavingsSubtab === 'savings';
   const isLoans = currentSavingsSubtab === 'loans';
-  if ($("#banksListWrap")) $("#banksListWrap").style.display = isBanks ? 'block' : 'none';
-  if ($("#savingsGrid")) $("#savingsGrid").style.display = isSavings ? 'grid' : 'none';
-  if ($("#loansGrid")) $("#loansGrid").style.display = isLoans ? 'grid' : 'none';
+
+  const secFree = $("#bankSectionFree");
+  const secSavings = $("#bankSectionSavings");
+  const secLoans = $("#bankSectionLoans");
+  const titleFree = $("#bankTitleFree");
+  const titleSavings = $("#bankTitleSavings");
+  const titleLoans = $("#bankTitleLoans");
+
+  if (secFree) secFree.style.display = (isAll || isBanks) ? 'block' : 'none';
+  if (secSavings) secSavings.style.display = (isAll || isSavings) ? 'block' : 'none';
+  if (secLoans) secLoans.style.display = (isAll || isLoans) ? 'block' : 'none';
+
+  if (titleFree) {
+    titleFree.style.display = isAll ? 'flex' : 'none';
+    titleFree.innerHTML = `<span>🏦 자유입출금 통장 (${filteredBanks.length}건)</span>`;
+  }
+  if (titleSavings) {
+    titleSavings.style.display = isAll ? 'flex' : 'none';
+    titleSavings.innerHTML = `<span>💰 예·적금 상품 (${filteredSavings.length}건)</span>`;
+  }
+  if (titleLoans) {
+    titleLoans.style.display = isAll ? 'flex' : 'none';
+    titleLoans.innerHTML = `<span>💳 대출 · 마이너스통장 (${filteredLoans.length + minusBanks.length}건)</span>`;
+  }
+
+  if ($("#banksListWrap")) $("#banksListWrap").style.display = (isAll || isBanks) ? 'block' : 'none';
+  if ($("#savingsGrid")) $("#savingsGrid").style.display = (isAll || isSavings) ? 'grid' : 'none';
+  if ($("#loansGrid")) $("#loansGrid").style.display = (isAll || isLoans) ? 'grid' : 'none';
   document.querySelectorAll('.savings-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === currentSavingsSubtab));
 
   // 은행 계좌 매핑 사전 (출금/입금 통장 표시용)
@@ -1416,6 +1444,11 @@ function openBankAccountDialog(account = null, fromLoan = false) {
   form.reset();
   form.querySelector("[name='id']").value = account ? account.id : "";
 
+  const typeRow = form.querySelector(".bank-type-select-row");
+  const switcher = form.querySelector(".bank-category-switcher");
+  if (typeRow) typeRow.style.display = account ? "none" : "block";
+  if (switcher) switcher.value = "free";
+
   const isMinus = account && (Number(account.balance) < 0 || Number(account.limit_amount) > 0 || fromLoan);
   if ($("#bankAccountDialogTitle")) {
     if (account) {
@@ -1449,6 +1482,12 @@ function openSavingAccountDialog(saving = null) {
   if (!dialog || !form) return;
   form.reset();
   form.querySelector("[name='id']").value = saving ? saving.id : "";
+
+  const typeRow = form.querySelector(".bank-type-select-row");
+  const switcher = form.querySelector(".bank-category-switcher");
+  if (typeRow) typeRow.style.display = saving ? "none" : "block";
+  if (switcher) switcher.value = "savings";
+
   if ($("#savingAccountDialogTitle")) {
     $("#savingAccountDialogTitle").textContent = saving ? "예·적금 상품 수정" : "예·적금 상품 추가";
   }
@@ -1547,6 +1586,12 @@ function openLoanAccountDialog(loan = null) {
   if (!dialog || !form) return;
   form.reset();
   form.querySelector("[name='id']").value = loan ? loan.id : "";
+
+  const typeRow = form.querySelector(".bank-type-select-row");
+  const switcher = form.querySelector(".bank-category-switcher");
+  if (typeRow) typeRow.style.display = loan ? "none" : "block";
+  if (switcher) switcher.value = "loans";
+
   if ($("#loanAccountDialogTitle")) {
     $("#loanAccountDialogTitle").textContent = loan ? "대출 · 마이너스통장 수정" : "대출 · 마이너스통장 추가";
   }
@@ -1577,6 +1622,16 @@ function openLoanAccountDialog(loan = null) {
 
   calcLoanPreview();
   dialog.showModal();
+}
+
+function openIntegratedBankDialog() {
+  if (currentSavingsSubtab === 'savings') {
+    openSavingAccountDialog();
+  } else if (currentSavingsSubtab === 'loans') {
+    openLoanAccountDialog();
+  } else {
+    openBankAccountDialog();
+  }
 }
 
 // ── 4-2. 통합 계좌 카테고리 탭 (증권 / 은행 / 보험) ─────────────────────────
@@ -3436,7 +3491,13 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 🏦 일반 은행 계좌 추가 모달 열기
+  // 🏦 통합 은행 계좌 추가 모달 열기 (자유통장 / 예·적금 / 대출)
+  if (e.target.closest('#addBankIntegratedBtn')) {
+    openIntegratedBankDialog();
+    return;
+  }
+
+  // 🏦 일반 은행 계좌 추가 모달 열기 (하위 호환)
   if (e.target.closest('#addBankAccountBtn')) {
     openBankAccountDialog();
     return;
@@ -3516,15 +3577,13 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 🗂️ 은행 서브 탭 전환 (예적금 / 입출금통장 / 대출마통)
+  // 🗂️ 은행 서브 탭 전환 (전체 / 자유 / 예적금 / 대출)
   const subtabBtn = e.target.closest('.savings-subtab');
   if (subtabBtn) {
     const subtab = subtabBtn.dataset.subtab;
     currentSavingsSubtab = subtab;
     document.querySelectorAll('.savings-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
-    if ($("#savingsGrid")) $("#savingsGrid").style.display = subtab === 'savings' ? 'grid' : 'none';
-    if ($("#banksListWrap")) $("#banksListWrap").style.display = subtab === 'banks' ? 'block' : 'none';
-    if ($("#loansGrid")) $("#loansGrid").style.display = subtab === 'loans' ? 'grid' : 'none';
+    renderSavingsWithOwner(currentOwner);
     return;
   }
 
@@ -6574,6 +6633,23 @@ async function handleSaveUserOpenApi(e) {
 window.handleSaveUserOpenApi = handleSaveUserOpenApi;
 
 function initSavingsListeners() {
+  // 🏦 은행 계좌 모달 상단 카테고리 전환기 (자유통장 ↔ 예·적금 ↔ 대출)
+  document.querySelectorAll('.bank-category-switcher').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const nextType = e.target.value;
+      closeDialog('bankAccountDialog');
+      closeDialog('savingAccountDialog');
+      closeDialog('loanAccountDialog');
+      if (nextType === 'savings') {
+        openSavingAccountDialog();
+      } else if (nextType === 'loans') {
+        openLoanAccountDialog();
+      } else {
+        openBankAccountDialog();
+      }
+    });
+  });
+
   const savingForm = $("#savingAccountForm");
   if (savingForm) {
     savingForm.addEventListener("input", () => {

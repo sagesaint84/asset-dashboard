@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v482" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v483" />
   </head>
   <body>
     <main class="shell">
@@ -545,9 +545,7 @@
                 <button id="addAccountBtn" class="button secondary compact" type="button" title="증권 계좌 추가">➕ 증권계좌 추가</button>
               </div>
               <div id="bankingActions" style="display:none;gap:6px;align-items:center;">
-                <button id="addBankAccountBtn" class="button secondary compact" type="button" title="자유입출금 통장 추가">🏦 자유통장 추가</button>
-                <button id="addSavingBtn" class="button secondary compact" type="button" title="예·적금 상품 추가">➕ 예·적금 추가</button>
-                <button id="addLoanBtn" class="button secondary compact" type="button" title="대출·마이너스통장 추가">💳 대출 추가</button>
+                <button id="addBankIntegratedBtn" class="button secondary compact" type="button" title="은행 계좌 추가 (자유통장 / 예·적금 / 대출)">🏦 계좌 추가</button>
               </div>
               <div id="insuranceActions" style="display:none;gap:6px;align-items:center;">
                 <button id="addInsuranceBtn" class="button secondary compact" type="button" title="보험 / 연금 / 공제 추가">➕ 보험/연금 추가</button>
@@ -585,15 +583,34 @@
               </div>
             </div>
 
-            <div class="savings-subtabs" style="display:flex;gap:8px;margin-top:14px;">
-              <button type="button" class="savings-subtab active" data-subtab="banks">자유 (<span id="banksCount">0</span>)</button>
+            <div class="savings-subtabs" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+              <button type="button" class="savings-subtab active" data-subtab="all">전체 (<span id="allBankCount">0</span>)</button>
+              <button type="button" class="savings-subtab" data-subtab="banks">자유 (<span id="banksCount">0</span>)</button>
               <button type="button" class="savings-subtab" data-subtab="savings">예·적금 (<span id="savingsCount">0</span>)</button>
               <button type="button" class="savings-subtab" data-subtab="loans">대출 (<span id="loansCount">0</span>)</button>
             </div>
 
-            <div id="banksListWrap" class="banks-table-wrap" style="display:block;margin-top:12px;"></div>
-            <div id="savingsGrid" class="savings-card-grid" style="display:none;margin-top:12px;"></div>
-            <div id="loansGrid" class="savings-card-grid" style="display:none;margin-top:12px;"></div>
+            <!-- 은행 계좌 서브 섹션들 (전체 탭에서는 세 섹션이 소제목과 함께 모두 표시됨) -->
+            <div id="bankSectionFree" class="bank-sub-section" style="margin-top:12px;">
+              <div class="bank-section-title" id="bankTitleFree" style="display:none;margin-bottom:8px;font-size:13px;font-weight:700;color:#38bdf8;align-items:center;gap:6px;">
+                <span>🏦 자유입출금 통장</span>
+              </div>
+              <div id="banksListWrap" class="banks-table-wrap"></div>
+            </div>
+
+            <div id="bankSectionSavings" class="bank-sub-section" style="margin-top:16px;">
+              <div class="bank-section-title" id="bankTitleSavings" style="display:none;margin-bottom:8px;font-size:13px;font-weight:700;color:#38bdf8;align-items:center;gap:6px;">
+                <span>💰 예·적금 상품</span>
+              </div>
+              <div id="savingsGrid" class="savings-card-grid"></div>
+            </div>
+
+            <div id="bankSectionLoans" class="bank-sub-section" style="margin-top:16px;">
+              <div class="bank-section-title" id="bankTitleLoans" style="display:none;margin-bottom:8px;font-size:13px;font-weight:700;color:#fb7185;align-items:center;gap:6px;">
+                <span>💳 대출 · 마이너스통장</span>
+              </div>
+              <div id="loansGrid" class="savings-card-grid"></div>
+            </div>
           </div>
 
           <!-- 3) 보험·연금·공제 탭 본문 -->
@@ -891,6 +908,15 @@
         </div>
         <p class="dialog-description">수시입출금 통장 등 일반 계좌의 잔고를 관리합니다. (※ 음수(-) 금액 입력 시 마이너스통장 부채로 자동 인식)</p>
         <input type="hidden" name="id" />
+        <div class="form-grid bank-type-select-row" style="margin-bottom:12px;">
+          <label style="grid-column:1/-1;">계좌 유형
+            <select class="bank-category-switcher" data-current-type="free" style="font-weight:700;padding:8px 10px;border-color:#38bdf8;">
+              <option value="free" selected>🏦 자유입출금 통장 (수시입출금 / 마이너스통장)</option>
+              <option value="savings">💰 예·적금 상품 (정기예금 / 적금)</option>
+              <option value="loans">💳 대출 · 마이너스통장 (신용 / 담보 / 한도대출)</option>
+            </select>
+          </label>
+        </div>
         <div class="form-grid">
           <label>은행명
             <input name="bank_name" placeholder="KB국민, 토스뱅크, 신한, 카카오뱅크 등" required />
@@ -955,6 +981,15 @@
         </div>
         <p class="dialog-description">정기예금/적금의 이율과 만기일을 기록하고 세전·세후 이자를 자동으로 계산합니다.</p>
         <input type="hidden" name="id" />
+        <div class="form-grid bank-type-select-row" style="margin-bottom:12px;">
+          <label style="grid-column:1/-1;">계좌 유형
+            <select class="bank-category-switcher" data-current-type="savings" style="font-weight:700;padding:8px 10px;border-color:#38bdf8;">
+              <option value="free">🏦 자유입출금 통장 (수시입출금 / 마이너스통장)</option>
+              <option value="savings" selected>💰 예·적금 상품 (정기예금 / 적금)</option>
+              <option value="loans">💳 대출 · 마이너스통장 (신용 / 담보 / 한도대출)</option>
+            </select>
+          </label>
+        </div>
         <div class="form-grid" style="grid-template-columns:repeat(2,1fr);">
           <label>상품 유형
             <select name="saving_type" id="savingTypeSelect">
@@ -1126,6 +1161,15 @@
       </div>
       <form id="loanAccountForm" method="dialog" style="padding:16px 20px 20px;">
         <input type="hidden" name="id" value="" />
+        <div class="form-grid bank-type-select-row" style="margin-bottom:12px;">
+          <label style="grid-column:1/-1;">계좌 유형
+            <select class="bank-category-switcher" data-current-type="loans" style="font-weight:700;padding:8px 10px;border-color:#38bdf8;">
+              <option value="free">🏦 자유입출금 통장 (수시입출금 / 마이너스통장)</option>
+              <option value="savings">💰 예·적금 상품 (정기예금 / 적금)</option>
+              <option value="loans" selected>💳 대출 · 마이너스통장 (신용 / 담보 / 한도대출)</option>
+            </select>
+          </label>
+        </div>
         <div class="form-grid">
           <label>
             대출 유형
@@ -1787,7 +1831,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v482"></script>
+    <script src="/static/wealth.js?v=20260830-v483"></script>
   </body>
 </html>
 
