@@ -3727,29 +3727,17 @@ function updateAccountTaxBenefitFields(form) {
   if (!form) return;
   const accType = form.querySelector(".account-type-select")?.value || "general";
   const taxGroup = form.querySelector(".pension-tax-benefit-group");
-  const rawType = form.querySelector(".account-type-select")?.value || "general";
-  const isPensionSavings = rawType === "pension_savings" || rawType === "pension_savings_non_deductible";
-  const isIRP = rawType === "irp" || rawType === "irp_non_deductible";
-  const isPension = isPensionSavings || isIRP;
+  const isPension = accType === "pension_savings" || accType === "irp";
   if (taxGroup) taxGroup.style.display = isPension ? "block" : "none";
 
   if (isPension) {
-    const dedSel = form.querySelector(".pension-tax-deductible");
-    let isDeductible = true;
-
-    if (rawType.endsWith("_non_deductible")) {
-      isDeductible = false;
-      if (dedSel && dedSel.value !== "false") dedSel.value = "false";
-    } else {
-      isDeductible = dedSel ? dedSel.value !== "false" : true;
-    }
-
+    const isDeductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
     const annualDep = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
     const isaTr = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
     const incomeLvl = form.querySelector(".pension-income-level")?.value || "low";
     const rate = incomeLvl === "low" ? 16.5 : 13.2;
 
-    const baseLimit = isDeductible ? (isPensionSavings ? 6000000 : 9000000) : 0;
+    const baseLimit = isDeductible ? (accType === "pension_savings" ? 6000000 : 9000000) : 0;
     const baseTarget = Math.min(annualDep, baseLimit);
     const isaTarget = Math.min(isaTr * 0.10, 3000000);
     const totalTarget = baseTarget + isaTarget;
@@ -3767,20 +3755,6 @@ function updateAccountTaxBenefitFields(form) {
       if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
       if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
     }
-
-    // 계좌명에 (세액공제O) / (세액공제X) 등이 포함되어 있을 때 자동 동기화 지원
-    const nameInput = form.querySelector("[name='name']") || form.querySelector("[name='account_name']");
-    if (nameInput && nameInput.value) {
-      if (!isDeductible) {
-        if (nameInput.value.includes("(세액공제O)")) nameInput.value = nameInput.value.replace("(세액공제O)", "(세액공제X)");
-        else if (nameInput.value.includes("세액공제O")) nameInput.value = nameInput.value.replace("세액공제O", "세액공제X");
-        else if (nameInput.value.includes("(공제O)")) nameInput.value = nameInput.value.replace("(공제O)", "(비공제)");
-      } else {
-        if (nameInput.value.includes("(세액공제X)")) nameInput.value = nameInput.value.replace("(세액공제X)", "(세액공제O)");
-        else if (nameInput.value.includes("세액공제X")) nameInput.value = nameInput.value.replace("세액공제X", "세액공제O");
-        else if (nameInput.value.includes("(비공제)")) nameInput.value = nameInput.value.replace("(비공제)", "(공제O)");
-      }
-    }
   }
 }
 
@@ -3793,19 +3767,12 @@ function openAccountEditDialog(account) {
   form.name.value = account.name || "";
   if (form.owner) form.owner.value = account.owner || "모두";
 
-  const isTaxDeductible = isAccountTaxDeductible(account);
   const aName = (account.name || "").toLowerCase();
-  let aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
-
-  if (aType === "pension_savings" || aType === "pension_savings_non_deductible") {
-    aType = isTaxDeductible ? "pension_savings" : "pension_savings_non_deductible";
-  } else if (aType === "irp" || aType === "irp_non_deductible") {
-    aType = isTaxDeductible ? "irp" : "irp_non_deductible";
-  }
-
+  const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
   const typeSelect = form.querySelector(".account-type-select");
   if (typeSelect) typeSelect.value = aType;
 
+  const isTaxDeductible = isAccountTaxDeductible(account);
   const dedSel = form.querySelector(".pension-tax-deductible");
   if (dedSel) dedSel.value = isTaxDeductible ? "true" : "false";
 
@@ -4899,20 +4866,8 @@ async function saveEditAccount() {
   const name = (form.querySelector("[name='name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
 
-  const rawType = form.querySelector(".account-type-select")?.value || "general";
-  const dedSelVal = form.querySelector(".pension-tax-deductible")?.value;
-  
-  let isDeductible = true;
-  if (rawType.endsWith("_non_deductible")) {
-    isDeductible = false;
-  } else if (dedSelVal === "false") {
-    isDeductible = false;
-  }
-
-  let normalizedType = rawType;
-  if (rawType === "pension_savings_non_deductible") normalizedType = "pension_savings";
-  if (rawType === "irp_non_deductible") normalizedType = "irp";
-
+  const account_type = form.querySelector(".account-type-select")?.value || "general";
+  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
@@ -4932,8 +4887,8 @@ async function saveEditAccount() {
         broker,
         name,
         owner,
-        account_type: normalizedType,
-        tax_deductible: isDeductible,
+        account_type,
+        tax_deductible,
         income_level,
         annual_deposit,
         isa_transfer_amount,
@@ -4958,21 +4913,8 @@ async function saveNewAccount() {
   const broker = (form.querySelector("[name='broker']")?.value || "").trim();
   const account_name = (form.querySelector("[name='account_name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
-
-  const rawType = form.querySelector(".account-type-select")?.value || "general";
-  const dedSelVal = form.querySelector(".pension-tax-deductible")?.value;
-  
-  let isDeductible = true;
-  if (rawType.endsWith("_non_deductible")) {
-    isDeductible = false;
-  } else if (dedSelVal === "false") {
-    isDeductible = false;
-  }
-
-  let normalizedType = rawType;
-  if (rawType === "pension_savings_non_deductible") normalizedType = "pension_savings";
-  if (rawType === "irp_non_deductible") normalizedType = "irp";
-
+  const account_type = form.querySelector(".account-type-select")?.value || "general";
+  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
