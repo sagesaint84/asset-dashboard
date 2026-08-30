@@ -149,19 +149,41 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
     total_positive_bank_balance = 0.0
     total_minus_bank_debt = 0.0
     minus_account_count = 0
+    total_loan_monthly_interest = 0.0
+    total_loan_limit = 0.0
 
     for b in bank_accounts:
         b_item = deepcopy(b)
         bal = float(b_item.get("balance") or 0.0)
         total_bank_balance += bal
+        rate = float(b_item.get("interest_rate") or 0.0)
+        limit = float(b_item.get("limit_amount") or 0.0)
+        mat_date_str = b_item.get("maturity_date") or ""
+
+        d_day = None
+        if mat_date_str:
+            try:
+                mat_dt = datetime.strptime(mat_date_str[:10], "%Y-%m-%d").date()
+                d_day = (mat_dt - today_dt).days
+            except ValueError:
+                pass
+        b_item["d_day"] = d_day
+
         if bal < 0:
+            debt = abs(bal)
             b_item["is_minus_account"] = True
-            b_item["minus_debt"] = abs(bal)
-            total_minus_bank_debt += abs(bal)
+            b_item["minus_debt"] = debt
+            total_minus_bank_debt += debt
             minus_account_count += 1
+            calc = calculate_loan_interest(debt, rate, "bullet", 12)
+            b_item["calc"] = calc
+            b_item["monthly_interest"] = calc["monthly_interest"]
+            total_loan_monthly_interest += calc["monthly_interest"]
+            total_loan_limit += limit
         else:
             b_item["is_minus_account"] = False
             b_item["minus_debt"] = 0.0
+            b_item["monthly_interest"] = 0.0
             total_positive_bank_balance += bal
         enriched_banks.append(b_item)
 
@@ -173,8 +195,6 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
     loan_accounts = data.get("loan_accounts", [])
     enriched_loans = []
     total_loan_balance = 0.0
-    total_loan_monthly_interest = 0.0
-    total_loan_limit = 0.0
 
     for loan in loan_accounts:
         item = deepcopy(loan)
@@ -249,6 +269,9 @@ def save_bank_account(payload: dict[str, Any], username: str | None = None) -> d
         "account_number": (payload.get("account_number") or "").strip(),
         "owner": (payload.get("owner") or "모두").strip(),
         "balance": float(payload.get("balance") or 0.0),
+        "limit_amount": max(0.0, float(payload.get("limit_amount") or 0.0)),
+        "interest_rate": max(0.0, float(payload.get("interest_rate") or 0.0)),
+        "maturity_date": (payload.get("maturity_date") or "").strip(),
         "currency": (payload.get("currency") or "KRW").upper(),
         "memo": (payload.get("memo") or "").strip(),
         "updated_at": datetime.now().astimezone().isoformat(),

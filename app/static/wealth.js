@@ -985,7 +985,15 @@ function renderSavingsWithOwner(owner = '모두') {
   const totalMaturity = filteredSavings.reduce((sum, s) => sum + (Number(s.calc?.maturity_total) || 0), 0);
   const totalPureLoan = filteredLoans.reduce((sum, l) => sum + (Number(l.current_balance) || 0), 0);
   const totalCombinedDebt = totalPureLoan + totalMinusDebt;
-  const totalLoanInterest = filteredLoans.reduce((sum, l) => sum + (Number(l.monthly_interest) || Number(l.calc?.monthly_interest) || 0), 0);
+
+  // 순수 대출 이자 + 자유연동 마통 월 예상 이자 합산
+  const totalMinusInterest = minusBanks.reduce((sum, b) => {
+    const debt = Math.abs(Number(b.balance || 0));
+    const rate = Number(b.interest_rate || 0);
+    return sum + (rate > 0 ? Math.round(debt * (rate / 100) / 12) : 0);
+  }, 0);
+  const totalPureLoanInterest = filteredLoans.reduce((sum, l) => sum + (Number(l.monthly_interest) || Number(l.calc?.monthly_interest) || 0), 0);
+  const totalLoanInterest = totalPureLoanInterest + totalMinusInterest;
 
   // 상단 요약 카드 집계
   if ($("#totalBankBalanceVal")) $("#totalBankBalanceVal").textContent = `₩${number(totalPositiveBank, 0)}`;
@@ -1171,6 +1179,20 @@ function renderSavingsWithOwner(owner = '모두') {
     const allLoanItems = [...filteredLoans];
     // 자유입출금 계좌 중 음수 잔고인 마이너스통장도 대출 탭에 함께 연동 표시
     minusBanks.forEach(mb => {
+      const curBal = Math.abs(Number(mb.balance || 0));
+      const limitAmt = Number(mb.limit_amount || 0);
+      const rate = Number(mb.interest_rate || 0);
+      const monthlyInt = rate > 0 ? Math.round(curBal * (rate / 100) / 12) : 0;
+      let dDay = null;
+      if (mb.maturity_date) {
+        try {
+          const endDt = new Date(mb.maturity_date.substring(0, 10));
+          const nowDt = new Date();
+          nowDt.setHours(0, 0, 0, 0);
+          dDay = Math.round((endDt - nowDt) / (1000 * 60 * 60 * 24));
+        } catch (e) {}
+      }
+
       allLoanItems.push({
         id: mb.id,
         is_from_bank: true,
@@ -1178,11 +1200,13 @@ function renderSavingsWithOwner(owner = '모두') {
         bank_name: mb.bank_name,
         product_name: `${mb.account_name} (자유통장 연동)`,
         owner: mb.owner,
-        current_balance: Math.abs(Number(mb.balance || 0)),
-        limit_amount: 0,
-        interest_rate: 0,
+        current_balance: curBal,
+        limit_amount: limitAmt,
+        interest_rate: rate,
+        monthly_interest: monthlyInt,
         repayment_type: "bullet",
-        maturity_date: "",
+        maturity_date: mb.maturity_date || "",
+        d_day: dDay,
         linked_account_id: mb.id,
         memo: mb.memo || "자유입출금 마이너스 잔고 부채",
       });
@@ -1239,24 +1263,27 @@ function renderSavingsWithOwner(owner = '모두') {
                   <div class="saving-progress-bar" style="width: ${utilPercent}%; background: ${utilPercent >= 80 ? '#fb7185' : '#38bdf8'};"></div>
                 </div>
               </div>
-            ` : ''}
+            ` : (l.is_from_bank ? `
+              <div style="font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:6px;margin:8px 0 4px;display:flex;justify-content:space-between;align-items:center;">
+                <span>마통 한도 미설정</span>
+                <button type="button" ${editAttr} style="background:none;border:none;color:#38bdf8;cursor:pointer;font-size:11px;padding:0;text-decoration:underline;">한도/금리 설정 ✎</button>
+              </div>
+            ` : '')}
 
             <div class="saving-card-details">
-              ${l.interest_rate > 0 ? `
-                <div class="saving-detail-row">
-                  <span class="saving-detail-label">약정 금리</span>
-                  <span class="saving-detail-val" style="color:#fb7185;font-weight:700;">연 ${l.interest_rate}%</span>
-                </div>
-              ` : ''}
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">약정 금리</span>
+                <span class="saving-detail-val" style="${l.interest_rate > 0 ? 'color:#fb7185;font-weight:700;' : 'color:#94a3b8;font-size:11px;'}">${l.interest_rate > 0 ? `연 ${l.interest_rate}%` : (l.is_from_bank ? '미설정 (✎ 수정)' : '-')}</span>
+              </div>
               ${monthlyInt > 0 ? `
                 <div class="saving-detail-row">
                   <span class="saving-detail-label">월 예상 이자</span>
-                  <span class="saving-detail-val" style="color:#fb7185;">₩${number(monthlyInt, 0)}</span>
+                  <span class="saving-detail-val" style="color:#fb7185;font-weight:700;">₩${number(monthlyInt, 0)}</span>
                 </div>
               ` : ''}
               <div class="saving-detail-row">
                 <span class="saving-detail-label">상환 방식</span>
-                <span class="saving-detail-val">${l.is_from_bank ? '자유입출금 잔고 차감' : repayLabel}</span>
+                <span class="saving-detail-val">${l.is_from_bank ? '자유잔고 차감' : repayLabel}</span>
               </div>
               ${!l.is_from_bank && l.linked_account_id ? `
                 <div class="saving-detail-row">
@@ -1329,25 +1356,59 @@ function calcSavingInterestPreview() {
   if ($("#prevMaturityTotal")) $("#prevMaturityTotal").textContent = `₩${number(maturity, 0)}`;
 }
 
-function openBankAccountDialog(account = null) {
+function calcBankMinusPreview() {
+  const balInput = Number($("#bankBalanceInput")?.value || 0);
+  const limitInput = Number($("#bankLimitAmount")?.value || 0);
+  const rateInput = Number($("#bankInterestRate")?.value || 0);
+
+  const previewBox = $("#bankMinusPreviewBox");
+  if (!previewBox) return;
+
+  const isMinus = balInput < 0;
+  if (isMinus || limitInput > 0 || rateInput > 0) {
+    previewBox.style.display = "flex";
+    const debt = Math.abs(balInput);
+    const monthlyInt = rateInput > 0 ? Math.round(debt * (rateInput / 100) / 12) : 0;
+    const utilPercent = limitInput > 0 ? Math.min(100, Math.round((debt / limitInput) * 100)) : 0;
+
+    if ($("#bankMinusMonthlyInterest")) $("#bankMinusMonthlyInterest").textContent = `₩${number(monthlyInt, 0)}`;
+    if ($("#bankMinusUtilPercent")) $("#bankMinusUtilPercent").textContent = `${utilPercent}% (한도 ₩${number(limitInput, 0)})`;
+  } else {
+    previewBox.style.display = "none";
+  }
+}
+
+function openBankAccountDialog(account = null, fromLoan = false) {
   const dialog = $("#bankAccountDialog");
   const form = $("#bankAccountForm");
   if (!dialog || !form) return;
   form.reset();
   form.querySelector("[name='id']").value = account ? account.id : "";
+
+  const isMinus = account && (Number(account.balance) < 0 || Number(account.limit_amount) > 0 || fromLoan);
   if ($("#bankAccountDialogTitle")) {
-    $("#bankAccountDialogTitle").textContent = account ? "자유입출금 통장 수정" : "자유입출금 통장 추가";
+    if (account) {
+      $("#bankAccountDialogTitle").textContent = isMinus ? "자유연동 마이너스통장 수정" : "자유입출금 통장 수정";
+    } else {
+      $("#bankAccountDialogTitle").textContent = fromLoan ? "마이너스통장 (자유연동) 추가" : "자유입출금 통장 추가";
+    }
   }
+
   if (account) {
     form.querySelector("[name='bank_name']").value = account.bank_name || "";
     form.querySelector("[name='account_name']").value = account.account_name || "";
     form.querySelector("[name='account_number']").value = account.account_number || "";
     form.querySelector("[name='owner']").value = account.owner || "모두";
-    form.querySelector("[name='balance']").value = account.balance || 0;
+    form.querySelector("[name='balance']").value = account.balance ?? 0;
+    form.querySelector("[name='limit_amount']").value = account.limit_amount || "";
+    form.querySelector("[name='interest_rate']").value = account.interest_rate || "";
+    form.querySelector("[name='maturity_date']").value = account.maturity_date || "";
     form.querySelector("[name='memo']").value = account.memo || "";
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
   }
+
+  calcBankMinusPreview();
   dialog.showModal();
 }
 
@@ -5949,6 +6010,9 @@ function initSavingsListeners() {
         account_number: fd.get("account_number") || "",
         owner: fd.get("owner") || "모두",
         balance: Number(fd.get("balance")) || 0,
+        limit_amount: Number(fd.get("limit_amount")) || 0,
+        interest_rate: Number(fd.get("interest_rate")) || 0,
+        maturity_date: fd.get("maturity_date") || "",
         currency: "KRW",
         memo: fd.get("memo") || "",
       };
@@ -5959,12 +6023,17 @@ function initSavingsListeners() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast("일반 은행 계좌가 저장되었습니다.");
+        toast("자유입출금 통장(마통) 정보가 저장되었습니다.");
         closeDialog("bankAccountDialog");
         await loadDashboard();
       } catch (err) {
-        toast(err.message || "은행 계좌 저장 실패", true);
+        toast(err.message || "통장 저장 실패", true);
       }
+    });
+
+    ["bankBalanceInput", "bankLimitAmount", "bankInterestRate"].forEach(id => {
+      document.getElementById(id)?.addEventListener("input", calcBankMinusPreview);
+      document.getElementById(id)?.addEventListener("change", calcBankMinusPreview);
     });
   }
 

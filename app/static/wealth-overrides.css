@@ -2699,16 +2699,21 @@ dialog.dialog .dialog-actions {
 .saving-detail-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
 .saving-detail-label {
   color: #788bab;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .saving-detail-val {
   color: #e2e8f0;
   font-weight: 600;
+  text-align: right;
+  word-break: keep-all;
 }
 
 .saving-interest-box {

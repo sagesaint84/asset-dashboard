@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v471" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v472" />
   </head>
   <body>
     <main class="shell">
@@ -870,11 +870,34 @@
             </select>
           </label>
           <label>현재 잔고 (KRW)
-            <input name="balance" type="number" step="any" placeholder="예: 5000000 또는 -3500000 (마통)" required />
+            <input name="balance" id="bankBalanceInput" type="number" step="any" placeholder="예: 5000000 또는 -3500000 (마통)" required />
           </label>
           <label>메모
             <input name="memo" placeholder="생활비 및 결제 전용" />
           </label>
+        </div>
+
+        <!-- 마이너스통장(한도대출) 옵션 영역 -->
+        <div id="bankMinusOptionsBox" style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.2);">
+          <div style="font-size:12px;font-weight:700;color:#fb7185;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            <span>💳 마이너스통장 설정 (한도 / 금리)</span>
+            <span style="font-size:11px;font-weight:400;color:#94a3b8;">— 마통일 때 입력 (선택)</span>
+          </div>
+          <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:10px;">
+            <label>설정 한도금액 (KRW)
+              <input name="limit_amount" id="bankLimitAmount" type="number" step="any" placeholder="예: 50000000" />
+            </label>
+            <label>약정 대출금리 (연 %)
+              <input name="interest_rate" id="bankInterestRate" type="number" step="0.01" placeholder="예: 4.8" />
+            </label>
+            <label>만기일 (약정 만기일)
+              <input name="maturity_date" id="bankMaturityDate" type="date" />
+            </label>
+          </div>
+          <div id="bankMinusPreviewBox" style="display:none;margin-top:8px;padding:8px 10px;border-radius:6px;background:rgba(0,0,0,0.2);font-size:11.5px;color:#cbd5e1;justify-content:space-between;align-items:center;">
+            <span>월 예상 이자: <strong id="bankMinusMonthlyInterest" style="color:#fb7185;">₩0</strong></span>
+            <span>한도 소진율: <strong id="bankMinusUtilPercent" style="color:#38bdf8;">0%</strong></span>
+          </div>
         </div>
         <div class="dialog-actions">
           <button class="button secondary" value="cancel" type="button">취소</button>
@@ -1592,7 +1615,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v471"></script>
+    <script src="/static/wealth.js?v=20260830-v472"></script>
   </body>
 </html>
 
