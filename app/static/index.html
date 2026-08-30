@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v488" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v489" />
   </head>
   <body>
     <main class="shell">
@@ -1033,13 +1033,13 @@
             <input name="interest_rate" type="number" step="0.01" min="0" max="30" placeholder="예: 4.2" id="savingInterestRate" required />
           </label>
           <label id="monthlyAmountLabel">월 납입 금액 (KRW)
-            <input name="monthly_amount" type="number" step="1000" min="0" placeholder="예: 500000" id="savingMonthlyAmount" data-korean-currency />
+            <input name="monthly_amount" type="number" step="any" min="0" placeholder="예: 500000" id="savingMonthlyAmount" data-korean-currency />
           </label>
           <label id="targetAmountLabel">예치 원금 (목표금액 KRW)
-            <input name="target_amount" type="number" step="1000" min="0" placeholder="예: 10000000" id="savingTargetAmount" data-korean-currency />
+            <input name="target_amount" type="number" step="any" min="0" placeholder="예: 10000000" id="savingTargetAmount" data-korean-currency />
           </label>
           <label>현재까지 누적 납입액 (KRW)
-            <input name="current_paid_amount" type="number" step="1000" min="0" placeholder="현재까지 불입한 원금" id="savingCurrentPaid" data-korean-currency />
+            <input name="current_paid_amount" type="number" step="any" min="0" placeholder="현재까지 불입한 원금" id="savingCurrentPaid" data-korean-currency />
           </label>
           <label>과세 구분
             <select name="tax_type" id="savingTaxType">
@@ -1130,15 +1130,15 @@
           </label>
           <label>
             월 납입액 (KRW)
-            <input type="number" name="monthly_premium" placeholder="예: 150000" min="0" step="1000" data-korean-currency />
+            <input type="number" name="monthly_premium" placeholder="예: 150000" min="0" step="any" data-korean-currency />
           </label>
           <label>
             누적 총 납입액 (KRW)
-            <input type="number" name="total_paid_amount" placeholder="현재까지 납입한 원금 총액" min="0" step="10000" data-korean-currency />
+            <input type="number" name="total_paid_amount" placeholder="현재까지 납입한 원금 총액" min="0" step="any" data-korean-currency />
           </label>
           <label>
             예상 수령액 / 해약환급금 (KRW)
-            <input type="number" name="expected_amount" placeholder="만기 예상액 또는 해약환급금" min="0" step="10000" data-korean-currency />
+            <input type="number" name="expected_amount" placeholder="만기 예상액 또는 해약환급금" min="0" step="any" data-korean-currency />
           </label>
           <label>
             가입일
@@ -1207,11 +1207,11 @@
           </label>
           <label id="loanLimitLabel">
             설정 한도금액 (KRW)
-            <input type="number" name="limit_amount" id="loanLimitAmount" placeholder="마이너스통장 총 한도액" min="0" step="100000" data-korean-currency />
+            <input type="number" name="limit_amount" id="loanLimitAmount" placeholder="마이너스통장 총 한도액" min="0" step="any" data-korean-currency />
           </label>
           <label>
             현재 대출잔액 (갚아야 할 빚, KRW)
-            <input type="number" name="current_balance" id="loanCurrentBalance" placeholder="현재 실제 마이너스/대출금" min="0" step="10000" data-korean-currency required />
+            <input type="number" name="current_balance" id="loanCurrentBalance" placeholder="현재 실제 마이너스/대출금" min="0" step="any" data-korean-currency required />
           </label>
           <label>
             약정 대출금리 (연 %)
@@ -1839,7 +1839,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v488"></script>
+    <script src="/static/wealth.js?v=20260831-v489"></script>
   </body>
 </html>
 
