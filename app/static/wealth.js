@@ -1052,6 +1052,20 @@ function renderClassifications(items) {
   }
 }
 
+function isAccountTaxDeductible(account) {
+  if (!account) return true;
+  const val = account.tax_deductible;
+  if (val === false || val === "false" || val === 0 || val === "0") return false;
+  if (val === true || val === "true" || val === 1 || val === "1") return true;
+
+  // 설정값이 없을 때(null / undefined)는 계좌명으로 스마트 판별
+  const name = (account.name || account.account_name || "").toLowerCase();
+  if (name.includes("공제x") || name.includes("공제 x") || name.includes("세액공제x") || name.includes("세액공제 x") || name.includes("비공제") || name.includes("미공제") || name.includes("공제제외") || name.includes("공제 안") || name.includes("공제안")) {
+    return false;
+  }
+  return true;
+}
+
 // ── 4. 계좌 목록 렌더링 ──────────────────────────────────────────────────────
 function renderAccounts(items) {
   const container = $("#accountList");
@@ -1074,13 +1088,7 @@ function renderAccounts(items) {
 
       const aName = (account.name || "").toLowerCase();
       const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
-
-      let isTaxDeductible = account.tax_deductible !== undefined ? Boolean(account.tax_deductible) : true;
-      if (account.tax_deductible === undefined) {
-        if (aName.includes("공제x") || aName.includes("세액공제x") || aName.includes("비공제") || aName.includes("미공제") || aName.includes("공제제외") || aName.includes("공제 안") || aName.includes("공제안")) {
-          isTaxDeductible = false;
-        }
-      }
+      const isTaxDeductible = isAccountTaxDeductible(account);
 
       let typeBadge = "";
       if (aType === "pension_savings") {
@@ -2012,13 +2020,7 @@ function renderInsuranceWithOwner(owner = '모두') {
   const pensionTaxSaved = secAccounts.reduce((sum, a) => {
     const aName = (a.name || '').toLowerCase();
     const aType = a.account_type || (aName.includes('연금') ? 'pension_savings' : (aName.includes('irp') ? 'irp' : 'general'));
-    if (aType === 'pension_savings' || aType === 'irp') {
-      let isTaxDeductible = a.tax_deductible !== undefined ? Boolean(a.tax_deductible) : true;
-      if (a.tax_deductible === undefined) {
-        if (aName.includes("공제x") || aName.includes("세액공제x") || aName.includes("비공제") || aName.includes("미공제") || aName.includes("공제제외") || aName.includes("공제 안") || aName.includes("공제안")) {
-          isTaxDeductible = false;
-        }
-      }
+      const isTaxDeductible = isAccountTaxDeductible(a);
       const dep = Number(a.annual_deposit) || 0;
       const isaTr = Number(a.isa_transfer_amount) || 0;
       const rate = a.income_level === 'high' ? 0.132 : 0.165;
@@ -3769,12 +3771,7 @@ function openAccountEditDialog(account) {
   const typeSelect = form.querySelector(".account-type-select");
   if (typeSelect) typeSelect.value = aType;
 
-  let isTaxDeductible = account.tax_deductible !== undefined ? Boolean(account.tax_deductible) : true;
-  if (account.tax_deductible === undefined) {
-    if (aName.includes("공제x") || aName.includes("세액공제x") || aName.includes("비공제") || aName.includes("미공제") || aName.includes("공제제외") || aName.includes("공제 안") || aName.includes("공제안")) {
-      isTaxDeductible = false;
-    }
-  }
+  const isTaxDeductible = isAccountTaxDeductible(account);
   const dedSel = form.querySelector(".pension-tax-deductible");
   if (dedSel) dedSel.value = isTaxDeductible ? "true" : "false";
 
@@ -4858,20 +4855,28 @@ $("#accountCashForm")?.addEventListener("submit", async (e) => {
   }
 });
 
-$("#accountEditForm")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = e.currentTarget;
+let isSubmittingEditAccount = false;
+async function saveEditAccount() {
+  if (isSubmittingEditAccount) return;
+  const form = document.getElementById("accountEditForm");
+  if (!form) return;
   const accountId = form.dataset.accountId;
-  const broker = form.broker.value.trim();
-  const name = form.name.value.trim();
-  const owner = form.owner ? form.owner.value : "모두";
+  const broker = (form.querySelector("[name='broker']")?.value || "").trim();
+  const name = (form.querySelector("[name='name']")?.value || "").trim();
+  const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
   const account_type = form.querySelector(".account-type-select")?.value || "general";
-  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
+  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value === "true";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
   const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
+  if (!broker || !name) {
+    toast("증권사와 계좌 이름을 모두 입력해 주세요.", true);
+    return;
+  }
+
+  isSubmittingEditAccount = true;
   try {
     const res = await api(`/api/accounts/${accountId}`, {
       method: "PUT",
@@ -4888,13 +4893,15 @@ $("#accountEditForm")?.addEventListener("submit", async (e) => {
         isa_transfer_year
       })
     });
-    form.closest("dialog")?.close();
-    toast(res.message);
+    document.getElementById("accountEditDialog")?.close();
+    toast(res.message || "계좌 정보가 수정되었습니다.");
     await loadDashboard();
   } catch (err) {
     toast(err.message, true);
+  } finally {
+    isSubmittingEditAccount = false;
   }
-});
+}
 
 let isSubmittingAccount = false;
 async function saveNewAccount() {
@@ -4905,7 +4912,7 @@ async function saveNewAccount() {
   const account_name = (form.querySelector("[name='account_name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
   const account_type = form.querySelector(".account-type-select")?.value || "general";
-  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
+  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value === "true";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
@@ -4944,9 +4951,19 @@ async function saveNewAccount() {
   }
 }
 
-$("#accountAddForm")?.addEventListener("submit", (e) => {
-  e.preventDefault();
-  saveNewAccount();
+$("#accountEditSaveBtn")?.addEventListener("click", saveEditAccount);
+$("#accountEditForm")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    saveEditAccount();
+  }
+});
+$("#accountAddSaveBtn")?.addEventListener("click", saveNewAccount);
+$("#accountAddForm")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    saveNewAccount();
+  }
 });
 
 // ── 종목 사전 및 양방향 자동완성 (종목코드 ↔ 종목명) ─────────────────────────

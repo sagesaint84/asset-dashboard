@@ -1,3 +1,14 @@
+v4.9.2
+
+(fix) 🛠️ 연금저축·IRP 세액공제 제외 설정 저장 버그 수정 및 판별 로직 불릿프루프화
+- **세액공제 적용 여부(`tax_deductible`) 저장 및 파싱 버그 수정**:
+  - 백엔드 `rename_account` 및 `create_account`에서 `tax_deductible` boolean 파싱 로직을 불릿프루프(`parse_bool`)하게 개편하여 `False` 값이 정확히 저장되도록 수정
+  - 증권 계좌 수정 팝업(`accountEditDialog`) 폼 제출 시 다이얼로그 `method="dialog"` 충돌을 방지하고 `onsubmit="return false;"` 및 명시적 저장 핸들러(`saveEditAccount`)로 분리
+- **프론트엔드 `isAccountTaxDeductible()` 헬퍼 통합**:
+  - 계좌 목록 렌더링, 계좌 수정 다이얼로그 초기화, 절세 요약 계산 등 모든 영역에서 `isAccountTaxDeductible()`로 일관되게 판별
+  - `tax_deductible: false`인 경우 즉시 **`[연금(비공제)]` / `[IRP(비공제)]`** 뱃지와 **`🌿 비공제 (원금 비과세 인출용)`**이 완벽히 렌더링되도록 수정
+(perf) 서비스 워커 캐시 버전(wealth-cache-v40) 및 정적 자산 쿼리(v492) 갱신
+
 v4.9.1
 
 (feat) 🌿 연금저축·IRP 세액공제 제외(비공제 / 원금 비과세 인출용) 계좌 관리 및 1,800만 한도 지원

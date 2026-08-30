@@ -947,10 +947,22 @@ async def create_account(request: Request) -> dict:
     acc_type = (body.get("account_type") or "general").strip()
     income_lvl = (body.get("income_level") or "low").strip()
     annual_dep = max(0.0, float(body.get("annual_deposit") or 0.0))
-    isa_tr = max(0.0, float(body.get("isa_transfer_amount") or 0.0))
-    isa_year = str(body.get("isa_transfer_year") or "").strip()
+    def _parse_bool(val: Any, default: bool = True) -> bool:
+        if val is None:
+            return default
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            return bool(val)
+        if isinstance(val, str):
+            s = val.strip().lower()
+            if s in ("false", "0", "no", "off", "non_deductible"):
+                return False
+            if s in ("true", "1", "yes", "on", "deductible"):
+                return True
+        return default
 
-    tax_deductible = bool(body.get("tax_deductible", True))
+    tax_deductible = _parse_bool(body.get("tax_deductible"), True)
 
     new_account = {
         "id": str(uuid.uuid4()),
@@ -1333,7 +1345,15 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
     if "account_type" in payload:
         account["account_type"] = str(payload.get("account_type") or "general").strip()
     if "tax_deductible" in payload:
-        account["tax_deductible"] = bool(payload.get("tax_deductible"))
+        td_val = payload.get("tax_deductible")
+        if isinstance(td_val, bool):
+            account["tax_deductible"] = td_val
+        elif isinstance(td_val, str):
+            account["tax_deductible"] = td_val.strip().lower() not in ("false", "0", "no", "off", "non_deductible")
+        elif isinstance(td_val, (int, float)):
+            account["tax_deductible"] = bool(td_val)
+        else:
+            account["tax_deductible"] = bool(td_val)
     if "income_level" in payload:
         account["income_level"] = str(payload.get("income_level") or "low").strip()
     if "annual_deposit" in payload:

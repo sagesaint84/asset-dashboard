@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v491" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v492" />
   </head>
   <body>
     <main class="shell">
@@ -867,7 +867,7 @@
 
     <!-- 증권사 및 계좌 정보 수정 다이얼로그 -->
     <dialog id="accountEditDialog" class="dialog" style="max-width:560px;width:95vw;">
-      <form id="accountEditForm" method="dialog">
+      <form id="accountEditForm" onsubmit="return false;">
         <div class="dialog-head">
           <h2>증권사 및 계좌 정보 수정</h2>
           <button value="cancel" class="close" aria-label="닫기">×</button>
@@ -940,8 +940,8 @@
         </div>
 
         <div class="dialog-actions" style="margin-top:14px;">
-          <button class="button secondary" value="cancel" type="button">취소</button>
-          <button class="button primary" type="submit">저장</button>
+          <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
+          <button id="accountEditSaveBtn" class="button primary" type="button">저장</button>
         </div>
       </form>
     </dialog>
@@ -1996,7 +1996,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260831-v491"></script>
+    <script src="/static/wealth.js?v=20260831-v492"></script>
   </body>
 </html>
 
