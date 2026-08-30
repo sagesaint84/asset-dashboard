@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v470" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v471" />
   </head>
   <body>
     <main class="shell">
@@ -544,9 +544,9 @@
                 <button id="addAccountBtn" class="button secondary compact" type="button" title="증권 계좌 추가">➕ 증권계좌 추가</button>
               </div>
               <div id="bankingActions" style="display:none;gap:6px;align-items:center;">
-                <button id="addBankAccountBtn" class="button secondary compact" type="button" title="입출금 통장 추가">🏦 입출금통장 추가</button>
+                <button id="addBankAccountBtn" class="button secondary compact" type="button" title="자유입출금 통장 추가">🏦 자유통장 추가</button>
                 <button id="addSavingBtn" class="button secondary compact" type="button" title="예·적금 상품 추가">➕ 예·적금 추가</button>
-                <button id="addLoanBtn" class="button secondary compact" type="button" title="대출·마이너스통장 추가">💳 대출·마통 추가</button>
+                <button id="addLoanBtn" class="button secondary compact" type="button" title="대출·마이너스통장 추가">💳 대출 추가</button>
               </div>
               <div id="insuranceActions" style="display:none;gap:6px;align-items:center;">
                 <button id="addInsuranceBtn" class="button secondary compact" type="button" title="보험 / 연금 / 공제 추가">➕ 보험/연금 추가</button>
@@ -563,7 +563,7 @@
           <div id="catPanelBanking" class="cat-panel" style="display:none;margin-top:12px;">
             <div class="savings-summary-grid loan-summary-grid" id="savingsSummaryCards">
               <div class="saving-stat-card">
-                <span class="saving-stat-label">🏦 입출금 통장 잔고</span>
+                <span class="saving-stat-label">🏦 자유통장 잔고</span>
                 <strong id="totalBankBalanceVal">₩0</strong>
               </div>
               <div class="saving-stat-card">
@@ -582,13 +582,13 @@
             </div>
 
             <div class="savings-subtabs" style="display:flex;gap:8px;margin-top:14px;">
-              <button type="button" class="savings-subtab active" data-subtab="savings">예·적금 (<span id="savingsCount">0</span>)</button>
-              <button type="button" class="savings-subtab" data-subtab="banks">입출금 통장 (<span id="banksCount">0</span>)</button>
-              <button type="button" class="savings-subtab" data-subtab="loans">대출·마이너스통장 (<span id="loansCount">0</span>)</button>
+              <button type="button" class="savings-subtab active" data-subtab="banks">자유 (<span id="banksCount">0</span>)</button>
+              <button type="button" class="savings-subtab" data-subtab="savings">예·적금 (<span id="savingsCount">0</span>)</button>
+              <button type="button" class="savings-subtab" data-subtab="loans">대출 (<span id="loansCount">0</span>)</button>
             </div>
 
-            <div id="savingsGrid" class="savings-card-grid" style="margin-top:12px;"></div>
-            <div id="banksListWrap" class="banks-table-wrap" style="display:none;margin-top:12px;"></div>
+            <div id="banksListWrap" class="banks-table-wrap" style="display:block;margin-top:12px;"></div>
+            <div id="savingsGrid" class="savings-card-grid" style="display:none;margin-top:12px;"></div>
             <div id="loansGrid" class="savings-card-grid" style="display:none;margin-top:12px;"></div>
           </div>
 
@@ -842,21 +842,21 @@
       </form>
     </dialog>
 
-    <!-- 일반 은행 계좌 등록/수정 다이얼로그 -->
+    <!-- 자유입출금 통장 등록/수정 다이얼로그 -->
     <dialog id="bankAccountDialog" class="dialog">
       <form id="bankAccountForm" method="dialog">
         <div class="dialog-head">
-          <h2 id="bankAccountDialogTitle">일반 은행 계좌 추가</h2>
+          <h2 id="bankAccountDialogTitle">자유입출금 통장 추가</h2>
           <button value="cancel" class="close" aria-label="닫기">×</button>
         </div>
-        <p class="dialog-description">수시입출금 통장 등 일반 은행 계좌의 잔고를 관리합니다.</p>
+        <p class="dialog-description">수시입출금 통장 등 일반 계좌의 잔고를 관리합니다. (※ 음수(-) 금액 입력 시 마이너스통장 부채로 자동 인식)</p>
         <input type="hidden" name="id" />
         <div class="form-grid">
           <label>은행명
             <input name="bank_name" placeholder="KB국민, 토스뱅크, 신한, 카카오뱅크 등" required />
           </label>
           <label>계좌 이름 (별칭)
-            <input name="account_name" placeholder="급여 통장, 비상금 통장 등" required />
+            <input name="account_name" placeholder="급여 통장, 마이너스 통장 등" required />
           </label>
           <label>계좌 번호 (선택)
             <input name="account_number" placeholder="123-456-7890" />
@@ -870,7 +870,7 @@
             </select>
           </label>
           <label>현재 잔고 (KRW)
-            <input name="balance" type="number" step="any" placeholder="0" required />
+            <input name="balance" type="number" step="any" placeholder="예: 5000000 또는 -3500000 (마통)" required />
           </label>
           <label>메모
             <input name="memo" placeholder="생활비 및 결제 전용" />
@@ -1592,7 +1592,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v470"></script>
+    <script src="/static/wealth.js?v=20260830-v471"></script>
   </body>
 </html>
 

@@ -144,7 +144,26 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
         total_savings_maturity += calc["maturity_total"]
         enriched_savings.append(item)
 
-    total_bank_balance = sum(float(a.get("balance") or 0) for a in bank_accounts)
+    enriched_banks = []
+    total_bank_balance = 0.0
+    total_positive_bank_balance = 0.0
+    total_minus_bank_debt = 0.0
+    minus_account_count = 0
+
+    for b in bank_accounts:
+        b_item = deepcopy(b)
+        bal = float(b_item.get("balance") or 0.0)
+        total_bank_balance += bal
+        if bal < 0:
+            b_item["is_minus_account"] = True
+            b_item["minus_debt"] = abs(bal)
+            total_minus_bank_debt += abs(bal)
+            minus_account_count += 1
+        else:
+            b_item["is_minus_account"] = False
+            b_item["minus_debt"] = 0.0
+            total_positive_bank_balance += bal
+        enriched_banks.append(b_item)
 
     insurance_accounts = data.get("insurance_accounts", [])
     total_insurance_monthly = sum(float(i.get("monthly_premium") or 0) for i in insurance_accounts)
@@ -184,21 +203,27 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
         total_loan_limit += limit
         enriched_loans.append(item)
 
+    total_combined_debt = total_loan_balance + total_minus_bank_debt
+
     return {
-        "bank_accounts": bank_accounts,
+        "bank_accounts": enriched_banks,
         "savings_accounts": enriched_savings,
         "insurance_accounts": insurance_accounts,
         "loan_accounts": enriched_loans,
         "summary": {
-            "bank_account_count": len(bank_accounts),
+            "bank_account_count": len(enriched_banks),
             "savings_account_count": len(enriched_savings),
             "insurance_account_count": len(insurance_accounts),
             "loan_account_count": len(enriched_loans),
+            "minus_account_count": minus_account_count,
             "total_bank_balance": round(total_bank_balance),
+            "total_positive_bank_balance": round(total_positive_bank_balance),
+            "total_minus_bank_debt": round(total_minus_bank_debt),
             "total_savings_paid": round(total_savings_paid),
             "total_savings_maturity": round(total_savings_maturity),
             "total_cash_and_savings": round(total_bank_balance + total_savings_paid),
-            "total_loan_balance": round(total_loan_balance),
+            "total_loan_balance": round(total_combined_debt),
+            "total_pure_loan_balance": round(total_loan_balance),
             "total_loan_monthly_interest": round(total_loan_monthly_interest),
             "total_loan_limit": round(total_loan_limit),
             "net_bank_worth": round((total_bank_balance + total_savings_paid) - total_loan_balance),
@@ -223,7 +248,7 @@ def save_bank_account(payload: dict[str, Any], username: str | None = None) -> d
         "account_name": (payload.get("account_name") or "").strip() or "수시입출금",
         "account_number": (payload.get("account_number") or "").strip(),
         "owner": (payload.get("owner") or "모두").strip(),
-        "balance": max(0.0, float(payload.get("balance") or 0.0)),
+        "balance": float(payload.get("balance") or 0.0),
         "currency": (payload.get("currency") or "KRW").upper(),
         "memo": (payload.get("memo") or "").strip(),
         "updated_at": datetime.now().astimezone().isoformat(),
