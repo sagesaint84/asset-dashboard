@@ -1112,13 +1112,15 @@ function renderAccounts(items) {
         const dep = Number(account.annual_deposit) || 0;
         const isaTr = Number(account.isa_transfer_amount) || 0;
         if (!isTaxDeductible) {
-          taxBenefitText = ` · <span style="color:#a7f3d0;font-size:11px;">🌿 비공제 (원금 비과세 인출)</span>`;
+          taxBenefitText = ` · <span style="color:#34d399;font-size:11px;font-weight:600;">🌿 비공제 (원금 비과세 인출용)</span>`;
         } else if (dep > 0 || isaTr > 0) {
           const rate = account.income_level === "high" ? 0.132 : 0.165;
           const baseTarget = Math.min(dep, aType === "pension_savings" ? 6000000 : 9000000);
           const isaTarget = Math.min(isaTr * 0.10, 3000000);
           const refund = Math.floor((baseTarget + isaTarget) * rate);
-          taxBenefitText = ` · <span style="color:#4ade80;font-weight:600;">💎 세액공제 ₩${number(refund, 0)}${isaTarget > 0 ? ` (ISA이전 +₩${number(Math.floor(isaTarget * rate), 0)})` : ''}</span>`;
+          taxBenefitText = ` · <span style="color:#38bdf8;font-weight:600;">💎 세액공제 ₩${number(refund, 0)}${isaTarget > 0 ? ` (ISA이전 +₩${number(Math.floor(isaTarget * rate), 0)})` : ''}</span>`;
+        } else {
+          taxBenefitText = ` · <span style="color:#38bdf8;font-size:11px;font-weight:600;">💎 세액공제 신청 (공제 대상)</span>`;
         }
       }
 
