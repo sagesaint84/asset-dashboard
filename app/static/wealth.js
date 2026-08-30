@@ -717,16 +717,35 @@ function renderSummary(data) {
   const totalMinusBankDebt = negBanks.reduce((acc, b) => acc + Math.abs(Number(b.balance) || 0), 0);
   const totalPureDebt = curLoans.reduce((acc, l) => acc + (Number(l.current_balance) || 0), 0);
 
-  // 부동산 자산 및 부채 합산
-  const totalREVal = curRealEstates
-    .filter(r => (r.property_type || 'own') !== 'lease')
-    .reduce((acc, r) => acc + (Number(r.current_price) || 0), 0);
-  const totalTenantDepositVal = curRealEstates
-    .filter(r => r.property_type === 'lease')
-    .reduce((acc, r) => acc + (Number(r.deposit_amount) || 0), 0);
-  const totalLandlordDepositDebt = curRealEstates
-    .filter(r => r.property_type === 'rental')
-    .reduce((acc, r) => acc + (Number(r.deposit_amount) || 0), 0);
+  // 부동산 자산 및 부채 합산 (공동명의 지분율 비례 적용)
+  const allREs = data.real_estates || rawRealEstates || [];
+  let totalREVal = 0;
+  let totalTenantDepositVal = 0;
+  let totalLandlordDepositDebt = 0;
+
+  allREs.forEach(r => {
+    const ownerships = (r.ownerships && r.ownerships.length) 
+      ? r.ownerships 
+      : [{ owner: r.owner || '모두', ratio: 100 }];
+
+    let share = 1.0;
+    if (o !== '모두') {
+      const matched = ownerships.find(x => x.owner === o);
+      if (!matched || matched.ratio <= 0) return;
+      share = (matched.ratio || 100) / 100;
+    }
+
+    const pType = r.property_type || 'own';
+    if (pType !== 'lease') {
+      totalREVal += ((Number(r.current_price) || 0) * share);
+    }
+    if (pType === 'lease') {
+      totalTenantDepositVal += ((Number(r.deposit_amount) || 0) * share);
+    }
+    if (pType === 'rental') {
+      totalLandlordDepositDebt += ((Number(r.deposit_amount) || 0) * share);
+    }
+  });
 
   const totalAllDebt = totalPureDebt + totalMinusBankDebt + totalLandlordDepositDebt;
   const grossAssets = totalInvestVal + totalPositiveBankVal + totalSavingVal + totalREVal + totalTenantDepositVal;
@@ -1744,21 +1763,34 @@ function renderRealEstate(reList, owner = '모두') {
 
 function renderRealEstateWithOwner(owner = '모두') {
   const o = owner || currentOwner || '모두';
-  const filtered = o === '모두' 
-    ? rawRealEstates 
-    : rawRealEstates.filter(r => (r.owner || '모두') === o);
+  const filtered = [];
+
+  rawRealEstates.forEach(r => {
+    const ownerships = (r.ownerships && r.ownerships.length) 
+      ? r.ownerships 
+      : [{ owner: r.owner || '모두', ratio: 100 }];
+
+    let share = 1.0;
+    if (o !== '모두') {
+      const matched = ownerships.find(x => x.owner === o);
+      if (!matched || matched.ratio <= 0) return;
+      share = (matched.ratio || 100) / 100;
+    }
+    const clone = Object.assign({}, r, { _shareRatio: share });
+    filtered.push(clone);
+  });
 
   const ownList = filtered.filter(r => (r.property_type || 'own') === 'own');
   const rentalList = filtered.filter(r => r.property_type === 'rental');
   const leaseList = filtered.filter(r => r.property_type === 'lease');
 
-  const totalREVal = ownList.concat(rentalList).reduce((sum, r) => sum + (Number(r.current_price) || 0), 0);
-  const totalPurchaseVal = ownList.concat(rentalList).reduce((sum, r) => sum + (Number(r.purchase_price) || 0), 0);
+  const totalREVal = ownList.concat(rentalList).reduce((sum, r) => sum + ((Number(r.current_price) || 0) * (r._shareRatio || 1.0)), 0);
+  const totalPurchaseVal = ownList.concat(rentalList).reduce((sum, r) => sum + ((Number(r.purchase_price) || 0) * (r._shareRatio || 1.0)), 0);
   const totalProfit = totalPurchaseVal > 0 ? (totalREVal - totalPurchaseVal) : 0;
   const totalProfitRate = totalPurchaseVal > 0 ? ((totalProfit / totalPurchaseVal) * 100).toFixed(1) : "0.0";
 
-  const totalTenantDeposit = leaseList.reduce((sum, r) => sum + (Number(r.deposit_amount) || 0), 0);
-  const totalLandlordDeposit = rentalList.reduce((sum, r) => sum + (Number(r.deposit_amount) || 0), 0);
+  const totalTenantDeposit = leaseList.reduce((sum, r) => sum + ((Number(r.deposit_amount) || 0) * (r._shareRatio || 1.0)), 0);
+  const totalLandlordDeposit = rentalList.reduce((sum, r) => sum + ((Number(r.deposit_amount) || 0) * (r._shareRatio || 1.0)), 0);
   
   let totalLinkedLoanBalance = 0;
   const loanMap = new Map();
@@ -1767,7 +1799,7 @@ function renderRealEstateWithOwner(owner = '모두') {
   filtered.forEach(r => {
     (r.linked_loan_ids || []).forEach(lid => {
       const l = loanMap.get(lid);
-      if (l) totalLinkedLoanBalance += Number(l.current_balance || 0);
+      if (l) totalLinkedLoanBalance += ((Number(l.current_balance) || 0) * (r._shareRatio || 1.0));
     });
   });
 
@@ -1775,7 +1807,8 @@ function renderRealEstateWithOwner(owner = '모두') {
 
   if ($("#totalRealEstateVal")) $("#totalRealEstateVal").textContent = `₩${number(totalREVal, 0)}`;
   if ($("#totalRealEstateCountSub")) {
-    $("#totalRealEstateCountSub").textContent = `보유: ${ownList.length + rentalList.length}건 (자가 ${ownList.length} · 임대 ${rentalList.length})`;
+    const isShare = o !== '모두' ? ` (${o} 지분 반영)` : '';
+    $("#totalRealEstateCountSub").textContent = `보유: ${ownList.length + rentalList.length}건 (자가 ${ownList.length} · 임대 ${rentalList.length})${isShare}`;
   }
   if ($("#totalPurchaseVal")) $("#totalPurchaseVal").textContent = `₩${number(totalPurchaseVal, 0)}`;
   if ($("#totalTenantDepositSub")) {
@@ -1795,16 +1828,20 @@ function renderRealEstateWithOwner(owner = '모두') {
     $("#totalRealEstateDebtSub").textContent = `담보·전세대출: ₩${number(totalLinkedLoanBalance, 0)} · 임대보증금: ₩${number(totalLandlordDeposit, 0)}`;
   }
 
+  // 4개 서브탭 카운트 업데이트
   if ($("#reAllCount")) $("#reAllCount").textContent = filtered.length;
   if ($("#reOwnCount")) $("#reOwnCount").textContent = ownList.length;
-  if ($("#reRentalCount")) $("#reRentalCount").textContent = rentalList.length + leaseList.length;
+  if ($("#reRentalCount")) $("#reRentalCount").textContent = rentalList.length;
+  if ($("#reLeaseCount")) $("#reLeaseCount").textContent = leaseList.length;
   if ($("#realEstateTabCount")) $("#realEstateTabCount").textContent = filtered.length;
 
   let displayList = filtered;
   if (currentRealEstateSubtab === 'own') {
     displayList = ownList;
   } else if (currentRealEstateSubtab === 'rental') {
-    displayList = rentalList.concat(leaseList);
+    displayList = rentalList;
+  } else if (currentRealEstateSubtab === 'lease') {
+    displayList = leaseList;
   }
 
   const grid = $("#realEstateGrid");
@@ -1822,11 +1859,18 @@ function renderRealEstateWithOwner(owner = '모두') {
     const pType = re.property_type || 'own';
     const typeLabel = PROPERTY_TYPE_LABELS[pType] || "부동산";
     const typeBadgeClass = pType === 'own' ? 'badge-own' : (pType === 'rental' ? 'badge-rental' : 'badge-lease');
+    const shareRatio = re._shareRatio || 1.0;
+    const isPartial = shareRatio < 0.999;
 
-    const purch = Number(re.purchase_price || 0);
-    const curr = Number(re.current_price || 0);
-    const dep = Number(re.deposit_amount || 0);
-    const rent = Number(re.monthly_rent || 0);
+    const rawPurch = Number(re.purchase_price || 0);
+    const rawCurr = Number(re.current_price || 0);
+    const rawDep = Number(re.deposit_amount || 0);
+    const rawRent = Number(re.monthly_rent || 0);
+
+    const purch = isPartial ? rawPurch * shareRatio : rawPurch;
+    const curr = isPartial ? rawCurr * shareRatio : rawCurr;
+    const dep = isPartial ? rawDep * shareRatio : rawDep;
+    const rent = isPartial ? rawRent * shareRatio : rawRent;
 
     const profit = (pType !== 'lease' && purch > 0) ? (curr - purch) : 0;
     const profitRate = (pType !== 'lease' && purch > 0) ? ((profit / purch) * 100).toFixed(1) : "0.0";
@@ -1843,8 +1887,8 @@ function renderRealEstateWithOwner(owner = '모두') {
     }
 
     const connectedLoanItems = (re.linked_loan_ids || []).map(lid => loanMap.get(lid)).filter(Boolean);
-    const linkedLoanTotalBal = connectedLoanItems.reduce((acc, l) => acc + Number(l.current_balance || 0), 0);
-    const linkedLoanTotalInterest = connectedLoanItems.reduce((acc, l) => acc + (Number(l.monthly_interest) || Number(l.calc?.monthly_interest) || 0), 0);
+    const linkedLoanTotalBal = connectedLoanItems.reduce((acc, l) => acc + Number(l.current_balance || 0) * shareRatio, 0);
+    const linkedLoanTotalInterest = connectedLoanItems.reduce((acc, l) => acc + (Number(l.monthly_interest) || Number(l.calc?.monthly_interest) || 0) * shareRatio, 0);
 
     let netEquity = 0;
     if (pType === 'own') {
@@ -1856,7 +1900,20 @@ function renderRealEstateWithOwner(owner = '모두') {
     }
 
     const pyungText = re.exclusive_area > 0 ? ` (약 ${(re.exclusive_area / 3.3058).toFixed(1)}평)` : '';
-    const naverLandUrl = `https://m.land.naver.com/search/result/${encodeURIComponent(re.name || re.address || '')}`;
+
+    // 네이버 부동산 검색 링크: 동·호수를 제외한 깨끗한 단지명으로 검색
+    const cleanSearchKeyword = (re.name || '').replace(/\s*\d+[-~_동호].*$/i, '').trim() || re.name || re.address || '';
+    const naverLandUrl = `https://m.land.naver.com/search/result/${encodeURIComponent(cleanSearchKeyword)}`;
+
+    // 카드 타이틀에 동·호수 결합 표시
+    const titleHtml = re.dong_ho 
+      ? `${html(re.name)} <span style="font-size:12.5px;font-weight:normal;opacity:0.85;">(${html(re.dong_ho)})</span>`
+      : html(re.name);
+
+    // 소유자 배지 라벨
+    const ownerBadgeText = re.is_joint_ownership 
+      ? (isPartial ? `🤝 ${o} ${(shareRatio * 100).toFixed(0)}% (공동명의)` : `🤝 ${re.owner}`)
+      : (re.owner || '모두');
 
     return `
       <div class="saving-card real-estate-card ${typeBadgeClass}">
@@ -1864,14 +1921,14 @@ function renderRealEstateWithOwner(owner = '모두') {
           <div class="saving-card-title-group">
             <div class="saving-badge-row">
               <span class="saving-type-badge ${typeBadgeClass}">${typeLabel}</span>
-              <span class="saving-owner-badge">${html(re.owner || '모두')}</span>
+              <span class="saving-owner-badge" title="${html(re.owner || '')}">${html(ownerBadgeText)}</span>
               ${dDayText ? `<span class="d-day-badge">${dDayText}</span>` : ''}
             </div>
-            <h3 class="saving-product-name">${html(re.name)}</h3>
+            <h3 class="saving-product-name">${titleHtml}</h3>
             <span class="saving-bank-name">${html(re.address || '-')}</span>
           </div>
           <div class="account-row-actions saving-card-actions">
-            <a href="${naverLandUrl}" target="_blank" rel="noopener" class="account-action-button" title="네이버 부동산 시세 확인" style="text-decoration:none;display:inline-flex;align-items:center;font-size:12px;">🔍</a>
+            <a href="${naverLandUrl}" target="_blank" rel="noopener" class="account-action-button" title="네이버 부동산 '${cleanSearchKeyword}' 시세 확인" style="text-decoration:none;display:inline-flex;align-items:center;font-size:12px;">🔍</a>
             <button class="account-action-button" data-re-edit-id="${re.id}" title="수정" type="button">✎</button>
             <button class="mini-delete-button" data-re-del-id="${re.id}" title="삭제" type="button">🗑️</button>
           </div>
@@ -1880,12 +1937,12 @@ function renderRealEstateWithOwner(owner = '모두') {
         <div class="saving-card-details">
           ${pType !== 'lease' ? `
             <div class="saving-detail-row">
-              <span class="saving-detail-label">매수가 (취득가)</span>
-              <span class="saving-detail-val">₩${number(purch, 0)}</span>
+              <span class="saving-detail-label">${isPartial ? `${o} 매수가` : '매수가 (취득가)'}</span>
+              <span class="saving-detail-val">₩${number(purch, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawPurch, 0)})</small>` : ''}</span>
             </div>
             <div class="saving-detail-row">
-              <span class="saving-detail-label">현재 시세</span>
-              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;">₩${number(curr, 0)}</span>
+              <span class="saving-detail-label">${isPartial ? `${o} 현재 시세` : '현재 시세'}</span>
+              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;">₩${number(curr, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawCurr, 0)})</small>` : ''}</span>
             </div>
             <div class="saving-detail-row" style="grid-column:1/-1;">
               <span class="saving-detail-label">시세 차익 (수익률)</span>
@@ -1893,8 +1950,8 @@ function renderRealEstateWithOwner(owner = '모두') {
             </div>
           ` : `
             <div class="saving-detail-row">
-              <span class="saving-detail-label">임차 전세보증금</span>
-              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;">₩${number(dep, 0)}</span>
+              <span class="saving-detail-label">${isPartial ? `${o} 임차 보증금` : '임차 전세보증금'}</span>
+              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;">₩${number(dep, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawDep, 0)})</small>` : ''}</span>
             </div>
             ${rent > 0 ? `
               <div class="saving-detail-row">
@@ -1906,8 +1963,8 @@ function renderRealEstateWithOwner(owner = '모두') {
 
           ${pType === 'rental' ? `
             <div class="saving-detail-row">
-              <span class="saving-detail-label">임대 전세금 (부채)</span>
-              <span class="saving-detail-val" style="color:#fb7185;font-weight:700;">-₩${number(dep, 0)}</span>
+              <span class="saving-detail-label">${isPartial ? `${o} 임대 전세금` : '임대 전세금 (부채)'}</span>
+              <span class="saving-detail-val" style="color:#fb7185;font-weight:700;">-₩${number(dep, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawDep, 0)})</small>` : ''}</span>
             </div>
             ${rent > 0 ? `
               <div class="saving-detail-row">
@@ -1955,7 +2012,7 @@ function renderRealEstateWithOwner(owner = '모두') {
 
         <div class="saving-interest-box" style="background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.25);">
           <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
-            <span style="color:#93c5fd;font-weight:600;">부동산 순에퀴티(순자산)</span>
+            <span style="color:#93c5fd;font-weight:600;">${isPartial ? `${o} 순에퀴티(순자산)` : '부동산 순에퀴티(순자산)'}</span>
             <span style="color:#60a5fa;font-size:15px;font-weight:700;">₩${number(netEquity, 0)}</span>
           </div>
         </div>
@@ -2033,6 +2090,45 @@ function updateRealEstateTypeFields() {
   calcRealEstatePreview();
 }
 
+function renderJointOwnershipRows(ownerships = []) {
+  const container = $("#reJointRows");
+  if (!container) return;
+  const members = (typeof familyMembers !== 'undefined' && familyMembers && familyMembers.length) 
+    ? familyMembers 
+    : ['아빠', '엄마', '자녀'];
+
+  const rows = (ownerships && ownerships.length) ? ownerships : [
+    { owner: members[0] || '아빠', ratio: 50 },
+    { owner: members[1] || '엄마', ratio: 50 }
+  ];
+
+  container.innerHTML = rows.map(r => `
+    <div class="re-joint-row" style="display:flex;align-items:center;gap:8px;">
+      <select class="re-joint-owner-select" style="flex:1;">
+        ${members.map(m => `<option value="${m}" ${m === r.owner ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <div style="display:flex;align-items:center;gap:4px;width:110px;">
+        <input type="number" class="re-joint-ratio-input" value="${r.ratio}" min="1" max="100" step="1" style="width:70px;text-align:right;" />
+        <span style="font-size:12px;color:#94a3b8;">%</span>
+      </div>
+      <button type="button" class="mini-delete-button re-joint-del-btn" title="삭제" style="padding:2px 6px;">×</button>
+    </div>
+  `).join('');
+
+  updateJointTotalRatio();
+}
+
+function updateJointTotalRatio() {
+  const inputs = document.querySelectorAll('.re-joint-ratio-input');
+  let sum = 0;
+  inputs.forEach(inp => sum += Number(inp.value || 0));
+  const totalEl = $("#reJointTotalRatio");
+  if (totalEl) {
+    totalEl.textContent = `지분율 합계: ${sum}%`;
+    totalEl.style.color = sum === 100 ? "#38bdf8" : "#fb7185";
+  }
+}
+
 function openRealEstateDialog(reItem = null) {
   const dialog = $("#realEstateDialog");
   const form = $("#realEstateForm");
@@ -2054,10 +2150,22 @@ function openRealEstateDialog(reItem = null) {
     loanSelect.innerHTML = opts;
   }
 
+  const isJoint = Boolean(reItem?.is_joint_ownership);
+  const jointCheck = $("#reIsJointCheck");
+  if (jointCheck) jointCheck.checked = isJoint;
+
+  const singleWrap = $("#reSingleOwnerWrap");
+  const jointWrap = $("#reJointOwnershipWrap");
+  if (singleWrap) singleWrap.style.display = isJoint ? "none" : "block";
+  if (jointWrap) jointWrap.style.display = isJoint ? "block" : "none";
+
+  renderJointOwnershipRows(reItem?.ownerships || []);
+
   if (reItem) {
     form.querySelector("[name='property_type']").value = reItem.property_type || "own";
-    form.querySelector("[name='owner']").value = reItem.owner || "모두";
+    form.querySelector("[name='owner']").value = reItem.ownerships?.[0]?.owner || reItem.owner || "모두";
     form.querySelector("[name='name']").value = reItem.name || "";
+    form.querySelector("[name='dong_ho']").value = reItem.dong_ho || "";
     form.querySelector("[name='address']").value = reItem.address || "";
     form.querySelector("[name='purchase_price']").value = reItem.purchase_price || "";
     form.querySelector("[name='current_price']").value = reItem.current_price || "";
@@ -6539,12 +6647,27 @@ function initSavingsListeners() {
       const linkedLoanId = fd.get("linked_loan_ids");
       const linkedLoanIds = linkedLoanId ? [linkedLoanId] : [];
 
+      const isJoint = Boolean(document.getElementById("reIsJointCheck")?.checked);
+      const ownerships = [];
+      if (isJoint) {
+        document.querySelectorAll("#reJointRows .re-joint-row").forEach(row => {
+          const mOwner = row.querySelector(".re-joint-owner-select")?.value;
+          const mRatio = Number(row.querySelector(".re-joint-ratio-input")?.value || 0);
+          if (mOwner && mRatio > 0) {
+            ownerships.push({ owner: mOwner, ratio: mRatio });
+          }
+        });
+      }
+
       const payload = {
         id: fd.get("id") || undefined,
         property_type: fd.get("property_type") || "own",
         owner: fd.get("owner") || "모두",
         name: fd.get("name") || "",
+        dong_ho: fd.get("dong_ho") || "",
         address: fd.get("address") || "",
+        is_joint_ownership: isJoint,
+        ownerships: ownerships,
         purchase_price: Number(fd.get("purchase_price")) || 0,
         current_price: Number(fd.get("current_price")) || 0,
         deposit_amount: Number(fd.get("deposit_amount")) || 0,
@@ -6574,6 +6697,56 @@ function initSavingsListeners() {
     ["rePurchasePrice", "reCurrentPrice", "reDepositAmount", "reLinkedLoansSelect"].forEach(id => {
       document.getElementById(id)?.addEventListener("input", calcRealEstatePreview);
       document.getElementById(id)?.addEventListener("change", calcRealEstatePreview);
+    });
+
+    // 공동명의 체크박스 토글 리스너
+    document.getElementById("reIsJointCheck")?.addEventListener("change", (e) => {
+      const checked = e.target.checked;
+      const singleWrap = document.getElementById("reSingleOwnerWrap");
+      const jointWrap = document.getElementById("reJointOwnershipWrap");
+      if (singleWrap) singleWrap.style.display = checked ? "none" : "block";
+      if (jointWrap) jointWrap.style.display = checked ? "block" : "none";
+      if (checked) {
+        const rows = document.querySelectorAll("#reJointRows .re-joint-row");
+        if (!rows.length) renderJointOwnershipRows();
+      }
+    });
+
+    // 공동명의 행 추가 버튼 리스너
+    document.getElementById("reAddJointRowBtn")?.addEventListener("click", () => {
+      const container = document.getElementById("reJointRows");
+      if (!container) return;
+      const members = (typeof familyMembers !== 'undefined' && familyMembers && familyMembers.length) 
+        ? familyMembers 
+        : ['아빠', '엄마', '자녀'];
+      const div = document.createElement("div");
+      div.className = "re-joint-row";
+      div.style.cssText = "display:flex;align-items:center;gap:8px;";
+      div.innerHTML = `
+        <select class="re-joint-owner-select" style="flex:1;">
+          ${members.map(m => `<option value="${m}">${m}</option>`).join('')}
+        </select>
+        <div style="display:flex;align-items:center;gap:4px;width:110px;">
+          <input type="number" class="re-joint-ratio-input" value="50" min="1" max="100" step="1" style="width:70px;text-align:right;" />
+          <span style="font-size:12px;color:#94a3b8;">%</span>
+        </div>
+        <button type="button" class="mini-delete-button re-joint-del-btn" title="삭제" style="padding:2px 6px;">×</button>
+      `;
+      container.appendChild(div);
+      updateJointTotalRatio();
+    });
+
+    // 공동명의 행 삭제 및 지분율 입력 이벤트 위임
+    document.getElementById("reJointRows")?.addEventListener("click", (e) => {
+      if (e.target.closest(".re-joint-del-btn")) {
+        e.target.closest(".re-joint-row")?.remove();
+        updateJointTotalRatio();
+      }
+    });
+    document.getElementById("reJointRows")?.addEventListener("input", (e) => {
+      if (e.target.classList.contains("re-joint-ratio-input")) {
+        updateJointTotalRatio();
+      }
     });
   }
 }

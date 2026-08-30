@@ -25,12 +25,36 @@ def save_real_estate(payload: dict[str, Any], username: str | None = None) -> di
         raw_loan_ids = [s.strip() for s in raw_loan_ids.split(",") if s.strip()]
     linked_loan_ids = list({str(lid).strip() for lid in raw_loan_ids if str(lid).strip()})
 
+    # 공동명의 지분율 처리
+    raw_ownerships = payload.get("ownerships") or []
+    ownerships = []
+    if isinstance(raw_ownerships, list):
+        for item in raw_ownerships:
+            m_owner = (item.get("owner") or "").strip()
+            try:
+                m_ratio = max(0.0, min(100.0, float(item.get("ratio") or 0.0)))
+            except (ValueError, TypeError):
+                m_ratio = 0.0
+            if m_owner and m_ratio > 0:
+                ownerships.append({"owner": m_owner, "ratio": m_ratio})
+
+    is_joint = bool(payload.get("is_joint_ownership")) and len(ownerships) > 0
+    if is_joint:
+        owner_display = " · ".join([f"{o['owner']} {int(o['ratio']) if o['ratio'].is_integer() else o['ratio']}%" for o in ownerships])
+    else:
+        single_owner = (payload.get("owner") or "모두").strip()
+        ownerships = [{"owner": single_owner, "ratio": 100.0}]
+        owner_display = single_owner
+
     record = {
         "id": re_id,
         "property_type": prop_type,  # own: 자가, rental: 임대준주택, lease: 임차(전월세거주)
         "name": (payload.get("name") or "").strip() or "부동산 자산",
+        "dong_ho": (payload.get("dong_ho") or "").strip(),
         "address": (payload.get("address") or "").strip(),
-        "owner": (payload.get("owner") or "모두").strip(),
+        "owner": owner_display,
+        "is_joint_ownership": is_joint,
+        "ownerships": ownerships,
         "purchase_price": max(0.0, float(payload.get("purchase_price") or 0.0)),
         "current_price": max(0.0, float(payload.get("current_price") or 0.0)),
         "deposit_amount": max(0.0, float(payload.get("deposit_amount") or 0.0)),
@@ -108,6 +132,10 @@ def get_real_estate_data(username: str | None = None) -> dict[str, Any]:
         curr = float(item.get("current_price") or 0.0)
         dep = float(item.get("deposit_amount") or 0.0)
 
+        # 소유권 지분율 정규화
+        if not item.get("ownerships"):
+            item["ownerships"] = [{"owner": item.get("owner") or "모두", "ratio": 100.0}]
+
         # 1. 평가손익 및 수익률 (자가 또는 임대 주택인 경우)
         profit_loss = 0.0
         return_rate = 0.0
@@ -157,9 +185,6 @@ def get_real_estate_data(username: str | None = None) -> dict[str, Any]:
         item["linked_loan_monthly_interest"] = round(loan_monthly_interest_sum)
 
         # 4. 부동산 순자산(순에퀴티) 계산
-        # - 자가: 현재시세 - 담보대출
-        # - 임대: 현재시세 - (임대보증금 + 담보대출)
-        # - 임차: 임차보증금(자산) - 전세대출(부채)
         if p_type == "own":
             net_equity = curr - loan_balance_sum
             total_re_asset_val += curr

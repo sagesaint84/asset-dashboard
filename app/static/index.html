@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v480" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260830-v481" />
   </head>
   <body>
     <main class="shell">
@@ -641,10 +641,11 @@
               </div>
             </div>
 
-            <div class="savings-subtabs real-estate-subtabs" style="display:flex;gap:8px;margin-top:14px;">
+            <div class="savings-subtabs real-estate-subtabs" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
               <button type="button" class="real-estate-subtab active" data-subtab="all">전체 (<span id="reAllCount">0</span>)</button>
-              <button type="button" class="real-estate-subtab" data-subtab="own">자가/보유 (<span id="reOwnCount">0</span>)</button>
-              <button type="button" class="real-estate-subtab" data-subtab="rental">임대/임차 (<span id="reRentalCount">0</span>)</button>
+              <button type="button" class="real-estate-subtab" data-subtab="own">자가 (<span id="reOwnCount">0</span>)</button>
+              <button type="button" class="real-estate-subtab" data-subtab="rental">임대 (<span id="reRentalCount">0</span>)</button>
+              <button type="button" class="real-estate-subtab" data-subtab="lease">임차 (<span id="reLeaseCount">0</span>)</button>
             </div>
 
             <div id="realEstateGrid" class="savings-card-grid" style="margin-top:12px;"></div>
@@ -1223,17 +1224,42 @@
               <option value="lease">🔑 임차 (전세 / 월세 거주 중)</option>
             </select>
           </label>
-          <label>소유자
-            <select name="owner" id="reOwnerSelect">
-              <option value="모두">모두</option>
-              <option value="아빠">아빠</option>
-              <option value="엄마">엄마</option>
-              <option value="자녀">자녀</option>
-            </select>
+          <div style="grid-column:1/-1;background:rgba(255,255,255,0.03);padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:12.5px;font-weight:600;color:#e2e8f0;">소유자 명의 설정</span>
+              <label style="font-size:12px;color:#38bdf8;cursor:pointer;display:flex;align-items:center;gap:4px;margin:0;">
+                <input type="checkbox" id="reIsJointCheck" style="cursor:pointer;" />
+                <span>부부·가족 공동명의</span>
+              </label>
+            </div>
+            <!-- 1) 단일 명의 셀렉트 -->
+            <div id="reSingleOwnerWrap">
+              <select name="owner" id="reOwnerSelect">
+                <option value="모두">모두</option>
+                <option value="아빠">아빠</option>
+                <option value="엄마">엄마</option>
+                <option value="자녀">자녀</option>
+              </select>
+            </div>
+            <!-- 2) 공동명의 지분율 설정 -->
+            <div id="reJointOwnershipWrap" style="display:none;margin-top:8px;">
+              <div id="reJointRows" style="display:flex;flex-direction:column;gap:6px;"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+                <small id="reJointTotalRatio" style="font-size:11.5px;color:#38bdf8;font-weight:600;">지분율 합계: 100%</small>
+                <button type="button" id="reAddJointRowBtn" class="button secondary compact" style="font-size:11px;padding:2px 8px;">+ 구성원 추가</button>
+              </div>
+            </div>
+          </div>
+
+          <label>단지명 / 건물명 (시세 연동)
+            <input name="name" id="reNameInput" placeholder="예: 마포 래미안 푸르지오 또는 현대아파트" required />
+            <small style="font-size:11px;color:#94a3b8;margin-top:2px;">동·호수를 빼고 단지명만 적으면 시세 검색이 정확합니다.</small>
           </label>
-          <label style="grid-column:1/-1;">부동산 이름 (단지명 / 동호수)
-            <input name="name" id="reNameInput" placeholder="예: 마포 래미안 푸르지오 105동 또는 강남 오피스텔 302호" required />
+          <label>상세 동·호수 (선택)
+            <input name="dong_ho" id="reDongHoInput" placeholder="예: 105동 1204호" />
+            <small style="font-size:11px;color:#94a3b8;margin-top:2px;">카드에만 표시되고 시세 검색어에서는 자동 제외됩니다.</small>
           </label>
+
           <label style="grid-column:1/-1;">소재지 주소 (선택)
             <input name="address" id="reAddressInput" placeholder="예: 서울시 마포구 아현동 777" />
           </label>
@@ -1745,7 +1771,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260830-v480"></script>
+    <script src="/static/wealth.js?v=20260830-v481"></script>
   </body>
 </html>
 
