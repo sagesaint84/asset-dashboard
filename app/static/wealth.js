@@ -2020,6 +2020,7 @@ function renderInsuranceWithOwner(owner = '모두') {
   const pensionTaxSaved = secAccounts.reduce((sum, a) => {
     const aName = (a.name || '').toLowerCase();
     const aType = a.account_type || (aName.includes('연금') ? 'pension_savings' : (aName.includes('irp') ? 'irp' : 'general'));
+    if (aType === 'pension_savings' || aType === 'irp') {
       const isTaxDeductible = isAccountTaxDeductible(a);
       const dep = Number(a.annual_deposit) || 0;
       const isaTr = Number(a.isa_transfer_amount) || 0;
