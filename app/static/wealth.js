@@ -4869,7 +4869,7 @@ async function saveEditAccount() {
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
 
   const account_type = form.querySelector(".account-type-select")?.value || "general";
-  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
+  const isDeductible = form.querySelector(".pension-tax-deductible")?.value === "true";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
@@ -4890,7 +4890,7 @@ async function saveEditAccount() {
         name,
         owner,
         account_type,
-        tax_deductible,
+        tax_deductible: isDeductible,
         income_level,
         annual_deposit,
         isa_transfer_amount,
@@ -4898,7 +4898,7 @@ async function saveEditAccount() {
       })
     });
     document.getElementById("accountEditDialog")?.close();
-    toast(res.message || "계좌 정보가 수정되었습니다.");
+    toast(`[${name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'}으로 저장되었습니다.`);
     await loadDashboard();
   } catch (err) {
     toast(err.message, true);
@@ -4916,7 +4916,7 @@ async function saveNewAccount() {
   const account_name = (form.querySelector("[name='account_name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
   const account_type = form.querySelector(".account-type-select")?.value || "general";
-  const tax_deductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
+  const isDeductible = form.querySelector(".pension-tax-deductible")?.value === "true";
   const income_level = form.querySelector(".pension-income-level")?.value || "low";
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
@@ -4937,7 +4937,7 @@ async function saveNewAccount() {
         account_name,
         name: account_name,
         owner,
-        account_type: normalizedType,
+        account_type,
         tax_deductible: isDeductible,
         income_level,
         annual_deposit,
@@ -4946,7 +4946,7 @@ async function saveNewAccount() {
       })
     });
     document.getElementById("accountAddDialog")?.close();
-    toast(res.message || "계좌가 추가되었습니다.");
+    toast(`[${account_name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} 계좌가 추가되었습니다.`);
     await loadDashboard();
   } catch (err) {
     toast(err.message, true);

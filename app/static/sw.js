@@ -1,5 +1,5 @@
 // Wealth Service Worker - MDN Progressive Web App Standard
-const CACHE_NAME = "wealth-cache-v44";
+const CACHE_NAME = "wealth-cache-v47";
 const PRECACHE_RESOURCES = [
   "/",
   "/dashboard",
@@ -37,12 +37,13 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// 3. 네트워크 요청 처리: Network-first 전략 (오프라인 시 캐시 반환)
+// 3. 네트워크 요청 처리: Network-first 전략 (API 및 주요 스크립트는 항상 네트워크 직접 요청)
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // API 요청 및 비GET 요청은 서비스 워커 캐시를 거치지 않고 실시간 처리
-  if (url.pathname.startsWith("/api/") || event.request.method !== "GET") {
+  // API 요청 및 JS/CSS 변경사항은 항상 네트워크에서 최신 버전 직접 로드
+  if (url.pathname.startsWith("/api/") || url.pathname.endsWith(".js") || url.pathname.endsWith(".css") || event.request.method !== "GET") {
+    event.respondWith(fetch(event.request));
     return;
   }
 
