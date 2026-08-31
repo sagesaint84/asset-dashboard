@@ -3135,6 +3135,131 @@ dialog.dialog .dialog-actions {
   font-weight: 600;
 }
 
+/* ==========================================================================
+   스마트 가족 가계부 (HOUSEHOLD LEDGER) 전용 스타일링
+   ========================================================================== */
+.ledger-cat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.ledger-cat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+}
+.ledger-cat-bar-track {
+  height: 6px;
+  background: #1e293b;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.ledger-cat-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  transition: width 0.3s ease;
+}
+
+.ledger-trend-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  height: 180px;
+  padding-top: 15px;
+}
+.ledger-trend-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.ledger-trend-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  width: 100%;
+  max-width: 44px;
+  height: 140px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 6px;
+  padding: 3px;
+}
+.ledger-bar-inc {
+  flex: 1;
+  background: linear-gradient(180deg, #4ade80, #16a34a);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+.ledger-bar-exp {
+  flex: 1;
+  background: linear-gradient(180deg, #f43f5e, #be123c);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+
+.ledger-tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ledger-tx-table th {
+  padding: 10px 12px;
+  background: #090e1c;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  border-bottom: 1px solid #1e293b;
+  text-align: left;
+}
+.ledger-tx-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+}
+.ledger-tx-row:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ledger-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ledger-badge.expense {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+.ledger-badge.income {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.ledger-badge.transfer {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+@media (max-width: 900px) {
+  .ledger-analytics-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
 
 
 

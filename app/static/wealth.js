@@ -323,6 +323,7 @@ function renderWithOwner(data, owner) {
 
   render(filteredData);
   loadAssetRecords(owner);
+  if (currentModule === 'ledger') loadLedger();
 }
 
 // 다이얼로그 닫기 버튼 공통 처리
@@ -7648,11 +7649,503 @@ function initSavingsListeners() {
   }
 }
 
+// ===========================================================================
+// 📒 SMART FAMILY HOUSEHOLD LEDGER (스마트 가족 가계부 모듈)
+// ===========================================================================
+let currentLedgerYear = new Date().getFullYear();
+let currentLedgerMonth = new Date().getMonth() + 1;
+let rawLedgerData = null;
+let currentModule = "wealth"; // "wealth" | "ledger"
+
+function switchMainModule(mod) {
+  currentModule = mod;
+  const wealthNavBtn = document.getElementById("navTabWealth");
+  const ledgerNavBtn = document.getElementById("navTabLedger");
+  const wealthWrapper = document.getElementById("userAssetDashboardWrapper");
+  const ledgerWrapper = document.getElementById("userLedgerWrapper");
+
+  if (mod === "wealth") {
+    if (wealthNavBtn) { wealthNavBtn.className = "button primary"; wealthNavBtn.style.color = "#fff"; }
+    if (ledgerNavBtn) { ledgerNavBtn.className = "button secondary"; ledgerNavBtn.style.color = "#94a3b8"; }
+    if (wealthWrapper) wealthWrapper.style.display = "block";
+    if (ledgerWrapper) ledgerWrapper.style.display = "none";
+  } else {
+    if (wealthNavBtn) { wealthNavBtn.className = "button secondary"; wealthNavBtn.style.color = "#94a3b8"; }
+    if (ledgerNavBtn) { ledgerNavBtn.className = "button primary"; ledgerNavBtn.style.color = "#fff"; }
+    if (wealthWrapper) wealthWrapper.style.display = "none";
+    if (ledgerWrapper) ledgerWrapper.style.display = "block";
+    loadLedger();
+  }
+}
+window.switchMainModule = switchMainModule;
+
+async function loadLedger() {
+  try {
+    const owner = currentOwner || "모두";
+    const res = await api(`/api/ledger?year=${currentLedgerYear}&month=${currentLedgerMonth}&owner=${encodeURIComponent(owner)}`);
+    rawLedgerData = res;
+    renderLedger(res);
+  } catch (err) {
+    console.error("가계부 로드 오류:", err);
+  }
+}
+
+function renderLedger(data) {
+  if (!data) return;
+
+  // 1. 헤더 월 텍스트 & 소유자 뱃지
+  const monthText = document.getElementById("ledgerCurrentMonthText");
+  if (monthText) monthText.textContent = `${data.year}년 ${data.month}월`;
+  const ownerPill = document.getElementById("ledgerOwnerPill");
+  if (ownerPill) ownerPill.textContent = `소유자: ${data.owner || "모두"}`;
+
+  // 2. 요약 카드 4종
+  if ($("#ledgerTotalIncomeVal")) $("#ledgerTotalIncomeVal").textContent = `₩${number(data.total_income, 0)}`;
+  if ($("#ledgerTotalExpenseVal")) $("#ledgerTotalExpenseVal").textContent = `₩${number(data.total_expense, 0)}`;
+  if ($("#ledgerNetSavingsVal")) {
+    const sVal = data.net_savings;
+    const prefix = sVal > 0 ? "+" : "";
+    $("#ledgerNetSavingsVal").textContent = `${prefix}₩${number(sVal, 0)}`;
+    $("#ledgerNetSavingsVal").style.color = sVal >= 0 ? "#38bdf8" : "#f43f5e";
+  }
+  if ($("#ledgerSavingsRateVal")) $("#ledgerSavingsRateVal").textContent = `저축률 ${data.savings_rate}%`;
+  if ($("#ledgerRecurringTotalVal")) $("#ledgerRecurringTotalVal").textContent = `₩${number(data.recurring_expense_total, 0)}`;
+
+  // 3. 카테고리 지출 분석 렌더링
+  renderLedgerCategories(data.category_expenses || []);
+
+  // 4. 최근 6개월 추이 막대 그래프 렌더링
+  renderLedgerTrend(data.monthly_trend || []);
+
+  // 5. 상세 거래 내역 타임라인 렌더링
+  renderLedgerTransactions(data.transactions || []);
+}
+
+function renderLedgerCategories(cats) {
+  const container = document.getElementById("ledgerCategoryContainer");
+  if (!container) return;
+  if (!cats || cats.length === 0) {
+    container.innerHTML = `<div class="empty" style="padding:30px 0;"><p style="margin:0;font-size:12.5px;">이번 달 지출 내역이 없습니다.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = cats.map(c => {
+    return `
+      <div class="ledger-cat-row">
+        <div class="ledger-cat-head">
+          <span style="font-weight:600;color:#f1f5f9;">${html(c.category)}</span>
+          <span style="font-weight:700;color:#38bdf8;">₩${number(c.amount, 0)} <small style="color:#94a3b8;font-weight:normal;">(${c.percent}%)</small></span>
+        </div>
+        <div class="ledger-cat-bar-track">
+          <div class="ledger-cat-bar-fill" style="width:${Math.min(100, Math.max(2, c.percent))}%;"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderLedgerTrend(trend) {
+  const container = document.getElementById("ledgerTrendContainer");
+  if (!container) return;
+  if (!trend || trend.length === 0) {
+    container.innerHTML = `<div class="empty" style="padding:30px 0;"><p style="margin:0;font-size:12.5px;">추이 데이터가 없습니다.</p></div>`;
+    return;
+  }
+
+  const maxVal = Math.max(...trend.map(t => Math.max(t.income, t.expense)), 100000);
+
+  const barsHtml = trend.map(t => {
+    const incH = Math.round((t.income / maxVal) * 100);
+    const expH = Math.round((t.expense / maxVal) * 100);
+    const isCurrent = t.month === currentLedgerMonth && t.year === currentLedgerYear;
+
+    return `
+      <div class="ledger-trend-col">
+        <div class="ledger-trend-bars">
+          <div class="ledger-bar-inc" style="height:${Math.max(2, incH)}%;" title="수입 ₩${number(t.income, 0)}"></div>
+          <div class="ledger-bar-exp" style="height:${Math.max(2, expH)}%;" title="지출 ₩${number(t.expense, 0)}"></div>
+        </div>
+        <span style="font-size:11px;font-weight:${isCurrent ? '800' : '500'};color:${isCurrent ? '#38bdf8' : '#94a3b8'};">${html(t.label)}</span>
+      </div>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;gap:12px;font-size:11px;color:#94a3b8;margin-bottom:8px;">
+      <span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:8px;height:8px;border-radius:2px;background:#4ade80;display:inline-block;"></i> 수입</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:8px;height:8px;border-radius:2px;background:#f43f5e;display:inline-block;"></i> 지출</span>
+    </div>
+    <div class="ledger-trend-chart">${barsHtml}</div>
+  `;
+}
+
+function renderLedgerTransactions(txs) {
+  const container = document.getElementById("ledgerTxListContainer");
+  const countBadge = document.getElementById("ledgerTxCountBadge");
+  if (!container) return;
+
+  if (countBadge) countBadge.textContent = `${txs.length}건`;
+
+  if (!txs || txs.length === 0) {
+    container.innerHTML = `<div class="empty" style="padding:40px 0;"><p style="margin:0;font-size:13px;color:#94a3b8;">등록된 거래 내역이 없습니다. [➕ 내역 등록]을 눌러 첫 거래를 추가해 보세요!</p></div>`;
+    return;
+  }
+
+  const rowsHtml = txs.map(t => {
+    const isIncome = t.type === "income";
+    const isTransfer = t.type === "transfer";
+    const typeLabel = isIncome ? "수입" : (isTransfer ? "이체" : "지출");
+    const badgeClass = isIncome ? "income" : (isTransfer ? "transfer" : "expense");
+    const amtColor = isIncome ? "#4ade80" : (isTransfer ? "#38bdf8" : "#f43f5e");
+    const amtSign = isIncome ? "+" : (isTransfer ? "⇄ " : "-");
+
+    return `
+      <tr class="ledger-tx-row">
+        <td style="color:#94a3b8;font-size:12px;white-space:nowrap;">${html(t.date)}</td>
+        <td style="white-space:nowrap;"><span class="ledger-badge ${badgeClass}">${typeLabel}</span></td>
+        <td style="white-space:nowrap;"><span style="font-size:11.5px;color:#cbd5e1;">${html(t.category)}</span></td>
+        <td style="font-weight:600;color:#f8fafc;">
+          ${html(t.merchant || t.description || '-')}
+          ${t.memo ? `<small style="display:block;color:#64748b;font-size:11px;font-weight:normal;">${html(t.memo)}</small>` : ''}
+        </td>
+        <td style="white-space:nowrap;"><span class="saving-owner-badge" style="font-size:10px;padding:2px 6px;">${html(t.owner || '모두')}</span></td>
+        <td style="color:#94a3b8;font-size:11.5px;white-space:nowrap;">${html(t.pay_method || '-')}</td>
+        <td style="text-align:right;font-weight:700;font-size:13.5px;color:${amtColor};white-space:nowrap;">
+          ${amtSign}₩${number(t.amount, 0)}
+        </td>
+        <td style="text-align:right;white-space:nowrap;">
+          <button class="account-action-button" onclick="openLedgerTxModal('${t.id}')" title="수정" type="button">✎</button>
+          <button class="mini-delete-button" onclick="deleteLedgerTransaction('${t.id}')" title="삭제" type="button">🗑️</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <table class="ledger-tx-table">
+      <thead>
+        <tr>
+          <th>일자</th>
+          <th>구분</th>
+          <th>카테고리</th>
+          <th>내용 / 가맹점</th>
+          <th>소유자</th>
+          <th>결제수단</th>
+          <th style="text-align:right;">금액</th>
+          <th style="text-align:right;">관리</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function filterLedgerList() {
+  if (!rawLedgerData || !rawLedgerData.transactions) return;
+  const typeFilter = document.getElementById("ledgerFilterType")?.value || "all";
+  const searchQ = (document.getElementById("ledgerSearchInput")?.value || "").toLowerCase().trim();
+
+  const filtered = rawLedgerData.transactions.filter(t => {
+    if (typeFilter !== "all" && t.type !== typeFilter) return false;
+    if (searchQ) {
+      const matchMerchant = (t.merchant || "").toLowerCase().includes(searchQ);
+      const matchMemo = (t.memo || "").toLowerCase().includes(searchQ);
+      const matchCat = (t.category || "").toLowerCase().includes(searchQ);
+      if (!matchMerchant && !matchMemo && !matchCat) return false;
+    }
+    return true;
+  });
+
+  renderLedgerTransactions(filtered);
+}
+window.filterLedgerList = filterLedgerList;
+
+function updateLedgerCategoryOptions(selectedCat = null) {
+  const type = document.getElementById("ledgerTxTypeSelect")?.value || "expense";
+  const catSelect = document.getElementById("ledgerTxCategorySelect");
+  if (!catSelect) return;
+
+  const defaultCats = {
+    expense: ["식비/외식", "주거/통신", "교통/차량", "쇼핑/생활용품", "교육/학습", "의료/건강", "문화/여가", "경조사/선물", "금융/보험/이자", "기타지출"],
+    income: ["급여/상여", "사업소득", "배당/금융수익", "용돈/이전소득", "부수입/기타수입"],
+    transfer: ["계좌이체/저축", "투자이체", "카드대금결제"]
+  };
+
+  const cats = (rawLedgerData?.categories?.[type]) || defaultCats[type] || [];
+  catSelect.innerHTML = cats.map(c => `<option value="${html(c)}" ${c === selectedCat ? 'selected' : ''}>${html(c)}</option>`).join("");
+}
+window.updateLedgerCategoryOptions = updateLedgerCategoryOptions;
+
+function openLedgerTxModal(txId = null) {
+  const dialog = document.getElementById("ledgerTxDialog");
+  const form = document.getElementById("ledgerTxForm");
+  const title = document.getElementById("ledgerTxDialogTitle");
+  if (!dialog || !form) return;
+
+  form.dataset.txId = txId || "";
+
+  if (txId && rawLedgerData?.transactions) {
+    const tx = rawLedgerData.transactions.find(t => t.id === txId);
+    if (tx) {
+      if (title) title.textContent = "수입 / 지출 내역 수정";
+      form.querySelector("[name='date']").value = tx.date || new Date().toISOString().slice(0, 10);
+      form.querySelector("[name='type']").value = tx.type || "expense";
+      updateLedgerCategoryOptions(tx.category);
+      form.querySelector("[name='amount']").value = tx.amount || "";
+      form.querySelector("[name='owner']").value = tx.owner || "모두";
+      form.querySelector("[name='pay_method']").value = tx.pay_method || "신용/체크카드";
+      form.querySelector("[name='merchant']").value = tx.merchant || tx.description || "";
+      form.querySelector("[name='memo']").value = tx.memo || "";
+      dialog.showModal();
+      return;
+    }
+  }
+
+  if (title) title.textContent = "수입 / 지출 내역 등록";
+  form.reset();
+  form.querySelector("[name='date']").value = new Date().toISOString().slice(0, 10);
+  form.querySelector("[name='owner']").value = currentOwner || "모두";
+  form.querySelector("[name='type']").value = "expense";
+  updateLedgerCategoryOptions();
+  dialog.showModal();
+}
+window.openLedgerTxModal = openLedgerTxModal;
+
+async function saveLedgerTransaction() {
+  const form = document.getElementById("ledgerTxForm");
+  if (!form) return;
+
+  const txId = form.dataset.txId;
+  const dateVal = form.querySelector("[name='date']")?.value;
+  const typeVal = form.querySelector("[name='type']")?.value;
+  const amountVal = Number(form.querySelector("[name='amount']")?.value) || 0;
+  const categoryVal = form.querySelector("[name='category']")?.value;
+  const ownerVal = form.querySelector("[name='owner']")?.value || "모두";
+  const payMethodVal = form.querySelector("[name='pay_method']")?.value || "";
+  const merchantVal = (form.querySelector("[name='merchant']")?.value || "").trim();
+  const memoVal = (form.querySelector("[name='memo']")?.value || "").trim();
+
+  if (!amountVal || amountVal <= 0) {
+    alert("금액을 0원보다 크게 입력해 주세요.");
+    return;
+  }
+  if (!merchantVal) {
+    alert("내용(가맹점)을 입력해 주세요.");
+    return;
+  }
+
+  const payload = {
+    date: dateVal,
+    type: typeVal,
+    amount: amountVal,
+    category: categoryVal,
+    owner: ownerVal,
+    pay_method: payMethodVal,
+    merchant: merchantVal,
+    memo: memoVal
+  };
+
+  try {
+    if (txId) {
+      await api(`/api/ledger/transactions/${txId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast("내역이 수정되었습니다.");
+    } else {
+      await api("/api/ledger/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast("내역이 등록되었습니다.");
+    }
+    document.getElementById("ledgerTxDialog")?.close();
+    await loadLedger();
+  } catch (err) {
+    alert(`저장 중 오류: ${err.message}`);
+  }
+}
+window.saveLedgerTransaction = saveLedgerTransaction;
+
+async function deleteLedgerTransaction(txId) {
+  if (!confirm("이 거래 내역을 삭제하시겠습니까?")) return;
+  try {
+    await api(`/api/ledger/transactions/${txId}`, { method: "DELETE" });
+    toast("내역이 삭제되었습니다.");
+    await loadLedger();
+  } catch (err) {
+    alert(`삭제 중 오류: ${err.message}`);
+  }
+}
+window.deleteLedgerTransaction = deleteLedgerTransaction;
+
+// 고정지출 모달 관리
+function openLedgerRecurringModal() {
+  const dialog = document.getElementById("ledgerRecurringDialog");
+  const listContainer = document.getElementById("ledgerRecurringList");
+  if (!dialog || !listContainer) return;
+
+  const recs = rawLedgerData?.recurring || [];
+  if (recs.length === 0) {
+    listContainer.innerHTML = `<div class="empty" style="padding:15px 0;"><p style="margin:0;font-size:12px;color:#94a3b8;">등록된 정기 고정지출이 없습니다.</p></div>`;
+  } else {
+    listContainer.innerHTML = recs.map(r => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#090e1c;border:1px solid #23314f;border-radius:8px;">
+        <div>
+          <div style="font-weight:700;color:#f8fafc;font-size:13px;">
+            ${html(r.name)} <span class="saving-owner-badge" style="font-size:10px;padding:1px 5px;">${html(r.owner || '모두')}</span>
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+            매월 ${r.day_of_month}일 · ${html(r.category)} · ${html(r.pay_method)}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <strong style="color:#c084fc;font-size:13.5px;">₩${number(r.amount, 0)}</strong>
+          <button class="mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button">🗑️</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  dialog.showModal();
+}
+window.openLedgerRecurringModal = openLedgerRecurringModal;
+
+async function saveNewRecurringItem() {
+  const name = document.getElementById("recName")?.value.trim();
+  const amount = Number(document.getElementById("recAmount")?.value) || 0;
+  const day = Number(document.getElementById("recDay")?.value) || 1;
+  const category = document.getElementById("recCategory")?.value;
+  const owner = document.getElementById("recOwner")?.value || "모두";
+  const payMethod = document.getElementById("recPayMethod")?.value.trim() || "자동이체";
+
+  if (!name || amount <= 0) {
+    alert("항목 이름과 올바른 금액을 입력해 주세요.");
+    return;
+  }
+
+  try {
+    await api("/api/ledger/recurring", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        amount,
+        day_of_month: day,
+        category,
+        owner,
+        pay_method: payMethod
+      })
+    });
+    toast(`[${name}] 고정지출 항목이 추가되었습니다.`);
+    document.getElementById("recName").value = "";
+    document.getElementById("recAmount").value = "";
+    await loadLedger();
+    openLedgerRecurringModal();
+  } catch (err) {
+    alert(`고정지출 추가 오류: ${err.message}`);
+  }
+}
+window.saveNewRecurringItem = saveNewRecurringItem;
+
+async function deleteRecurringItem(recId) {
+  if (!confirm("이 고정지출 항목을 삭제하시겠습니까?")) return;
+  try {
+    await api(`/api/ledger/recurring/${recId}`, { method: "DELETE" });
+    toast("고정지출 항목이 삭제되었습니다.");
+    await loadLedger();
+    openLedgerRecurringModal();
+  } catch (err) {
+    alert(`삭제 중 오류: ${err.message}`);
+  }
+}
+window.deleteRecurringItem = deleteRecurringItem;
+
+// 엑셀/텍스트 일괄 가져오기
+function openLedgerExcelModal() {
+  document.getElementById("ledgerExcelDialog")?.showModal();
+}
+window.openLedgerExcelModal = openLedgerExcelModal;
+
+async function processLedgerImport() {
+  const text = document.getElementById("ledgerImportText")?.value.trim();
+  const owner = document.getElementById("ledgerImportOwner")?.value || "모두";
+  if (!text) {
+    alert("가져올 거래내역 텍스트를 입력해 주세요.");
+    return;
+  }
+
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  let successCount = 0;
+
+  for (const line of lines) {
+    const parts = line.split(/[\t, ]+/);
+    if (parts.length >= 3) {
+      const dateVal = parts[0];
+      const merchantVal = parts.slice(1, -1).join(" ");
+      const rawAmt = parts[parts.length - 1].replace(/[^0-9.-]+/g, "");
+      const amountVal = Math.abs(Number(rawAmt)) || 0;
+      const isInc = line.includes("급여") || line.includes("입금") || line.includes("수익") || Number(rawAmt) > 0 && line.includes("+");
+
+      if (dateVal && merchantVal && amountVal > 0) {
+        try {
+          await api("/api/ledger/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              date: dateVal.length === 8 ? `${dateVal.slice(0,4)}-${dateVal.slice(4,6)}-${dateVal.slice(6,8)}` : dateVal,
+              type: isInc ? "income" : "expense",
+              amount: amountVal,
+              category: isInc ? "급여/상여" : "식비/외식",
+              owner,
+              merchant: merchantVal
+            })
+          });
+          successCount++;
+        } catch (e) {}
+      }
+    }
+  }
+
+  document.getElementById("ledgerExcelDialog")?.close();
+  toast(`${successCount}건의 거래 내역을 일괄 가져왔습니다.`);
+  await loadLedger();
+}
+window.processLedgerImport = processLedgerImport;
+
+function initLedgerListeners() {
+  document.getElementById("ledgerPrevMonthBtn")?.addEventListener("click", () => {
+    currentLedgerMonth--;
+    if (currentLedgerMonth < 1) {
+      currentLedgerMonth = 12;
+      currentLedgerYear--;
+    }
+    loadLedger();
+  });
+  document.getElementById("ledgerNextMonthBtn")?.addEventListener("click", () => {
+    currentLedgerMonth++;
+    if (currentLedgerMonth > 12) {
+      currentLedgerMonth = 1;
+      currentLedgerYear++;
+    }
+    loadLedger();
+  });
+  document.getElementById("ledgerTodayMonthBtn")?.addEventListener("click", () => {
+    const now = new Date();
+    currentLedgerYear = now.getFullYear();
+    currentLedgerMonth = now.getMonth() + 1;
+    loadLedger();
+  });
+}
+
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
 async function bootstrap() {
   initAppTheme();
   initCollapsedSections();
   initSavingsListeners();
+  initLedgerListeners();
   await initAuthSession();
 }
 

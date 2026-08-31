@@ -1916,3 +1916,83 @@ async def sync_all_accounts(request: Request) -> dict:
     if errors:
         msg += f" (오류: {', '.join(errors)})"
     return {"message": msg, "synced": len(results), "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Smart Household Ledger (스마트 가족 가계부) API Endpoints
+# ---------------------------------------------------------------------------
+from app.services.ledger import (
+    get_ledger_summary,
+    add_transaction,
+    update_transaction,
+    delete_transaction,
+    add_recurring,
+    delete_recurring,
+    read_ledger,
+)
+
+
+@app.get("/api/ledger")
+async def get_ledger(
+    request: Request,
+    year: int | None = None,
+    month: int | None = None,
+    owner: str = "모두",
+) -> dict:
+    """Get ledger summary, category analytics, trend, and transactions for the specified month/owner."""
+    username = get_current_username(request)
+    return get_ledger_summary(username=username, year=year, month=month, owner=owner)
+
+
+@app.post("/api/ledger/transactions")
+async def create_ledger_transaction(request: Request) -> dict:
+    """Create a new income/expense/transfer transaction."""
+    username = get_current_username(request)
+    payload = await request.json()
+    if not payload.get("amount"):
+        raise HTTPException(400, "금액을 입력해 주세요.")
+    tx = add_transaction(payload, username=username)
+    return {"message": "내역이 등록되었습니다.", "transaction": tx}
+
+
+@app.put("/api/ledger/transactions/{tx_id}")
+async def edit_ledger_transaction(tx_id: str, request: Request) -> dict:
+    """Update an existing transaction."""
+    username = get_current_username(request)
+    payload = await request.json()
+    tx = update_transaction(tx_id, payload, username=username)
+    if not tx:
+        raise HTTPException(404, "수정할 내역을 찾을 수 없습니다.")
+    return {"message": "내역이 수정되었습니다.", "transaction": tx}
+
+
+@app.delete("/api/ledger/transactions/{tx_id}")
+async def remove_ledger_transaction(tx_id: str, request: Request) -> dict:
+    """Delete a transaction."""
+    username = get_current_username(request)
+    success = delete_transaction(tx_id, username=username)
+    if not success:
+        raise HTTPException(404, "삭제할 내역을 찾을 수 없습니다.")
+    return {"message": "내역이 삭제되었습니다."}
+
+
+@app.post("/api/ledger/recurring")
+async def create_recurring(request: Request) -> dict:
+    """Add a recurring monthly expense/income."""
+    username = get_current_username(request)
+    payload = await request.json()
+    if not payload.get("name") or not payload.get("amount"):
+        raise HTTPException(400, "고정지출 이름과 금액을 입력해 주세요.")
+    rec = add_recurring(payload, username=username)
+    return {"message": "고정지출이 등록되었습니다.", "recurring": rec}
+
+
+@app.delete("/api/ledger/recurring/{rec_id}")
+async def remove_recurring(rec_id: str, request: Request) -> dict:
+    """Delete a recurring entry."""
+    username = get_current_username(request)
+    success = delete_recurring(rec_id, username=username)
+    if not success:
+        raise HTTPException(404, "삭제할 고정지출 항목을 찾을 수 없습니다.")
+    return {"message": "고정지출 항목이 삭제되었습니다."}
+
