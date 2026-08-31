@@ -643,6 +643,13 @@ async def dashboard(request: Request) -> dict:
     data["real_estates"] = re_info.get("real_estates", [])
     data["real_estate_summary"] = re_info.get("summary", {})
 
+    from app.services.pnl_records import get_pnl_summary, read_pnl_records
+    from app.services.dividend_records import get_actual_dividend_summary, read_dividend_records
+    data["realized_pnl_records"] = read_pnl_records(username=username)
+    data["realized_pnl_summary"] = get_pnl_summary(owner="모두", username=username)
+    data["actual_dividend_records"] = read_dividend_records(username=username)
+    data["dividend_summary"] = get_actual_dividend_summary(owner="모두", username=username)
+
     auto_save_all_owner_snapshots(data, username=username)
     return data
 

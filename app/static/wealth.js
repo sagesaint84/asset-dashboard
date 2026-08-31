@@ -247,7 +247,7 @@ function computeFilteredClassifications(holdings, accounts, fxRates, owner = '�
     ...g,
     return_rate: g.cost_value_krw > 0 ? (g.profit_krw / g.cost_value_krw) * 100 : 0,
     weight: totalValue > 0 ? (g.market_value_krw / totalValue) * 100 : 0,
-  })).sort((a, b) => (ASSET_CLASS_ORDER[a.name] || 99) - (ASSET_CLASS_ORDER[b.name] || 99));
+  })).sort((a, b) => (b.weight || 0) - (a.weight || 0));
 }
 
 function computeFilteredSectors(holdings, accounts, fxRates) {
@@ -975,25 +975,73 @@ function renderSummary(data) {
   }
   if ($("#dayCaption")) $("#dayCaption").textContent = day.date ? `${day.date} 대비` : "전일 대비";
 
-  // 4. 총 실현손익
-  const curRealized = data.realized_pnl_summary || rawDashboard?.realized_pnl_summary;
-  if (curRealized && $("#summaryRealizedPnl")) {
-    const rProfit = Number(curRealized.total_realized_profit_krw || 0);
-    $("#summaryRealizedPnl").textContent = `${rProfit >= 0 ? "+" : ""}${money(rProfit)}`;
-    $("#summaryRealizedPnl").style.color = rProfit >= 0 ? "#f43f5e" : "#38bdf8";
-    if ($("#summaryRealizedPnlSub")) {
-      $("#summaryRealizedPnlSub").textContent = `승률 ${number(curRealized.win_rate || 0, 1)}% · 총 ${curRealized.total_closed_count || 0}건 실현`;
+  // 4. 총 실현손익 (연도별/월별 실시간 집계)
+  const curRealized = data.realized_pnl_summary || rawDashboard?.realized_pnl_summary || {};
+  const pnlRecords = filterByOwner(data.realized_pnl_records || rawDashboard?.realized_pnl_records || pnlData?.records || []);
+
+  const now = new Date();
+  const currFullYear = now.getFullYear().toString();
+  const currYear2Digit = currFullYear.slice(2);
+  const currMonthNum = now.getMonth() + 1;
+  const currMonthStr = currMonthNum < 10 ? `0${currMonthNum}` : `${currMonthNum}`;
+  const currYearMonthPrefix = `${currFullYear}-${currMonthStr}`;
+
+  let totalRealizedKrw = Number(curRealized.total_realized_profit_krw || curRealized.total_pnl_krw || 0);
+  let yearRealizedKrw = 0;
+  let monthRealizedKrw = 0;
+
+  if (pnlRecords.length > 0) {
+    pnlRecords.forEach(r => {
+      const d = String(r.date || '');
+      const p = Number(r.pnl_krw || 0);
+      if (d.startsWith(currFullYear)) yearRealizedKrw += p;
+      if (d.startsWith(currYearMonthPrefix)) monthRealizedKrw += p;
+    });
+    // If owner filtering or total needs re-sum
+    if (o !== '모두') {
+      totalRealizedKrw = pnlRecords.reduce((sum, r) => sum + Number(r.pnl_krw || 0), 0);
     }
   }
 
-  // 5. 총 배당금 및 이자
-  const curDiv = data.dividend_summary || rawDashboard?.dividend_summary;
-  if (curDiv && $("#summaryActualDividend")) {
-    const dVal = Number(curDiv.total_actual_dividend_krw || curDiv.actual_dividend_krw || 0);
-    $("#summaryActualDividend").textContent = money(dVal);
-    if ($("#summaryEstimatedDividend")) {
-      $("#summaryEstimatedDividend").textContent = `예상 연간 배당금 ${money(curDiv.annual_dividend_krw || 0)} (${number(curDiv.dividend_yield || 0)}%)`;
+  if ($("#summaryRealizedPnl")) {
+    $("#summaryRealizedPnl").textContent = `${totalRealizedKrw >= 0 ? "+" : ""}${money(totalRealizedKrw)}`;
+    $("#summaryRealizedPnl").style.color = totalRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+  }
+  if ($("#summaryRealizedPnlYear")) {
+    $("#summaryRealizedPnlYear").textContent = `${currYear2Digit}년 ${yearRealizedKrw >= 0 ? '+' : ''}${money(yearRealizedKrw)}`;
+  }
+  if ($("#summaryRealizedPnlMonth")) {
+    $("#summaryRealizedPnlMonth").textContent = `${currMonthStr}월 ${monthRealizedKrw >= 0 ? '+' : ''}${money(monthRealizedKrw)}`;
+  }
+
+  // 5. 총 배당금 및 이자 (실제 연도별/월별 실시간 집계)
+  const curDiv = data.dividend_summary || rawDashboard?.dividend_summary || {};
+  const divRecords = filterByOwner(data.actual_dividend_records || rawDashboard?.actual_dividend_records || actualDividendData?.records || []);
+
+  let totalActualDivKrw = Number(curDiv.total_actual_dividend_krw || curDiv.actual_dividend_krw || 0);
+  let yearActualDivKrw = 0;
+  let monthActualDivKrw = 0;
+
+  if (divRecords.length > 0) {
+    divRecords.forEach(r => {
+      const d = String(r.date || '');
+      const amt = Number(r.amount_krw || r.dividend_krw || r.amount || 0);
+      if (d.startsWith(currFullYear)) yearActualDivKrw += amt;
+      if (d.startsWith(currYearMonthPrefix)) monthActualDivKrw += amt;
+    });
+    if (o !== '모두') {
+      totalActualDivKrw = divRecords.reduce((sum, r) => sum + Number(r.amount_krw || r.dividend_krw || r.amount || 0), 0);
     }
+  }
+
+  if ($("#summaryActualDividend")) {
+    $("#summaryActualDividend").textContent = money(totalActualDivKrw);
+  }
+  if ($("#summaryActualDivYear")) {
+    $("#summaryActualDivYear").textContent = `실제 ${currYear2Digit}년 ${yearActualDivKrw >= 0 ? '+' : ''}${money(yearActualDivKrw)}`;
+  }
+  if ($("#summaryActualDivMonth")) {
+    $("#summaryActualDivMonth").textContent = `실제 ${currMonthStr}월 ${monthActualDivKrw >= 0 ? '+' : ''}${money(monthActualDivKrw)}`;
   }
 
   const krwStock = krw.stock_value_krw || (Number(krw.market_value_krw || 0) - Number(krw.cash || 0));
