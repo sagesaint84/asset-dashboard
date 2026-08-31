@@ -1093,15 +1093,15 @@ function renderAccounts(items) {
       let typeBadge = "";
       if (aType === "pension_savings") {
         if (isTaxDeductible) {
-          typeBadge = '<span class="account-type-tag pension" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);margin-right:4px;">연금(공제O)</span>';
+          typeBadge = `<span class="account-type-tag pension" data-toggle-tax-account-id="${account.id}" title="클릭 시 '비공제'로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);margin-right:4px;cursor:pointer;">연금(공제O) 🔄</span>`;
         } else {
-          typeBadge = '<span class="account-type-tag non-deductible" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">연금(비공제)</span>';
+          typeBadge = `<span class="account-type-tag non-deductible" data-toggle-tax-account-id="${account.id}" title="클릭 시 '세액공제 신청'으로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;cursor:pointer;">연금(비공제) 🔄</span>`;
         }
       } else if (aType === "irp") {
         if (isTaxDeductible) {
-          typeBadge = '<span class="account-type-tag irp" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);margin-right:4px;">IRP(공제O)</span>';
+          typeBadge = `<span class="account-type-tag irp" data-toggle-tax-account-id="${account.id}" title="클릭 시 '비공제'로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);margin-right:4px;cursor:pointer;">IRP(공제O) 🔄</span>`;
         } else {
-          typeBadge = '<span class="account-type-tag non-deductible" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">IRP(비공제)</span>';
+          typeBadge = `<span class="account-type-tag non-deductible" data-toggle-tax-account-id="${account.id}" title="클릭 시 '세액공제 신청'으로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;cursor:pointer;">IRP(비공제) 🔄</span>`;
         }
       } else if (aType === "isa") {
         typeBadge = '<span class="account-type-tag isa" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">ISA</span>';
@@ -3761,6 +3761,20 @@ function updateAccountTaxBenefitFields(form) {
       if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
       if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
     }
+
+    // 계좌명에 (세액공제O) / (세액공제X) 등이 포함되어 있을 때 자동 동기화 지원
+    const nameInput = form.querySelector("[name='name']") || form.querySelector("[name='account_name']");
+    if (nameInput && nameInput.value) {
+      if (!isDeductible) {
+        if (nameInput.value.includes("(세액공제O)")) nameInput.value = nameInput.value.replace("(세액공제O)", "(세액공제X)");
+        else if (nameInput.value.includes("세액공제O")) nameInput.value = nameInput.value.replace("세액공제O", "세액공제X");
+        else if (nameInput.value.includes("(공제O)")) nameInput.value = nameInput.value.replace("(공제O)", "(비공제)");
+      } else {
+        if (nameInput.value.includes("(세액공제X)")) nameInput.value = nameInput.value.replace("(세액공제X)", "(세액공제O)");
+        else if (nameInput.value.includes("세액공제X")) nameInput.value = nameInput.value.replace("세액공제X", "세액공제O");
+        else if (nameInput.value.includes("(비공제)")) nameInput.value = nameInput.value.replace("(비공제)", "(공제O)");
+      }
+    }
   }
 }
 
@@ -4683,9 +4697,55 @@ $("#holdingsBody")?.addEventListener("click", (e) => {
 
 // 9. 계좌 목록 클릭
 $("#accountList")?.addEventListener("click", async (e) => {
+  const toggleTaxBtn = e.target.closest("[data-toggle-tax-account-id]");
   const cashBtn = e.target.closest("[data-cash-id]");
   const editBtn = e.target.closest("[data-account-id]");
   const delBtn = e.target.closest("[data-account-del-id]");
+
+  if (toggleTaxBtn) {
+    const accId = toggleTaxBtn.dataset.toggleTaxAccountId;
+    const acct = (dashboard?.accounts || []).find(a => a.id === accId) || (rawDashboard?.accounts || []).find(a => a.id === accId);
+    if (acct) {
+      const currentDed = isAccountTaxDeductible(acct);
+      const newDed = !currentDed;
+      let newName = acct.name || "";
+      if (newDed) {
+        newName = newName.replace("(세액공제X)", "(세액공제O)").replace("세액공제X", "세액공제O").replace("(비공제)", "(공제O)");
+      } else {
+        newName = newName.replace("(세액공제O)", "(세액공제X)").replace("세액공제O", "세액공제X").replace("(공제O)", "(비공제)");
+      }
+      acct.tax_deductible = newDed;
+      acct.name = newName;
+      if (rawDashboard && Array.isArray(rawDashboard.accounts)) {
+        const rAcct = rawDashboard.accounts.find(a => a.id === accId);
+        if (rAcct) { rAcct.tax_deductible = newDed; rAcct.name = newName; }
+      }
+      renderWithOwner(rawDashboard || dashboard, currentOwner);
+      try {
+        await api(`/api/accounts/${accId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            broker: acct.broker,
+            name: newName,
+            owner: acct.owner || "모두",
+            account_type: acct.account_type || "pension_savings",
+            tax_deductible: newDed,
+            income_level: acct.income_level || "low",
+            annual_deposit: Number(acct.annual_deposit) || 0,
+            isa_transfer_amount: Number(acct.isa_transfer_amount) || 0,
+            isa_transfer_year: acct.isa_transfer_year || "2026"
+          })
+        });
+        toast(`[${newName}] ${newDed ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'}으로 전환되었습니다.`);
+        await loadDashboard();
+      } catch (err) {
+        alert(`전환 실패: ${err.message}`);
+        await loadDashboard();
+      }
+    }
+    return;
+  }
   if (cashBtn) {
     const acct = (dashboard?.accounts || []).find(a => a.id === cashBtn.dataset.cashId) || (rawDashboard?.accounts || []).find(a => a.id === cashBtn.dataset.cashId);
     if (acct) openAccountCashDialog(acct);
