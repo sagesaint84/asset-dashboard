@@ -8069,14 +8069,6 @@ function openLedgerExcelModal() {
 }
 window.openLedgerExcelModal = openLedgerExcelModal;
 
-async function processLedgerImport() {
-  const text = document.getElementById("ledgerImportText")?.value.trim();
-  const owner = document.getElementById("ledgerImportOwner")?.value || "모두";
-  if (!text) {
-    alert("가져올 거래내역 텍스트를 입력해 주세요.");
-    return;
-  }
-
 function handleLedgerFileSelect(input) {
   const file = input.files?.[0];
   const nameEl = document.getElementById("ledgerSelectedFileName");
@@ -8122,7 +8114,8 @@ async function uploadLedgerFile() {
 
     document.getElementById("ledgerExcelDialog")?.close();
     if (fileInput) fileInput.value = "";
-    document.getElementById("ledgerSelectedFileName").style.display = "none";
+    const nameEl = document.getElementById("ledgerSelectedFileName");
+    if (nameEl) nameEl.style.display = "none";
     if (uploadBtn) uploadBtn.style.display = "none";
 
     toast(result.message || "거래 내역을 성공적으로 가져왔습니다.");
