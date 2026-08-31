@@ -7815,7 +7815,7 @@ function renderLedgerTransactions(txs) {
         </td>
         <td style="text-align:right;white-space:nowrap;">
           <button class="account-action-button" onclick="openLedgerTxModal('${t.id}')" title="수정" type="button">✎</button>
-          <button class="mini-delete-button" onclick="deleteLedgerTransaction('${t.id}')" title="삭제" type="button">🗑️</button>
+          <button class="account-action-button mini-delete-button" onclick="deleteLedgerTransaction('${t.id}')" title="삭제" type="button">🗑️</button>
         </td>
       </tr>
     `;
@@ -8003,7 +8003,7 @@ function openLedgerRecurringModal() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <strong style="color:#c084fc;font-size:13.5px;">₩${number(r.amount, 0)}</strong>
-          <button class="mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button">🗑️</button>
+          <button class="account-action-button mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button">🗑️</button>
         </div>
       </div>
     `).join("");

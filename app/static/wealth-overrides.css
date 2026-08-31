@@ -1189,12 +1189,14 @@
 }
 
 .account-action-button,
-.account-row-actions .mini-delete-button {
+.mini-delete-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   padding: 0;
   border-radius: 6px;
   background: #141d33;
@@ -1204,6 +1206,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
+  box-sizing: border-box;
 }
 
 .account-action-button:hover {
@@ -1214,7 +1217,7 @@
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
 }
 
-.account-row-actions .mini-delete-button:hover {
+.mini-delete-button:hover {
   background: rgba(255, 92, 119, 0.2);
   border-color: #ff5c77;
   color: #ff5c77;
@@ -2163,7 +2166,7 @@ dialog.dialog .dialog-actions {
 
 /* 계좌 액션 버튼 (화이트 테마) */
 [data-theme="white"] .account-action-button,
-[data-theme="white"] .account-row-actions .mini-delete-button {
+[data-theme="white"] .mini-delete-button {
   background: #f1f5f9 !important;
   border-color: #cbd5e1 !important;
   color: #334155 !important;
@@ -2177,7 +2180,7 @@ dialog.dialog .dialog-actions {
   transform: translateY(-1px);
 }
 
-[data-theme="white"] .account-row-actions .mini-delete-button:hover {
+[data-theme="white"] .mini-delete-button:hover {
   background: #fee2e2 !important;
   border-color: #fca5a5 !important;
   color: #ef4444 !important;
