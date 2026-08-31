@@ -176,8 +176,7 @@ function computeFilteredClassifications(holdings, accounts, fxRates, owner = '�
     const pType = r.property_type || 'own';
     if (pType !== 'lease') {
       const pVal = (Number(r.current_price) || 0) * share;
-      const depDebt = pType === 'rental' ? ((Number(r.deposit_amount) || 0) * share) : 0;
-      totalREInvestEquity += Math.max(0, pVal - depDebt);
+      totalREInvestEquity += pVal;
       reInvestCount += 1;
     } else {
       totalTenantDepositVal += ((Number(r.deposit_amount) || 0) * share);
@@ -941,7 +940,7 @@ function renderSummary(data) {
       const depDebt = pType === 'rental' ? ((Number(r.deposit_amount) || 0) * share) : 0;
       totalREVal += pVal;
       totalLandlordDepositDebt += depDebt;
-      totalREInvestEquity += Math.max(0, pVal - depDebt);
+      totalREInvestEquity += pVal; // 부동산 시세 100% 반영
     } else {
       const depVal = ((Number(r.deposit_amount) || 0) * share);
       totalTenantDepositVal += depVal;
@@ -951,20 +950,20 @@ function renderSummary(data) {
   const totalAllDebt = totalPureDebt + totalMinusBankDebt + totalLandlordDepositDebt;
   const totalInvestAssets = totalREInvestEquity + totalStockVal;
   const totalSafeAssets = totalAllCash + totalTenantDepositVal + insuranceTotal;
-  const netWorth = (totalInvestAssets + totalSafeAssets) - (totalPureDebt + totalMinusBankDebt);
+  const netWorth = (totalInvestAssets + totalSafeAssets) - totalAllDebt;
 
-  // 1. 순자산 (흰색) & 총 부채 (푸른색)
+  // 1. 순자산 (흰색) & 총부채 (푸른색)
   if ($("#summaryNetWorth")) $("#summaryNetWorth").textContent = money(netWorth);
   if ($("#summaryTotalDebtCaption")) {
     $("#summaryTotalDebtCaption").textContent = totalAllDebt > 0 
-      ? `- 총 부채 ₩${number(totalAllDebt, 0)}` 
-      : `- 부채 ₩0`;
+      ? `총부채 ₩${number(totalAllDebt, 0)}` 
+      : `부채 ₩0`;
   }
 
-  // 2. 총 투자자산 (부동산 자가/임대 + 주식)
+  // 2. 총 투자자산 (부동산 자가/임대 100% + 주식)
   if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestAssets);
-  if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `- 부동산 ${money(totalREInvestEquity)}`;
-  if ($("#subStockVal")) $("#subStockVal").textContent = `- 주식 ${money(totalStockVal)}`;
+  if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `부동산 ${money(totalREInvestEquity)}`;
+  if ($("#subStockVal")) $("#subStockVal").textContent = `주식 ${money(totalStockVal)}`;
 
   // 3. 총 수익 (수익시 붉은색, 손실시 파란색) & 일간 수익 서브라인
   if ($("#totalProfit")) {
@@ -982,16 +981,16 @@ function renderSummary(data) {
     if (day.change_krw != null) {
       const sign = day.change_krw >= 0 ? "+" : "";
       const rateSign = (day.change_rate || 0) >= 0 ? "+" : "";
-      $("#dayProfitVal").textContent = `- 일간 수익 ${sign}${money(day.change_krw)} (${rateSign}${number(day.change_rate)}%)`;
+      $("#dayProfitVal").textContent = `일간 수익 ${sign}${money(day.change_krw)} (${rateSign}${number(day.change_rate)}%)`;
       $("#dayProfitVal").style.color = day.change_krw >= 0 ? "#f43f5e" : "#38bdf8";
     } else {
-      $("#dayProfitVal").textContent = `- 일간 수익 —`;
+      $("#dayProfitVal").textContent = `일간 수익 —`;
       $("#dayProfitVal").style.color = "#94a3b8";
     }
   }
   if ($("#dayCaption")) $("#dayCaption").textContent = day.date ? `${day.date} 대비` : "전일 대비";
 
-  // 4. 총 실현손익 (연도별/월별 실시간 집계 & +붉은색 -푸른색)
+  // 4. 총 실현손익 (연도별/월별 실시간 집계 & +붉은색 -푸른색, 세로 줄맞춤)
   const curRealized = data.realized_pnl_summary || rawDashboard?.realized_pnl_summary || {};
   const pnlRecords = filterByOwner(data.realized_pnl_records || rawDashboard?.realized_pnl_records || pnlData?.records || []);
 
@@ -1022,16 +1021,18 @@ function renderSummary(data) {
     $("#summaryRealizedPnl").textContent = `${totalRealizedKrw >= 0 ? "+" : ""}${money(totalRealizedKrw)}`;
     $("#summaryRealizedPnl").style.color = totalRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
   }
+  if ($("#pnlYearLabel")) $("#pnlYearLabel").textContent = `${currYear2Digit}년`;
   if ($("#summaryRealizedPnlYear")) {
-    $("#summaryRealizedPnlYear").textContent = `${currYear2Digit}년 ${yearRealizedKrw >= 0 ? '+' : ''}${money(yearRealizedKrw)}`;
+    $("#summaryRealizedPnlYear").textContent = `${yearRealizedKrw >= 0 ? '+' : ''}${money(yearRealizedKrw)}`;
     $("#summaryRealizedPnlYear").style.color = yearRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
   }
+  if ($("#pnlMonthLabel")) $("#pnlMonthLabel").textContent = `${currMonthStr}월`;
   if ($("#summaryRealizedPnlMonth")) {
-    $("#summaryRealizedPnlMonth").textContent = `${currMonthStr}월 ${monthRealizedKrw >= 0 ? '+' : ''}${money(monthRealizedKrw)}`;
+    $("#summaryRealizedPnlMonth").textContent = `${monthRealizedKrw >= 0 ? '+' : ''}${money(monthRealizedKrw)}`;
     $("#summaryRealizedPnlMonth").style.color = monthRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
   }
 
-  // 5. 총 배당금 및 이자 (연도별/월별 실시간 집계)
+  // 5. 총 배당금 및 이자 (연도별/월별 실시간 집계, 세로 줄맞춤)
   const curDiv = data.dividend_summary || rawDashboard?.dividend_summary || {};
   const divRecords = filterByOwner(data.actual_dividend_records || rawDashboard?.actual_dividend_records || actualDividendData?.records || []);
 
@@ -1054,18 +1055,20 @@ function renderSummary(data) {
   if ($("#summaryActualDividend")) {
     $("#summaryActualDividend").textContent = money(totalActualDivKrw);
   }
+  if ($("#divYearLabel")) $("#divYearLabel").textContent = `${currYear2Digit}년`;
   if ($("#summaryActualDivYear")) {
-    $("#summaryActualDivYear").textContent = `${currYear2Digit}년 ${yearActualDivKrw >= 0 ? '+' : ''}${money(yearActualDivKrw)}`;
+    $("#summaryActualDivYear").textContent = `${yearActualDivKrw >= 0 ? '+' : ''}${money(yearActualDivKrw)}`;
   }
+  if ($("#divMonthLabel")) $("#divMonthLabel").textContent = `${currMonthStr}월`;
   if ($("#summaryActualDivMonth")) {
-    $("#summaryActualDivMonth").textContent = `${currMonthStr}월 ${monthActualDivKrw >= 0 ? '+' : ''}${money(monthActualDivKrw)}`;
+    $("#summaryActualDivMonth").textContent = `${monthActualDivKrw >= 0 ? '+' : ''}${money(monthActualDivKrw)}`;
   }
 
   // 6. 안전자산 (예수금·예금, 임차보증금, 보험)
   if ($("#summarySafeAssetVal")) $("#summarySafeAssetVal").textContent = money(totalSafeAssets);
-  if ($("#subSafeCashVal")) $("#subSafeCashVal").textContent = `- 예수금 및 예금 ${money(totalAllCash)}`;
-  if ($("#subSafeLeaseVal")) $("#subSafeLeaseVal").textContent = `- 임차보증금 ${money(totalTenantDepositVal)}`;
-  if ($("#subSafeInsuranceVal")) $("#subSafeInsuranceVal").textContent = `- 보험 ${money(insuranceTotal)}`;
+  if ($("#subSafeCashVal")) $("#subSafeCashVal").textContent = `예수금 및 예금 ${money(totalAllCash)}`;
+  if ($("#subSafeLeaseVal")) $("#subSafeLeaseVal").textContent = `임차보증금 ${money(totalTenantDepositVal)}`;
+  if ($("#subSafeInsuranceVal")) $("#subSafeInsuranceVal").textContent = `보험 ${money(insuranceTotal)}`;
 
   const krwStock = krw.stock_value_krw || (Number(krw.market_value_krw || 0) - Number(krw.cash || 0));
   $("#krwValue") && ($("#krwValue").textContent = money(krw.market_value_krw || 0));
