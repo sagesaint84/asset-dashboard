@@ -136,20 +136,64 @@ function classifyHolding(h) {
 }
 
 const ASSET_CLASS_ORDER = {
-  '국내주식': 1,
-  '국내ETF': 2,
-  '국내상장해외ETF': 3,
-  '해외주식': 4,
+  '부동산': 1,
+  '국내주식': 2,
+  '국내ETF': 3,
+  '국내상장해외ETF': 4,
   '해외ETF': 5,
-  '현금·예수금': 6,
+  '해외주식': 6,
+  '현금·예수금': 7,
+  '보험': 8,
 };
 
-function computeFilteredClassifications(holdings, accounts, fxRates) {
+function computeFilteredClassifications(holdings, accounts, fxRates, owner = '모두', rawData = null) {
   const usdKrw = (fxRates || {})['USD'] || 1385;
   const groups = {};
   let totalValue = 0;
+  const src = rawData || rawDashboard || {};
+
+  const filterByOwner = (arr) => owner === '모두' ? (arr || []) : (arr || []).filter(x => (x.owner || '모두') === owner);
+
+  // 1. 부동산 순에퀴티 계산
+  const allREs = filterByOwner(src.real_estates || rawRealEstates || []);
+  let totalREEquity = 0;
+  allREs.forEach(r => {
+    const ownerships = (r.ownerships && r.ownerships.length) 
+      ? r.ownerships 
+      : [{ owner: r.owner || '모두', ratio: 100 }];
+
+    let share = 1.0;
+    if (owner !== '모두') {
+      const matched = ownerships.find(x => x.owner === owner);
+      if (!matched || matched.ratio <= 0) return;
+      share = (matched.ratio || 100) / 100;
+    }
+
+    const pType = r.property_type || 'own';
+    if (pType !== 'lease') {
+      const pVal = (Number(r.current_price) || 0) * share;
+      const depDebt = pType === 'rental' ? ((Number(r.deposit_amount) || 0) * share) : 0;
+      totalREEquity += Math.max(0, pVal - depDebt);
+    } else {
+      totalREEquity += ((Number(r.deposit_amount) || 0) * share);
+    }
+  });
+
+  if (totalREEquity > 0) {
+    groups['부동산'] = {
+      name: '부동산',
+      market_value_krw: totalREEquity,
+      cost_value_krw: totalREEquity,
+      profit_krw: 0,
+      holding_count: allREs.length,
+    };
+    totalValue += totalREEquity;
+  }
+
+  // 2. 주식 및 ETF 보유종목 분류
   holdings.forEach(h => {
-    const name = classifyHolding(h);
+    let name = classifyHolding(h);
+    if (name === '해외주식') name = '해외ETF'; // 해외ETF / 해외주식 통합 표시
     if (!groups[name]) groups[name] = { name, market_value_krw: 0, cost_value_krw: 0, profit_krw: 0, holding_count: 0 };
     const g = groups[name];
     g.market_value_krw += Number(h.market_value_krw || 0);
@@ -158,19 +202,47 @@ function computeFilteredClassifications(holdings, accounts, fxRates) {
     g.holding_count    += 1;
     totalValue         += Number(h.market_value_krw || 0);
   });
+
+  // 3. 현금·예수금 (증권사 예수금 + 은행 입출금 잔액 + 예적금 잔액)
   let cashKrw = 0, cashUsd = 0;
   (accounts || []).forEach(a => {
-    cashKrw += Number(a.cash_krw || 0);
+    cashKrw += Number(a.cash_krw || a.cash || 0);
     cashUsd += Number(a.cash_usd || 0);
   });
-  const totalCash = cashKrw + cashUsd * usdKrw;
-  if (totalCash > 0) {
+  const stockCashTotal = cashKrw + cashUsd * usdKrw;
+
+  const curBanks = filterByOwner(src.bank_accounts || rawBankAccounts || []);
+  const bankCashTotal = curBanks.reduce((acc, b) => acc + Math.max(0, Number(b.balance) || 0), 0);
+
+  const curSavings = filterByOwner(src.savings_accounts || rawSavingsAccounts || []);
+  const savingsTotal = curSavings.reduce((acc, s) => acc + (Number(s.current_value) || Number(s.current_paid_amount) || Number(s.balance) || 0), 0);
+
+  const totalAllCash = stockCashTotal + bankCashTotal + savingsTotal;
+  if (totalAllCash > 0) {
     groups['현금·예수금'] = {
-      name: '현금·예수금', market_value_krw: totalCash,
-      cost_value_krw: totalCash, profit_krw: 0, holding_count: 0,
+      name: '현금·예수금',
+      market_value_krw: totalAllCash,
+      cost_value_krw: totalAllCash,
+      profit_krw: 0,
+      holding_count: (accounts || []).length + curBanks.length + curSavings.length,
     };
-    totalValue += totalCash;
+    totalValue += totalAllCash;
   }
+
+  // 4. 보험 (해약환급금 / 예상 수령액)
+  const curInsurances = filterByOwner(src.insurance_accounts || rawInsuranceAccounts || []);
+  const insuranceTotal = curInsurances.reduce((acc, ins) => acc + (Number(ins.expected_refund_amount) || Number(ins.accumulated_paid_amount) || 0), 0);
+  if (insuranceTotal > 0) {
+    groups['보험'] = {
+      name: '보험',
+      market_value_krw: insuranceTotal,
+      cost_value_krw: insuranceTotal,
+      profit_krw: 0,
+      holding_count: curInsurances.length,
+    };
+    totalValue += insuranceTotal;
+  }
+
   return Object.values(groups).map(g => ({
     ...g,
     return_rate: g.cost_value_krw > 0 ? (g.profit_krw / g.cost_value_krw) * 100 : 0,
@@ -307,7 +379,7 @@ function renderWithOwner(data, owner) {
     filteredData.holdings = (src.holdings || []).filter(h => ownedIds.has(h.account_id));
 
     filteredData.summary               = computeFilteredSummary(filteredData.accounts, filteredData.holdings, src.fx_rates);
-    filteredData.classifications       = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates);
+    filteredData.classifications       = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates, owner, src);
     filteredData.sector_classifications= computeFilteredSectors(filteredData.holdings, filteredData.accounts, src.fx_rates);
     filteredData.currency_summary      = computeFilteredCurrencySummary(filteredData.holdings, filteredData.accounts, src.fx_rates);
     filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change, owner, filteredData.summary?.total_value_krw);
@@ -315,7 +387,7 @@ function renderWithOwner(data, owner) {
     filteredData.accounts              = src.accounts               || [];
     filteredData.holdings              = src.holdings               || [];
     filteredData.summary               = src.summary                || {};
-    filteredData.classifications       = src.classifications        || [];
+    filteredData.classifications       = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates, '모두', src);
     filteredData.sector_classifications= src.sector_classifications || [];
     filteredData.currency_summary      = src.currency_summary       || {};
     filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change, '모두', filteredData.summary?.total_value_krw);
@@ -804,39 +876,34 @@ async function loadMarkets() {
 function renderSummary(data) {
   const s = data.summary || {}, currencies = data.currency_summary || {};
   const krw = currencies.KRW || {}, usd = currencies.USD || {};
-
-  $("#totalValue").textContent = money(s.total_value_krw);
-  const totalStockVal = s.total_stock_value_krw || (Number(s.total_value_krw || 0) - Number(s.total_cash_krw || 0));
-  $("#holdingCaption").textContent = `주식 ${money(totalStockVal)}`;
-  const totalCashEl = $("#totalCashBadge");
-  if (totalCashEl) {
-    totalCashEl.textContent = `예수금 ${money(s.total_cash_krw || 0)}`;
-    totalCashEl.style.display = "block";
-  }
-
-  // 순자산 (Net Worth) 및 총 부채(대출·마통) 계산
   const o = currentOwner || '모두';
-  const filterByOwner = (arr) => o === '모두' ? arr : arr.filter(x => (x.owner || '모두') === o);
+  const filterByOwner = (arr) => o === '모두' ? (arr || []) : (arr || []).filter(x => (x.owner || '모두') === o);
 
+  // 1. 총 부채 및 자산 계산
   const curLoans = filterByOwner(data.loan_accounts || rawLoanAccounts || []);
   const curBanks = filterByOwner(data.bank_accounts || rawBankAccounts || []);
   const curSavings = filterByOwner(data.savings_accounts || rawSavingsAccounts || []);
-  const curRealEstates = filterByOwner(data.real_estates || rawRealEstates || []);
+  const curInsurances = filterByOwner(data.insurance_accounts || rawInsuranceAccounts || []);
+  const allREs = filterByOwner(data.real_estates || rawRealEstates || []);
 
   const posBanks = curBanks.filter(b => (Number(b.balance) || 0) >= 0);
   const negBanks = curBanks.filter(b => (Number(b.balance) || 0) < 0);
 
   const totalInvestVal = Number(s.total_value_krw || 0);
+  const totalStockVal = s.total_stock_value_krw || (totalInvestVal - Number(s.total_cash_krw || 0));
   const totalPositiveBankVal = posBanks.reduce((acc, b) => acc + (Number(b.balance) || 0), 0);
-  const totalSavingVal = curSavings.reduce((acc, sv) => acc + (Number(sv.current_value) || Number(sv.current_paid_amount) || 0), 0);
+  const totalSavingVal = curSavings.reduce((acc, sv) => acc + (Number(sv.current_value) || Number(sv.current_paid_amount) || Number(sv.balance) || 0), 0);
+  const totalAllCash = Number(s.total_cash_krw || 0) + totalPositiveBankVal + totalSavingVal;
+  const insuranceTotal = curInsurances.reduce((acc, ins) => acc + (Number(ins.expected_refund_amount) || Number(ins.accumulated_paid_amount) || 0), 0);
+
   const totalMinusBankDebt = negBanks.reduce((acc, b) => acc + Math.abs(Number(b.balance) || 0), 0);
   const totalPureDebt = curLoans.reduce((acc, l) => acc + (Number(l.current_balance) || 0), 0);
 
-  // 부동산 자산 및 부채 합산 (공동명의 지분율 비례 적용)
-  const allREs = data.real_estates || rawRealEstates || [];
+  // 부동산 순에퀴티 & 전세보증금 부채
   let totalREVal = 0;
   let totalTenantDepositVal = 0;
   let totalLandlordDepositDebt = 0;
+  let totalREEquity = 0;
 
   allREs.forEach(r => {
     const ownerships = (r.ownerships && r.ownerships.length) 
@@ -852,55 +919,92 @@ function renderSummary(data) {
 
     const pType = r.property_type || 'own';
     if (pType !== 'lease') {
-      totalREVal += ((Number(r.current_price) || 0) * share);
-    }
-    if (pType === 'lease') {
-      totalTenantDepositVal += ((Number(r.deposit_amount) || 0) * share);
-    }
-    if (pType === 'rental') {
-      totalLandlordDepositDebt += ((Number(r.deposit_amount) || 0) * share);
+      const pVal = (Number(r.current_price) || 0) * share;
+      const depDebt = pType === 'rental' ? ((Number(r.deposit_amount) || 0) * share) : 0;
+      totalREVal += pVal;
+      totalLandlordDepositDebt += depDebt;
+      totalREEquity += Math.max(0, pVal - depDebt);
+    } else {
+      const depVal = ((Number(r.deposit_amount) || 0) * share);
+      totalTenantDepositVal += depVal;
+      totalREEquity += depVal;
     }
   });
 
   const totalAllDebt = totalPureDebt + totalMinusBankDebt + totalLandlordDepositDebt;
-  const grossAssets = totalInvestVal + totalPositiveBankVal + totalSavingVal + totalREVal + totalTenantDepositVal;
+  const grossAssets = totalInvestVal + totalPositiveBankVal + totalSavingVal + totalREVal + totalTenantDepositVal + insuranceTotal;
   const netWorth = grossAssets - totalAllDebt;
 
+  // 1. 순자산 (흰색) & 총 부채 (붉은색)
   if ($("#summaryNetWorth")) $("#summaryNetWorth").textContent = money(netWorth);
   if ($("#summaryTotalDebtCaption")) {
     $("#summaryTotalDebtCaption").textContent = totalAllDebt > 0 
-      ? `총 부채(대출·마통·전세보증금) ₩${number(totalAllDebt, 0)} 차감` 
-      : `부채 ₩0 (무부채)`;
+      ? `- 총 부채 ₩${number(totalAllDebt, 0)}` 
+      : `- 부채 ₩0`;
   }
 
-  $("#totalProfit").textContent = money(s.profit_krw);
-  $("#totalProfit").className = signClass(s.profit_krw);
+  // 2. 총 투자자산 (흰색) & 4대 세부 자산 (연보라)
+  if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestVal);
+  if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `- 부동산 ${money(totalREEquity)}`;
+  if ($("#subStockVal")) $("#subStockVal").textContent = `- 주식 ${money(totalStockVal)}`;
+  if ($("#subCashVal")) $("#subCashVal").textContent = `- 예수금 및 예금 ${money(totalAllCash)}`;
+  if ($("#subInsuranceVal")) $("#subInsuranceVal").textContent = `- 보험 ${money(insuranceTotal)}`;
+
+  // 3. 총 수익 (수익시 붉은색, 손실시 파란색) & 일간 수익 서브라인
+  if ($("#totalProfit")) {
+    $("#totalProfit").textContent = money(s.profit_krw);
+    $("#totalProfit").style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
+  }
   const profitRateEl = $("#profitRate");
   if (profitRateEl) {
     profitRateEl.textContent = `(${s.return_rate >= 0 ? "+" : ""}${number(s.return_rate)}%)`;
-    profitRateEl.className = `sub-rate ${signClass(s.profit_krw)}`;
+    profitRateEl.style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
   }
-  $("#profitCaption").textContent = `총 매입 ${money(s.total_cost_krw)}`;
 
   const day = data.day_change || {};
-  $("#dayProfit").textContent = day.change_krw == null ? "—" : `${day.change_krw >= 0 ? "+" : ""}${money(day.change_krw)}`;
-  $("#dayProfit").className = day.change_krw == null ? "" : signClass(day.change_krw);
-  const dayRateEl = $("#dayRate");
-  if (dayRateEl) {
-    dayRateEl.textContent = day.change_rate == null ? "" : `(${day.change_rate >= 0 ? "+" : ""}${number(day.change_rate)}%)`;
-    dayRateEl.className = day.change_rate == null ? "sub-rate" : `sub-rate ${signClass(day.change_krw)}`;
+  if ($("#dayProfitVal")) {
+    if (day.change_krw != null) {
+      const sign = day.change_krw >= 0 ? "+" : "";
+      const rateSign = (day.change_rate || 0) >= 0 ? "+" : "";
+      $("#dayProfitVal").textContent = `- 일간 수익 ${sign}${money(day.change_krw)} (${rateSign}${number(day.change_rate)}%)`;
+      $("#dayProfitVal").style.color = day.change_krw >= 0 ? "#f43f5e" : "#38bdf8";
+    } else {
+      $("#dayProfitVal").textContent = `- 일간 수익 —`;
+      $("#dayProfitVal").style.color = "#94a3b8";
+    }
   }
-  $("#dayCaption").textContent = day.change_krw == null ? "전일 기준 데이터 수집 중" : `${day.date} 대비`;
+  if ($("#dayCaption")) $("#dayCaption").textContent = day.date ? `${day.date} 대비` : "전일 대비";
+
+  // 4. 총 실현손익
+  const curRealized = data.realized_pnl_summary || rawDashboard?.realized_pnl_summary;
+  if (curRealized && $("#summaryRealizedPnl")) {
+    const rProfit = Number(curRealized.total_realized_profit_krw || 0);
+    $("#summaryRealizedPnl").textContent = `${rProfit >= 0 ? "+" : ""}${money(rProfit)}`;
+    $("#summaryRealizedPnl").style.color = rProfit >= 0 ? "#f43f5e" : "#38bdf8";
+    if ($("#summaryRealizedPnlSub")) {
+      $("#summaryRealizedPnlSub").textContent = `승률 ${number(curRealized.win_rate || 0, 1)}% · 총 ${curRealized.total_closed_count || 0}건 실현`;
+    }
+  }
+
+  // 5. 총 배당금 및 이자
+  const curDiv = data.dividend_summary || rawDashboard?.dividend_summary;
+  if (curDiv && $("#summaryActualDividend")) {
+    const dVal = Number(curDiv.total_actual_dividend_krw || curDiv.actual_dividend_krw || 0);
+    $("#summaryActualDividend").textContent = money(dVal);
+    if ($("#summaryEstimatedDividend")) {
+      $("#summaryEstimatedDividend").textContent = `예상 연간 배당금 ${money(curDiv.annual_dividend_krw || 0)} (${number(curDiv.dividend_yield || 0)}%)`;
+    }
+  }
 
   const krwStock = krw.stock_value_krw || (Number(krw.market_value_krw || 0) - Number(krw.cash || 0));
-  $("#krwValue").textContent = money(krw.market_value_krw || 0);
-  $("#krwCaption").textContent = `주식 평가 ${money(krwStock)}`;
+  $("#krwValue") && ($("#krwValue").textContent = money(krw.market_value_krw || 0));
+  $("#krwCaption") && ($("#krwCaption").textContent = `주식 평가 ${money(krwStock)}`);
   const krwCashBadgeEl = $("#krwCashBadge");
   if (krwCashBadgeEl) krwCashBadgeEl.textContent = `(예수금 ${money(krw.cash || 0)})`;
 
   const usdStock = usd.stock_value || (Number(usd.market_value || 0) - Number(usd.cash || 0));
-  $("#usdValue").textContent = money(usd.market_value || 0, "USD");
-  $("#usdCaption").textContent = `주식 평가 ${money(usdStock, "USD")}`;
+  $("#usdValue") && ($("#usdValue").textContent = money(usd.market_value || 0, "USD"));
+  $("#usdCaption") && ($("#usdCaption").textContent = `주식 평가 ${money(usdStock, "USD")}`);
   const usdCashBadgeEl = $("#usdCashBadge");
   if (usdCashBadgeEl) usdCashBadgeEl.textContent = `(예수금 ${money(usd.cash || 0, "USD")})`;
 
@@ -1037,19 +1141,32 @@ function renderClassifications(items) {
   } else {
     const classes = dashboard?.classifications || items || [];
     renderAllocationDonut(classes, '자산군별 투자자산 데이터가 없습니다.');
-    list.innerHTML = classes.length ? classes.map((item) => `
-      <div class="classification-row clickable-sector-row" data-sector-filter="${html(item.name)}" style="cursor:pointer;" title="🔍 클릭하여 '${html(item.name)}' 보유종목 보기">
-        <div class="classification-title">
-          <strong>${html(item.name)}</strong>
-          <span>${number(item.holding_count, 0)}종목 · ${number(item.weight, 1)}%</span>
+    list.innerHTML = classes.length ? classes.map((item) => {
+      let subLabel = `${number(item.holding_count, 0)}종목 · ${number(item.weight, 1)}%`;
+      if (item.name === '부동산') {
+        subLabel = `부동산 순에퀴티 · ${number(item.weight, 1)}%`;
+      } else if (item.name === '현금·예수금') {
+        subLabel = `은행 예수금 포함 · ${number(item.weight, 1)}%`;
+      } else if (item.name === '보험') {
+        subLabel = `예상 수령액/해약환급금 · ${number(item.weight, 1)}%`;
+      }
+
+      const showProfit = item.name !== '현금·예수금' && item.name !== '부동산' && item.name !== '보험';
+
+      return `
+        <div class="classification-row clickable-sector-row" data-sector-filter="${html(item.name)}" style="cursor:pointer;" title="🔍 클릭하여 '${html(item.name)}' 상세 보기">
+          <div class="classification-title">
+            <strong>${html(item.name)}</strong>
+            <span>${subLabel}</span>
+          </div>
+          <div class="classification-value">
+            <span>${money(item.market_value_krw)}</span>
+            ${showProfit ? `<b class="${signClass(item.profit_krw)}">${item.return_rate >= 0 ? "+" : ""}${number(item.return_rate, 2)}%</b>` : `<span style="font-size:11.5px;color:#94a3b8;font-weight:600;">${number(item.weight, 1)}%</span>`}
+          </div>
+          <div class="bar"><i style="width:${Math.min(item.weight, 100)}%"></i></div>
         </div>
-        <div class="classification-value">
-          <span>${money(item.market_value_krw)}</span>
-          <b class="${signClass(item.profit_krw)}">${item.return_rate >= 0 ? "+" : ""}${number(item.return_rate, 2)}%</b>
-        </div>
-        <div class="bar"><i style="width:${Math.min(item.weight, 100)}%"></i></div>
-      </div>
-    `).join("") : '<div class="empty">자산을 불러오면 분류별 수익률을 표시합니다.</div>';
+      `;
+    }).join("") : '<div class="empty">자산을 불러오면 분류별 수익률을 표시합니다.</div>';
   }
 }
 
