@@ -3761,20 +3761,6 @@ function updateAccountTaxBenefitFields(form) {
       if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
       if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
     }
-
-    // 계좌명에 (세액공제O) / (세액공제X) 등이 포함되어 있을 때 자동 동기화 지원
-    const nameInput = form.querySelector("[name='name']") || form.querySelector("[name='account_name']");
-    if (nameInput && nameInput.value) {
-      if (!isDeductible) {
-        if (nameInput.value.includes("(세액공제O)")) nameInput.value = nameInput.value.replace("(세액공제O)", "(세액공제X)");
-        else if (nameInput.value.includes("세액공제O")) nameInput.value = nameInput.value.replace("세액공제O", "세액공제X");
-        else if (nameInput.value.includes("(공제O)")) nameInput.value = nameInput.value.replace("(공제O)", "(비공제)");
-      } else {
-        if (nameInput.value.includes("(세액공제X)")) nameInput.value = nameInput.value.replace("(세액공제X)", "(세액공제O)");
-        else if (nameInput.value.includes("세액공제X")) nameInput.value = nameInput.value.replace("세액공제X", "세액공제O");
-        else if (nameInput.value.includes("(비공제)")) nameInput.value = nameInput.value.replace("(비공제)", "(공제O)");
-      }
-    }
   }
 }
 
@@ -4708,17 +4694,11 @@ $("#accountList")?.addEventListener("click", async (e) => {
     if (acct) {
       const currentDed = isAccountTaxDeductible(acct);
       const newDed = !currentDed;
-      let newName = acct.name || "";
-      if (newDed) {
-        newName = newName.replace("(세액공제X)", "(세액공제O)").replace("세액공제X", "세액공제O").replace("(비공제)", "(공제O)");
-      } else {
-        newName = newName.replace("(세액공제O)", "(세액공제X)").replace("세액공제O", "세액공제X").replace("(공제O)", "(비공제)");
-      }
+      const acctName = acct.name || "";
       acct.tax_deductible = newDed;
-      acct.name = newName;
       if (rawDashboard && Array.isArray(rawDashboard.accounts)) {
         const rAcct = rawDashboard.accounts.find(a => a.id === accId);
-        if (rAcct) { rAcct.tax_deductible = newDed; rAcct.name = newName; }
+        if (rAcct) { rAcct.tax_deductible = newDed; }
       }
       renderWithOwner(rawDashboard || dashboard, currentOwner);
       try {
@@ -4727,7 +4707,7 @@ $("#accountList")?.addEventListener("click", async (e) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             broker: acct.broker,
-            name: newName,
+            name: acctName,
             owner: acct.owner || "모두",
             account_type: acct.account_type || "pension_savings",
             tax_deductible: newDed,
@@ -4737,7 +4717,7 @@ $("#accountList")?.addEventListener("click", async (e) => {
             isa_transfer_year: acct.isa_transfer_year || "2026"
           })
         });
-        toast(`[${newName}] ${newDed ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'}으로 전환되었습니다.`);
+        toast(`[${acctName}] ${newDed ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'}으로 전환되었습니다.`);
         await loadDashboard();
       } catch (err) {
         alert(`전환 실패: ${err.message}`);
