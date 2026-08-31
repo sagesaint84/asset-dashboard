@@ -8077,6 +8077,72 @@ async function processLedgerImport() {
     return;
   }
 
+function handleLedgerFileSelect(input) {
+  const file = input.files?.[0];
+  const nameEl = document.getElementById("ledgerSelectedFileName");
+  const uploadBtn = document.getElementById("ledgerFileUploadBtn");
+  if (file) {
+    if (nameEl) {
+      nameEl.textContent = `선택된 파일: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      nameEl.style.display = "block";
+    }
+    if (uploadBtn) uploadBtn.style.display = "inline-block";
+  } else {
+    if (nameEl) nameEl.style.display = "none";
+    if (uploadBtn) uploadBtn.style.display = "none";
+  }
+}
+window.handleLedgerFileSelect = handleLedgerFileSelect;
+
+async function uploadLedgerFile() {
+  const fileInput = document.getElementById("ledgerFileInput");
+  const file = fileInput?.files?.[0];
+  const owner = document.getElementById("ledgerImportOwner")?.value || "모두";
+  const uploadBtn = document.getElementById("ledgerFileUploadBtn");
+
+  if (!file) {
+    alert("업로드할 엑셀(.xlsx) 또는 CSV 파일을 선택해 주세요.");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("owner", owner);
+
+  if (uploadBtn) busy(uploadBtn, true);
+
+  try {
+    const res = await fetch("/api/ledger/import-file", {
+      method: "POST",
+      body: formData,
+      credentials: "include"
+    });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.detail || result.message || "파일 업로드에 실패했습니다.");
+
+    document.getElementById("ledgerExcelDialog")?.close();
+    if (fileInput) fileInput.value = "";
+    document.getElementById("ledgerSelectedFileName").style.display = "none";
+    if (uploadBtn) uploadBtn.style.display = "none";
+
+    toast(result.message || "거래 내역을 성공적으로 가져왔습니다.");
+    await loadLedger();
+  } catch (err) {
+    alert(`엑셀 파일 등록 오류: ${err.message}`);
+  } finally {
+    if (uploadBtn) busy(uploadBtn, false);
+  }
+}
+window.uploadLedgerFile = uploadLedgerFile;
+
+async function processLedgerTextImport() {
+  const text = document.getElementById("ledgerImportText")?.value.trim();
+  const owner = document.getElementById("ledgerImportOwner")?.value || "모두";
+  if (!text) {
+    alert("가져올 거래내역 텍스트를 입력해 주세요.");
+    return;
+  }
+
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
   let successCount = 0;
 
@@ -8087,7 +8153,7 @@ async function processLedgerImport() {
       const merchantVal = parts.slice(1, -1).join(" ");
       const rawAmt = parts[parts.length - 1].replace(/[^0-9.-]+/g, "");
       const amountVal = Math.abs(Number(rawAmt)) || 0;
-      const isInc = line.includes("급여") || line.includes("입금") || line.includes("수익") || Number(rawAmt) > 0 && line.includes("+");
+      const isInc = line.includes("급여") || line.includes("입금") || line.includes("수익") || (Number(rawAmt) > 0 && line.includes("+"));
 
       if (dateVal && merchantVal && amountVal > 0) {
         try {
@@ -8113,7 +8179,8 @@ async function processLedgerImport() {
   toast(`${successCount}건의 거래 내역을 일괄 가져왔습니다.`);
   await loadLedger();
 }
-window.processLedgerImport = processLedgerImport;
+window.processLedgerTextImport = processLedgerTextImport;
+window.processLedgerImport = processLedgerTextImport;
 
 function initLedgerListeners() {
   document.getElementById("ledgerPrevMonthBtn")?.addEventListener("click", () => {

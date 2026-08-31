@@ -278,3 +278,172 @@ def delete_recurring(rec_id: str, username: str | None = None) -> bool:
         write_ledger(data, username=username)
         return True
     return False
+
+
+def import_ledger_from_file_bytes(
+    file_bytes: bytes,
+    filename: str,
+    default_owner: str = "모두",
+    username: str | None = None,
+) -> int:
+    """Parse Excel (.xlsx, .xls) or CSV files and append to transactions."""
+    import io
+    import csv
+    import openpyxl
+
+    rows: list[list[Any]] = []
+    fname = filename.lower()
+
+    if fname.endswith(".csv"):
+        # UTF-8 or CP949 decoding
+        decoded_text = ""
+        for encoding in ["utf-8-sig", "utf-8", "cp949", "euc-kr"]:
+            try:
+                decoded_text = file_bytes.decode(encoding)
+                break
+            except Exception:
+                continue
+        if not decoded_text:
+            raise ValueError("CSV 파일 인코딩을 해석할 수 없습니다.")
+        reader = csv.reader(io.StringIO(decoded_text))
+        rows = [list(r) for r in reader if any(r)]
+    else:
+        # Excel
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(values_only=True):
+            if any(row):
+                rows.append(list(row))
+
+    if not rows:
+        raise ValueError("파일에 읽을 수 있는 데이터가 없습니다.")
+
+    # 헤더 행 탐색 (최상위 5행 이내에서 일자, 가맹점/내용, 금액 매핑 검색)
+    header_row_idx = -1
+    col_map = {
+        "date": -1,
+        "merchant": -1,
+        "amount": -1,
+        "type": -1,
+        "category": -1,
+        "owner": -1,
+        "pay_method": -1,
+        "memo": -1,
+    }
+
+    for idx, r in enumerate(rows[:6]):
+        str_row = [str(c or "").strip() for c in r]
+        date_idx = next((i for i, c in enumerate(str_row) if any(k in c for k in ["일자", "거래일", "날짜", "date", "승인일"])), -1)
+        amt_idx = next((i for i, c in enumerate(str_row) if any(k in c for k in ["금액", "amount", "이용금액", "승인금액", "출금액", "입금액"])), -1)
+        merch_idx = next((i for i, c in enumerate(str_row) if any(k in c for k in ["가맹점", "내용", "적요", "상호", "merchant", "description", "거래내역"])), -1)
+
+        if date_idx != -1 and (amt_idx != -1 or merch_idx != -1):
+            header_row_idx = idx
+            col_map["date"] = date_idx
+            col_map["amount"] = amt_idx
+            col_map["merchant"] = merch_idx
+            col_map["type"] = next((i for i, c in enumerate(str_row) if any(k in c for k in ["구분", "type", "거래구분"])), -1)
+            col_map["category"] = next((i for i, c in enumerate(str_row) if any(k in c for k in ["카테고리", "분류", "업종", "category"])), -1)
+            col_map["owner"] = next((i for i, c in enumerate(str_row) if any(k in c for k in ["소유자", "이름", "작성자", "owner"])), -1)
+            col_map["pay_method"] = next((i for i, c in enumerate(str_row) if any(k in c for k in ["결제", "카드", "수단", "출금처", "통장"])), -1)
+            col_map["memo"] = next((i for i, c in enumerate(str_row) if any(k in c for k in ["메모", "비고", "memo", "note"])), -1)
+            break
+
+    if header_row_idx == -1:
+        # 헤더가 없는 경우 위치 기반 폴백: [0:일자, 1:가맹점, 2:금액...]
+        header_row_idx = 0
+        col_map["date"] = 0
+        col_map["merchant"] = 1
+        col_map["amount"] = 2
+
+    data_rows = rows[header_row_idx + 1 :]
+    imported_count = 0
+    tx_list_to_add = []
+
+    for r in data_rows:
+        if not r or all(c is None or str(c).strip() == "" for c in r):
+            continue
+
+        # 1. 일자 파싱
+        raw_date = str(r[col_map["date"]] if col_map["date"] < len(r) and col_map["date"] != -1 else "").strip()
+        if not raw_date:
+            continue
+        # 날짜 포맷 정리 (YYYYMMDD, YYYY.MM.DD, YYYY/MM/DD -> YYYY-MM-DD)
+        clean_date = raw_date.replace(".", "-").replace("/", "-").replace(" ", "")
+        if isinstance(r[col_map["date"]], (datetime, date)):
+            clean_date = r[col_map["date"]].strftime("%Y-%m-%d")
+        elif len(clean_date) == 8 and clean_date.isdigit():
+            clean_date = f"{clean_date[:4]}-{clean_date[4:6]}-{clean_date[6:]}"
+        elif len(clean_date) >= 10:
+            clean_date = clean_date[:10]
+
+        # 2. 내용/가맹점
+        merchant = ""
+        if col_map["merchant"] != -1 and col_map["merchant"] < len(r):
+            merchant = str(r[col_map["merchant"]] or "").strip()
+
+        # 3. 금액 파싱
+        raw_amount = ""
+        if col_map["amount"] != -1 and col_map["amount"] < len(r):
+            raw_amount = str(r[col_map["amount"]] or "").replace(",", "").replace("₩", "").replace("원", "").replace(" ", "").strip()
+        try:
+            amount = abs(float(raw_amount)) if raw_amount else 0.0
+        except ValueError:
+            amount = 0.0
+
+        if amount <= 0:
+            continue
+
+        # 4. 구분 및 카테고리
+        raw_type = str(r[col_map["type"]] if col_map["type"] != -1 and col_map["type"] < len(r) else "").strip()
+        is_income = "수입" in raw_type or "입금" in raw_type or "급여" in merchant or "배당" in merchant
+        is_transfer = "이체" in raw_type or "저축" in raw_type or "환전" in raw_type
+        tx_type = "income" if is_income else ("transfer" if is_transfer else "expense")
+
+        category = ""
+        if col_map["category"] != -1 and col_map["category"] < len(r):
+            category = str(r[col_map["category"]] or "").strip()
+        if not category:
+            category = "급여/상여" if is_income else ("계좌이체/저축" if is_transfer else "식비/외식")
+
+        # 5. 소유자
+        owner = default_owner
+        if col_map["owner"] != -1 and col_map["owner"] < len(r):
+            val_owner = str(r[col_map["owner"]] or "").strip()
+            if val_owner in ["아빠", "엄마", "자녀", "모두"]:
+                owner = val_owner
+
+        # 6. 결제수단 및 메모
+        pay_method = "신용/체크카드"
+        if col_map["pay_method"] != -1 and col_map["pay_method"] < len(r):
+            pay_method = str(r[col_map["pay_method"]] or "").strip() or "신용/체크카드"
+
+        memo = ""
+        if col_map["memo"] != -1 and col_map["memo"] < len(r):
+            memo = str(r[col_map["memo"]] or "").strip()
+
+        tx = {
+            "id": str(uuid.uuid4()),
+            "date": clean_date,
+            "type": tx_type,
+            "amount": amount,
+            "category": category,
+            "owner": owner,
+            "pay_method": pay_method,
+            "account_id": "",
+            "account_name": "",
+            "merchant": merchant or "카드이용",
+            "memo": memo,
+            "is_recurring": False,
+            "created_at": datetime.now().isoformat(),
+        }
+        tx_list_to_add.append(tx)
+        imported_count += 1
+
+    if tx_list_to_add:
+        ledger_data = read_ledger(username=username)
+        ledger_data["transactions"].extend(tx_list_to_add)
+        write_ledger(ledger_data, username=username)
+
+    return imported_count
+

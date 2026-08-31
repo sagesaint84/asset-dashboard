@@ -1996,3 +1996,59 @@ async def remove_recurring(rec_id: str, request: Request) -> dict:
         raise HTTPException(404, "삭제할 고정지출 항목을 찾을 수 없습니다.")
     return {"message": "고정지출 항목이 삭제되었습니다."}
 
+
+# ---------------------------------------------------------------------------
+# Ledger Sample Downloads & Excel File Import
+# ---------------------------------------------------------------------------
+from app.services.ledger import import_ledger_from_file_bytes
+
+
+@app.get("/api/sample/card-statement")
+async def download_sample_card_statement():
+    """Download sample Excel file for card transaction statements."""
+    p = ROOT_DIR / "data" / "샘플_카드내역.xlsx"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="샘플_카드내역.xlsx 파일을 찾을 수 없습니다.")
+    return FileResponse(
+        path=str(p),
+        filename="샘플_카드내역.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/api/sample/ledger-transactions")
+async def download_sample_ledger_transactions():
+    """Download sample Excel file for general household transactions."""
+    p = ROOT_DIR / "data" / "샘플_거래내역.xlsx"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="샘플_거래내역.xlsx 파일을 찾을 수 없습니다.")
+    return FileResponse(
+        path=str(p),
+        filename="샘플_거래내역.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.post("/api/ledger/import-file")
+async def upload_ledger_file(
+    request: Request,
+    file: UploadFile = File(...),
+    owner: str = Form("모두"),
+) -> dict:
+    """Upload Excel (.xlsx, .xls) or CSV file to import transactions."""
+    username = get_current_username(request)
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(400, "업로드된 파일이 비어 있습니다.")
+    try:
+        count = import_ledger_from_file_bytes(
+            file_bytes=file_bytes,
+            filename=file.filename or "import.xlsx",
+            default_owner=owner,
+            username=username,
+        )
+        return {"message": f"총 {count}건의 거래 내역을 성공적으로 등록했습니다.", "count": count}
+    except Exception as e:
+        raise HTTPException(400, f"파일 처리 중 오류가 발생했습니다: {str(e)}")
+
+
