@@ -323,7 +323,7 @@ function renderWithOwner(data, owner) {
 
   render(filteredData);
   loadAssetRecords(owner);
-  if (currentModule === 'ledger') loadLedger();
+  loadLedger();
 }
 
 // 다이얼로그 닫기 버튼 공통 처리
