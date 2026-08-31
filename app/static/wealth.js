@@ -1112,13 +1112,17 @@ function renderAccounts(items) {
         const dep = Number(account.annual_deposit) || 0;
         const isaTr = Number(account.isa_transfer_amount) || 0;
         if (!isTaxDeductible) {
-          taxBenefitText = ` · <span style="color:#34d399;font-size:11px;font-weight:600;">🌿 비공제 (원금 비과세 인출용)</span>`;
+          if (dep > 0) {
+            taxBenefitText = ` · <span style="color:#34d399;font-size:11px;font-weight:600;">🌿 비공제 납입 ₩${number(dep, 0)} (원금 비과세 인출 대상)</span>`;
+          } else {
+            taxBenefitText = ` · <span style="color:#34d399;font-size:11px;font-weight:600;">🌿 비공제 (원금 비과세 인출용)</span>`;
+          }
         } else if (dep > 0 || isaTr > 0) {
           const rate = account.income_level === "high" ? 0.132 : 0.165;
           const baseTarget = Math.min(dep, aType === "pension_savings" ? 6000000 : 9000000);
           const isaTarget = Math.min(isaTr * 0.10, 3000000);
           const refund = Math.floor((baseTarget + isaTarget) * rate);
-          taxBenefitText = ` · <span style="color:#38bdf8;font-weight:600;">💎 세액공제 ₩${number(refund, 0)}${isaTarget > 0 ? ` (ISA이전 +₩${number(Math.floor(isaTarget * rate), 0)})` : ''}</span>`;
+          taxBenefitText = ` · <span style="color:#38bdf8;font-weight:600;">💎 세액공제 ₩${number(refund, 0)}${isaTarget > 0 ? ` (ISA이전 +₩${number(Math.floor(isaTarget * rate), 0)})` : ''} (납입 ₩${number(dep, 0)})</span>`;
         } else {
           taxBenefitText = ` · <span style="color:#38bdf8;font-size:11px;font-weight:600;">💎 세액공제 신청 (공제 대상)</span>`;
         }
@@ -3781,9 +3785,9 @@ function openAccountEditDialog(account) {
   const incomeLvl = form.querySelector(".pension-income-level");
   if (incomeLvl) incomeLvl.value = account.income_level || "low";
   const annualDep = form.querySelector(".pension-annual-deposit");
-  if (annualDep) annualDep.value = account.annual_deposit || "";
+  if (annualDep) annualDep.value = (account.annual_deposit !== undefined && account.annual_deposit !== null && account.annual_deposit !== "") ? account.annual_deposit : "";
   const isaTr = form.querySelector(".pension-isa-transfer");
-  if (isaTr) isaTr.value = account.isa_transfer_amount || "";
+  if (isaTr) isaTr.value = (account.isa_transfer_amount !== undefined && account.isa_transfer_amount !== null && account.isa_transfer_amount !== "") ? account.isa_transfer_amount : "";
   const isaYear = form.querySelector(".pension-isa-year");
   if (isaYear) isaYear.value = account.isa_transfer_year || "2026";
 
@@ -4898,7 +4902,7 @@ async function saveEditAccount() {
       })
     });
     document.getElementById("accountEditDialog")?.close();
-    toast(`[${name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'}으로 저장되었습니다.`);
+    toast(`[${name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} (납입 ₩${number(annual_deposit, 0)}) 저장되었습니다.`);
     await loadDashboard();
   } catch (err) {
     toast(err.message, true);
