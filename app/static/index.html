@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v499" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v501" />
   </head>
   <body>
     <main class="shell">
@@ -941,7 +941,7 @@
 
         <div class="dialog-actions" style="margin-top:14px;">
           <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
-          <button id="accountEditSaveBtn" class="button primary" type="button">저장</button>
+          <button id="accountEditSaveBtn" class="button primary" type="button" onclick="saveEditAccount()">저장</button>
         </div>
       </form>
     </dialog>
@@ -1013,7 +1013,7 @@
 
         <div class="dialog-actions" style="margin-top:14px;">
           <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
-          <button id="accountAddSaveBtn" class="button primary" type="button">저장</button>
+          <button id="accountAddSaveBtn" class="button primary" type="button" onclick="saveNewAccount()">저장</button>
         </div>
       </form>
     </dialog>
@@ -1996,7 +1996,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260831-v499"></script>
+    <script src="/static/wealth.js?v=20260831-v501"></script>
   </body>
 </html>
 

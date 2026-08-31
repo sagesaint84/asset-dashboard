@@ -1,3 +1,11 @@
+v5.0.1
+
+(fix) 🎯 계좌 정보 수정 버튼에 명시적 인라인 이벤트 핸들러(onclick) 바인딩 및 전역 노출
+- **저장 버튼 이벤트 바인딩 100% 보장**:
+  - `accountEditDialog` 및 `accountAddDialog`의 `[저장]` 버튼에 인라인 `onclick="saveEditAccount()"`를 직접 바인딩하여 리스너 등록 누락/경합 위험 완전 제거
+  - `saveEditAccount` 및 `saveNewAccount`를 window 전역 객체에 명시적으로 노출
+(perf) 서비스 워커 캐시 버전(wealth-cache-v51) 및 정적 자산 쿼리(v501) 갱신
+
 v4.9.9
 
 (feat) 🌿 비공제 계좌의 연간 납입금액(예: 1,800만원) 시각화 및 계좌 수정 폼 양방향 데이터 복원 완비

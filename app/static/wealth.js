@@ -4959,6 +4959,10 @@ async function saveNewAccount() {
   }
 }
 
+window.saveEditAccount = saveEditAccount;
+window.saveNewAccount = saveNewAccount;
+window.openAccountEditDialog = openAccountEditDialog;
+
 $("#accountEditSaveBtn")?.addEventListener("click", saveEditAccount);
 $("#accountEditForm")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
