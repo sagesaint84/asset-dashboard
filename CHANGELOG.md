@@ -1,3 +1,10 @@
+v5.1.6
+
+(fix) 🛡️ 증권 계좌 신규 생성 API(POST /api/accounts) 변수 참조 오류 완벽 해결
+- **신규 계좌 생성 핸들러 정상화**:
+  - `POST /api/accounts`에서 `isa_transfer_amount` 및 `isa_transfer_year` 변수 미정의로 인해 500 에러가 발생하던 문제를 수정하여 정상 추가 보장
+(perf) 서비스 워커 캐시 버전(wealth-cache-v66) 및 정적 자산 쿼리(v516) 갱신
+
 v5.1.4
 
 (fix) 🚀 백엔드 서버 데몬 리로더 정밀 재기동 및 자녀/엄마 비공제 1,800만 완벽 동기화 완료

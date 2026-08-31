@@ -947,6 +947,8 @@ async def create_account(request: Request) -> dict:
     acc_type = (body.get("account_type") or "general").strip()
     income_lvl = (body.get("income_level") or "low").strip()
     annual_dep = max(0.0, float(body.get("annual_deposit") or 0.0))
+    isa_tr = max(0.0, float(body.get("isa_transfer_amount") or 0.0))
+    isa_year = str(body.get("isa_transfer_year") or "2026").strip()
     def _parse_bool(val: Any, default: bool = True) -> bool:
         if val is None:
             return default
