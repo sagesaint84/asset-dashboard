@@ -1093,42 +1093,58 @@ function renderAccounts(items) {
       let typeBadge = "";
       if (aType === "pension_savings") {
         if (isTaxDeductible) {
-          typeBadge = `<span class="account-type-tag pension" data-toggle-tax-account-id="${account.id}" title="클릭 시 '비공제'로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);margin-right:4px;cursor:pointer;">연금(공제O) 🔄</span>`;
+          typeBadge = `<span class="account-type-tag pension" data-toggle-tax-account-id="${account.id}" title="클릭 시 '비공제'로 즉시 전환" style="font-size:10.5px;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.18);color:#38bdf8;border:1px solid rgba(56,189,248,0.4);margin-right:4px;cursor:pointer;">연금(공제O) 🔄</span>`;
         } else {
-          typeBadge = `<span class="account-type-tag non-deductible" data-toggle-tax-account-id="${account.id}" title="클릭 시 '세액공제 신청'으로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;cursor:pointer;">연금(비공제) 🔄</span>`;
+          typeBadge = `<span class="account-type-tag non-deductible" data-toggle-tax-account-id="${account.id}" title="클릭 시 '세액공제 신청'으로 즉시 전환" style="font-size:10.5px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.4);margin-right:4px;cursor:pointer;">연금(비공제) 🔄</span>`;
         }
       } else if (aType === "irp") {
         if (isTaxDeductible) {
-          typeBadge = `<span class="account-type-tag irp" data-toggle-tax-account-id="${account.id}" title="클릭 시 '비공제'로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3);margin-right:4px;cursor:pointer;">IRP(공제O) 🔄</span>`;
+          typeBadge = `<span class="account-type-tag irp" data-toggle-tax-account-id="${account.id}" title="클릭 시 '비공제'로 즉시 전환" style="font-size:10.5px;padding:2px 6px;border-radius:4px;background:rgba(168,85,247,0.18);color:#c084fc;border:1px solid rgba(168,85,247,0.4);margin-right:4px;cursor:pointer;">IRP(공제O) 🔄</span>`;
         } else {
-          typeBadge = `<span class="account-type-tag non-deductible" data-toggle-tax-account-id="${account.id}" title="클릭 시 '세액공제 신청'으로 즉시 전환" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;cursor:pointer;">IRP(비공제) 🔄</span>`;
+          typeBadge = `<span class="account-type-tag non-deductible" data-toggle-tax-account-id="${account.id}" title="클릭 시 '세액공제 신청'으로 즉시 전환" style="font-size:10.5px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.4);margin-right:4px;cursor:pointer;">IRP(비공제) 🔄</span>`;
         }
       } else if (aType === "isa") {
-        typeBadge = '<span class="account-type-tag isa" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3);margin-right:4px;">ISA</span>';
+        typeBadge = '<span class="account-type-tag isa" style="font-size:10.5px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.18);color:#34d399;border:1px solid rgba(16,185,129,0.4);margin-right:4px;">ISA</span>';
       }
 
-      let taxBenefitText = "";
+      let taxBenefitBox = "";
       if (aType === "pension_savings" || aType === "irp") {
         const dep = Number(account.annual_deposit) || 0;
         const isaTr = Number(account.isa_transfer_amount) || 0;
         if (!isTaxDeductible) {
-          if (dep > 0) {
-            taxBenefitText = ` · <span style="color:#34d399;font-size:11px;font-weight:600;">🌿 비공제 납입 ₩${number(dep, 0)} (원금 비과세 인출 대상)</span>`;
-          } else {
-            taxBenefitText = ` · <span style="color:#34d399;font-size:11px;font-weight:600;">🌿 비공제 (원금 비과세 인출용)</span>`;
-          }
-        } else if (dep > 0 || isaTr > 0) {
-          const rate = account.income_level === "high" ? 0.132 : 0.165;
-          const baseTarget = Math.min(dep, aType === "pension_savings" ? 6000000 : 9000000);
-          const isaTarget = Math.min(isaTr * 0.10, 3000000);
-          const refund = Math.floor((baseTarget + isaTarget) * rate);
-          taxBenefitText = ` · <span style="color:#38bdf8;font-weight:600;">💎 세액공제 ₩${number(refund, 0)}${isaTarget > 0 ? ` (ISA이전 +₩${number(Math.floor(isaTarget * rate), 0)})` : ''} (납입 ₩${number(dep, 0)})</span>`;
+          taxBenefitBox = `
+            <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:3px 8px;font-size:11.5px;color:#34d399;font-weight:600;">
+              <span>🌿 비공제 계좌</span>
+              <span style="color:#cbd5e1;font-weight:normal;">(납입 ₩${number(dep, 0)} · 원금 비과세 인출 대상)</span>
+            </div>
+          `;
         } else {
-          taxBenefitText = ` · <span style="color:#38bdf8;font-size:11px;font-weight:600;">💎 세액공제 신청 (공제 대상)</span>`;
+          const rate = account.income_level === "high" ? 13.2 : 16.5;
+          const baseLimit = aType === "pension_savings" ? 6000000 : 9000000;
+          const baseTarget = Math.min(dep, baseLimit);
+          const isaTarget = Math.min(isaTr * 0.10, 3000000);
+          const refund = Math.floor((baseTarget + isaTarget) * (rate / 100));
+          taxBenefitBox = `
+            <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.35);border-radius:6px;padding:3px 8px;font-size:11.5px;color:#38bdf8;font-weight:600;">
+              <span>💎 세액공제 신청</span>
+              <span style="color:#cbd5e1;font-weight:normal;">(납입 ₩${number(dep, 0)} → 예상 환급 <strong style="color:#4ade80;font-weight:700;">+₩${number(refund, 0)}</strong> / ${rate}%)</span>
+            </div>
+          `;
         }
       }
 
-      return `<div class="account-row"><div class="account-row-info"><strong>${typeBadge}${html(account.name)}</strong><span>${number(account.holding_count, 0)}종목${cashText}${taxBenefitText}</span></div><div class="account-row-actions"><button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button><button class="account-action-button" data-account-id="${account.id}" title="계좌 정보 수정" type="button">✎</button><button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button></div></div>`;
+      return `<div class="account-row">
+        <div class="account-row-info">
+          <strong>${typeBadge}${html(account.name)} <span class="saving-owner-badge" style="font-size:10px;padding:1px 5px;margin-left:4px;">${html(account.owner || '모두')}</span></strong>
+          <span>${number(account.holding_count, 0)}종목${cashText}</span>
+          ${taxBenefitBox}
+        </div>
+        <div class="account-row-actions">
+          <button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button>
+          <button class="account-action-button" data-account-id="${account.id}" title="계좌 정보 수정" type="button">✎</button>
+          <button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button>
+        </div>
+      </div>`;
     }).join("");
     return `<section class="broker-group"><div class="broker-head"><strong>${html(group.broker)}</strong><span>${number(group.count, 0)}개 계좌</span></div><div class="broker-accounts">${accounts}</div></section>`;
   }).join("");
@@ -2043,7 +2059,78 @@ function renderInsuranceWithOwner(owner = '모두') {
     $("#grandTotalTaxBenefitVal").textContent = `₩${number(grandTotalTax, 0)}`;
   }
 
-  grid.innerHTML = filtered.map(ins => {
+  // 증권 계좌 연금저축 & IRP 카드 생성
+  const secPensionAccounts = (dashboard?.accounts || []).filter(a => {
+    if (o !== '모두' && (a.owner || '모두') !== o) return false;
+    const aName = (a.name || '').toLowerCase();
+    const aType = a.account_type || (aName.includes('연금') ? 'pension_savings' : (aName.includes('irp') ? 'irp' : 'general'));
+    return aType === 'pension_savings' || aType === 'irp';
+  });
+
+  const pensionCardsHtml = secPensionAccounts.map(a => {
+    const aName = (a.name || '').toLowerCase();
+    const aType = a.account_type || (aName.includes('연금') ? 'pension_savings' : 'irp');
+    const isTaxDeductible = isAccountTaxDeductible(a);
+    const dep = Number(a.annual_deposit) || 0;
+    const isaTr = Number(a.isa_transfer_amount) || 0;
+    const rate = a.income_level === 'high' ? 13.2 : 16.5;
+    const baseLimit = aType === 'pension_savings' ? 6000000 : 9000000;
+    const baseTarget = isTaxDeductible ? Math.min(dep, baseLimit) : 0;
+    const isaTarget = Math.min(isaTr * 0.10, 3000000);
+    const totalTarget = baseTarget + isaTarget;
+    const refund = Math.floor(totalTarget * (rate / 100));
+
+    const typeLabel = aType === 'pension_savings' ? '연금저축' : '개인형 IRP';
+    const badgeClass = isTaxDeductible ? 'pension' : 'non-deductible';
+    const statusLabel = isTaxDeductible ? '세액공제 신청' : '세액공제 제외(비공제)';
+
+    return `
+      <div class="saving-card" style="border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.35)' : 'rgba(16,185,129,0.35)'};background:linear-gradient(145deg, rgba(16,25,51,0.9), rgba(11,17,35,0.9));">
+        <div class="saving-card-header">
+          <div class="saving-card-title-group">
+            <div class="saving-badge-row">
+              <span class="insurance-type-badge ${badgeClass}" style="${isTaxDeductible ? 'background:rgba(56,189,248,0.15);color:#38bdf8;' : 'background:rgba(16,185,129,0.15);color:#34d399;'}">${typeLabel}</span>
+              <span class="payment-status-badge ${badgeClass}" style="${isTaxDeductible ? 'background:rgba(56,189,248,0.15);color:#38bdf8;' : 'background:rgba(16,185,129,0.15);color:#34d399;'}">${statusLabel}</span>
+              <span class="saving-owner-badge">${html(a.owner || '모두')}</span>
+            </div>
+            <h3 class="saving-product-name">${html(a.name)}</h3>
+            <span class="saving-bank-name">${html(a.broker)}</span>
+          </div>
+          <div class="account-row-actions saving-card-actions">
+            <button class="account-action-button" data-account-id="${a.id}" title="계좌 정보 수정" type="button">✎</button>
+          </div>
+        </div>
+
+        <div class="saving-card-details">
+          <div class="saving-detail-row">
+            <span class="saving-detail-label">올해 납입액</span>
+            <span class="saving-detail-val" style="color:#38bdf8;font-weight:700;">₩${number(dep, 0)}</span>
+          </div>
+          <div class="saving-detail-row">
+            <span class="saving-detail-label">연간 납입한도</span>
+            <span class="saving-detail-val">₩18,000,000</span>
+          </div>
+          <div class="saving-detail-row" style="grid-column:1/-1;">
+            <span class="saving-detail-label">세액공제 한도</span>
+            <span class="saving-detail-val">${isTaxDeductible ? `연 ₩${number(baseLimit, 0)} (소득구간 ${rate}%)` : '<span style="color:#34d399;">비공제 (원금 비과세 인출 대상)</span>'}</span>
+          </div>
+        </div>
+
+        <div class="saving-interest-box" style="background:${isTaxDeductible ? 'rgba(56,189,248,0.08)' : 'rgba(16,185,129,0.08)'};border-color:${isTaxDeductible ? 'rgba(56,189,248,0.35)' : 'rgba(16,185,129,0.35)'};margin-top:8px;">
+          <div class="saving-interest-row">
+            <span style="color:${isTaxDeductible ? '#38bdf8' : '#34d399'};">세액공제 대상 금액</span>
+            <span style="color:#e2e8f0;font-weight:600;">₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 전환 추가 ₩${number(isaTarget, 0)})` : ''}</span>
+          </div>
+          <div class="saving-interest-row maturity-row" style="border-top:1px dashed ${isTaxDeductible ? 'rgba(56,189,248,0.3)' : 'rgba(16,185,129,0.3)'};padding-top:4px;margin-top:4px;">
+            <span style="color:${isTaxDeductible ? '#38bdf8' : '#34d399'};">예상 세금 절감(환급)액</span>
+            <span style="color:#4ade80;font-size:14px;font-weight:700;">${isTaxDeductible ? `+₩${number(refund, 0)} (${rate}%)` : '₩0 (원금 100% 비과세 인출)'}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const insuranceCardsHtml = filtered.map(ins => {
     const typeKey = ins.insurance_type || 'protection';
     const typeLabel = INSURANCE_TYPE_LABELS[typeKey] || '보험/공제';
     const statusKey = ins.payment_status || 'paying';
@@ -2128,6 +2215,8 @@ function renderInsuranceWithOwner(owner = '모두') {
       </div>
     `;
   }).join('');
+
+  grid.innerHTML = (pensionCardsHtml + insuranceCardsHtml) || '<div class="empty">등록된 보험/연금 상품이 없습니다.</div>';
 }
 
 function updateYellowUmbrellaFields() {
