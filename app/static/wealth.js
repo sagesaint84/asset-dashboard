@@ -5108,6 +5108,7 @@ async function saveNewAccount() {
       })
     });
     document.getElementById("accountAddDialog")?.close();
+    form.reset();
     toast(`[${account_name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} 계좌가 추가되었습니다.`);
     await loadDashboard();
   } catch (err) {

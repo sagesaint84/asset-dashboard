@@ -282,10 +282,13 @@ def get_dashboard(data: dict[str, Any] | None = None, username: str | None = Non
         acc_id = a["id"]
         acc_cash = cash_balances.get(acc_id)
         if not acc_cash and a.get("broker") == "토스증권" and toss_cash:
-            for seq_val in toss_cash.values():
-                if isinstance(seq_val, dict):
-                    acc_cash = seq_val
-                    break
+            if acc_id in toss_cash:
+                acc_cash = toss_cash[acc_id]
+            elif a.get("source") == "toss_api" or a.get("name") == "토스 일반 계좌":
+                for seq_val in toss_cash.values():
+                    if isinstance(seq_val, dict):
+                        acc_cash = seq_val
+                        break
         acc_cash = acc_cash or {}
         cash_krw = to_number(acc_cash.get("KRW"))
         cash_usd = to_number(acc_cash.get("USD"))
