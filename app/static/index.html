@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v538" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v540" />
   </head>
   <body>
     <main class="shell">
@@ -186,11 +186,11 @@
                 </div>
                 <div class="summary-row-val">
                   <strong id="summaryNetWorth" class="value-highlight" style="color:#ffffff;font-size:19px;font-weight:800;">₩0</strong>
-                  <small id="summaryTotalDebtCaption" style="color:#f43f5e;font-weight:700;display:block;margin-top:2px;">- 총 부채 ₩0</small>
+                  <small id="summaryTotalDebtCaption" style="color:#38bdf8;font-weight:700;display:block;margin-top:2px;">- 총 부채 ₩0</small>
                 </div>
               </div>
 
-              <!-- 2. 총 투자자산 -->
+              <!-- 2. 총 투자자산 (부동산 자가/임대 + 주식) -->
               <div class="summary-row featured">
                 <div class="summary-row-label">
                   <span class="card-icon mini">◈</span>
@@ -201,8 +201,6 @@
                   <div id="subAssetBreakdown" style="font-size:12px;color:#c4b5fd;margin-top:6px;line-height:1.6;display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
                     <span id="subRealEstateVal" style="color:#c4b5fd;display:block;">- 부동산 ₩0</span>
                     <span id="subStockVal" style="color:#c4b5fd;display:block;">- 주식 ₩0</span>
-                    <span id="subCashVal" style="color:#c4b5fd;display:block;">- 예수금 및 예금 ₩0</span>
-                    <span id="subInsuranceVal" style="color:#c4b5fd;display:block;">- 보험 ₩0</span>
                   </div>
                 </div>
               </div>
@@ -236,8 +234,8 @@
                     <strong id="summaryRealizedPnl" class="gain up" style="color:#f43f5e;font-weight:700;font-size:16px;">+₩0</strong>
                   </div>
                   <div style="margin-top:4px;font-size:12px;line-height:1.5;display:flex;flex-direction:column;align-items:flex-end;">
-                    <span id="summaryRealizedPnlYear" style="color:#c4b5fd;font-weight:600;display:block;">26년 +₩0</span>
-                    <span id="summaryRealizedPnlMonth" style="color:#c4b5fd;font-weight:600;display:block;">09월 +₩0</span>
+                    <span id="summaryRealizedPnlYear" style="color:#f43f5e;font-weight:700;display:block;">26년 +₩0</span>
+                    <span id="summaryRealizedPnlMonth" style="color:#f43f5e;font-weight:700;display:block;">09월 +₩0</span>
                   </div>
                 </div>
               </div>
@@ -253,8 +251,24 @@
                     <strong id="summaryActualDividend" style="color:#f8fafc;font-weight:700;font-size:16px;">₩0</strong>
                   </div>
                   <div style="margin-top:4px;font-size:12px;line-height:1.5;display:flex;flex-direction:column;align-items:flex-end;">
-                    <span id="summaryActualDivYear" style="color:#a78bfa;font-weight:600;display:block;">실제 26년 +₩0</span>
-                    <span id="summaryActualDivMonth" style="color:#a78bfa;font-weight:600;display:block;">실제 09월 +₩0</span>
+                    <span id="summaryActualDivYear" style="color:#a78bfa;font-weight:600;display:block;">26년 +₩0</span>
+                    <span id="summaryActualDivMonth" style="color:#a78bfa;font-weight:600;display:block;">09월 +₩0</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6. 안전자산 (예수금·예금, 임차보증금, 보험) -->
+              <div class="summary-row featured" id="safeAssetRow" style="background:rgba(52,211,153,0.06);border-left:3px solid #34d399;">
+                <div class="summary-row-label">
+                  <span class="card-icon mini" style="background:rgba(52,211,153,0.2);color:#34d399;">🛡️</span>
+                  <strong style="color:#ffffff;font-size:14.5px;">안전자산</strong>
+                </div>
+                <div class="summary-row-val">
+                  <strong id="summarySafeAssetVal" class="value-highlight" style="color:#ffffff;font-size:19px;font-weight:800;">₩0</strong>
+                  <div id="subSafeAssetBreakdown" style="font-size:12px;color:#86efac;margin-top:6px;line-height:1.6;display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+                    <span id="subSafeCashVal" style="color:#86efac;display:block;">- 예수금 및 예금 ₩0</span>
+                    <span id="subSafeLeaseVal" style="color:#86efac;display:block;">- 임차보증금 ₩0</span>
+                    <span id="subSafeInsuranceVal" style="color:#86efac;display:block;">- 보험 ₩0</span>
                   </div>
                 </div>
               </div>
@@ -2280,7 +2294,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260901-v538"></script>
+    <script src="/static/wealth.js?v=20260901-v540"></script>
   </body>
 </html>
 
