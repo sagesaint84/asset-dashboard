@@ -32,6 +32,7 @@ function selectOwner(owner) {
   loadActualDividends(currentOwner, selectedDividendYear);
   loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
   updateOverviewCardsAllTime(currentOwner);
+  loadLedger();
 }
 
 // ── 핵심 요약 패널의 실현손익 및 실제 배당금 전체 기간(All-Time) 갱신 ─────────
@@ -4133,6 +4134,7 @@ const FAMILY_TAB_CONTAINER_IDS = [
   'pnlFamilyTabs',
   'holdingsFamilyTabs',
   'familyTabs',
+  'ledgerFamilyTabs',
 ];
 
 function renderFamilyTabs(members) {
