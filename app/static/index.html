@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v520" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260831-v522" />
   </head>
   <body>
     <main class="shell">
@@ -1559,32 +1559,12 @@
 
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-    <!-- 테마 설정 (Theme Switcher) -->
-    <div class="theme-switcher-wrap">
-      <span class="theme-switcher-label">🎨 화면 테마 설정:</span>
-      <div class="theme-switcher-tabs" id="themeSwitcherTabs">
-        <button type="button" class="theme-tab active" data-theme="purple">🟣 퍼플 (시그니처 기본)</button>
-        <button type="button" class="theme-tab" data-theme="oled">🖤 클래식 다크 (OLED BLACK)</button>
-        <button type="button" class="theme-tab" data-theme="white">⚪ 모던 화이트 (CLEAN WHITE)</button>
-      </div>
-    </div>
-
-    <div class="bottom-actions" style="text-align:center; margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; padding-bottom:8px;">
-      <button id="exportButton" class="button secondary" type="button" style="font-size:14px;">💾 데이터 저장하기</button>
-      <button id="importBackupBtn" class="button secondary" type="button" style="font-size:14px;">📂 데이터 불러오기</button>
-      <button id="clearButton" class="button secondary danger" type="button" style="font-size:14px;">🗑️ 데이터 지우기</button>
-      <input id="importBackupFile" type="file" accept=".json" style="display:none;" />
-    </div>
-    <div style="text-align:center; padding-bottom:28px;">
-      <p id="updatedAt" class="muted" style="margin:0;font-size:12px;opacity:0.75;">데이터를 불러오는 중입니다.</p>
-    </div>
   </div><!-- end of userAssetDashboardWrapper -->
 
   <!-- ======================================================================= -->
   <!-- 📒 스마트 가족 가계부 메인 래퍼 (HOUSEHOLD LEDGER MODULE)               -->
   <!-- ======================================================================= -->
-  <div id="userLedgerWrapper" style="display:none;margin-top:16px;">
+  <div id="userLedgerWrapper" style="display:none;margin:16px auto 0;max-width:1360px;width:100%;box-sizing:border-box;">
     <!-- 1. 월 컨트롤러 및 액션 툴바 -->
     <section class="panel" style="padding:16px 20px;border:1px solid #1e293b;background:linear-gradient(145deg, #0d1527, #0b1020);">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
@@ -1688,6 +1668,31 @@
       </div>
     </section>
   </div><!-- end of userLedgerWrapper -->
+
+  <!-- ======================================================================= -->
+  <!-- ⚙️ 공통 최하단 푸터: 테마 설정 & 데이터 백업 관리                     -->
+  <!-- ======================================================================= -->
+  <footer id="appCommonFooter" style="margin-top:28px;padding-bottom:28px;">
+    <!-- 테마 설정 (Theme Switcher) -->
+    <div class="theme-switcher-wrap">
+      <span class="theme-switcher-label">🎨 화면 테마 설정:</span>
+      <div class="theme-switcher-tabs" id="themeSwitcherTabs">
+        <button type="button" class="theme-tab active" data-theme="purple">🟣 퍼플 (시그니처 기본)</button>
+        <button type="button" class="theme-tab" data-theme="oled">🖤 클래식 다크 (OLED BLACK)</button>
+        <button type="button" class="theme-tab" data-theme="white">⚪ 모던 화이트 (CLEAN WHITE)</button>
+      </div>
+    </div>
+
+    <div class="bottom-actions" style="text-align:center; margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; padding-bottom:8px;">
+      <button id="exportButton" class="button secondary" type="button" style="font-size:14px;">💾 데이터 저장하기</button>
+      <button id="importBackupBtn" class="button secondary" type="button" style="font-size:14px;">📂 데이터 불러오기</button>
+      <button id="clearButton" class="button secondary danger" type="button" style="font-size:14px;">🗑️ 데이터 지우기</button>
+      <input id="importBackupFile" type="file" accept=".json" style="display:none;" />
+    </div>
+    <div style="text-align:center;">
+      <p id="updatedAt" class="muted" style="margin:0;font-size:12px;opacity:0.75;">데이터를 불러오는 중입니다.</p>
+    </div>
+  </footer>
 
   <!-- 가계부 단건 등록/수정 다이얼로그 -->
   <dialog id="ledgerTxDialog" class="dialog" style="max-width:540px;width:95vw;">
@@ -2252,7 +2257,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260831-v520"></script>
+    <script src="/static/wealth.js?v=20260831-v522"></script>
   </body>
 </html>
 
