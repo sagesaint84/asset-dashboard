@@ -194,19 +194,87 @@ def get_ledger_summary(
     }
 
 
+def _apply_account_balance_delta(
+    acc_id: str | None,
+    delta: float,
+    username: str | None = None,
+) -> bool:
+    """Adjust balance of a linked bank account, savings account, or brokerage account."""
+    if not acc_id or abs(delta) < 1e-6:
+        return False
+    try:
+        from app.services.portfolio import read_portfolio, write_portfolio
+        pf = read_portfolio(username)
+        applied = False
+
+        # 1. Bank accounts
+        for b in pf.get("bank_accounts", []):
+            if b.get("id") == acc_id:
+                curr = float(b.get("balance") or 0.0)
+                b["balance"] = max(0.0, curr + delta)
+                b["updated_at"] = datetime.now().astimezone().isoformat()
+                applied = True
+                break
+
+        # 2. Savings accounts
+        if not applied:
+            for s in pf.get("savings_accounts", []):
+                if s.get("id") == acc_id:
+                    curr = float(s.get("balance") or 0.0)
+                    s["balance"] = max(0.0, curr + delta)
+                    s["updated_at"] = datetime.now().astimezone().isoformat()
+                    applied = True
+                    break
+
+        # 3. Brokerage accounts
+        if not applied:
+            for a in pf.get("accounts", []):
+                if a.get("id") == acc_id:
+                    curr = float(a.get("cash") or 0.0)
+                    a["cash"] = max(0.0, curr + delta)
+                    # Also update settings.cash_balances if exists
+                    settings = pf.setdefault("settings", {})
+                    cb = settings.setdefault("cash_balances", {})
+                    if acc_id in cb and isinstance(cb[acc_id], dict):
+                        cb[acc_id]["krw"] = max(0.0, float(cb[acc_id].get("krw") or 0.0) + delta)
+                    applied = True
+                    break
+
+        if applied:
+            write_portfolio(pf, username)
+            return True
+    except Exception as e:
+        print(f"Error applying balance delta for account {acc_id}: {e}")
+    return False
+
+
 def add_transaction(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
     data = read_ledger(username=username)
     tx_id = payload.get("id") or str(uuid.uuid4())
+    tx_type = str(payload.get("type") or "expense")
+    amount = max(0.0, float(payload.get("amount") or 0.0))
+    linked_acc_id = str(payload.get("account_id") or "").strip()
+    linked_acc_name = str(payload.get("account_name") or "").strip()
+    apply_to_account = bool(payload.get("apply_to_account", False) or linked_acc_id)
+
+    # Calculate delta for account balance
+    # income -> +amount, expense -> -amount, transfer -> -amount
+    applied_delta = 0.0
+    if apply_to_account and linked_acc_id and amount > 0:
+        applied_delta = amount if tx_type == "income" else -amount
+        _apply_account_balance_delta(linked_acc_id, applied_delta, username=username)
+
     tx = {
         "id": tx_id,
         "date": str(payload.get("date") or date.today().isoformat()),
-        "type": str(payload.get("type") or "expense"),
-        "amount": max(0.0, float(payload.get("amount") or 0.0)),
+        "type": tx_type,
+        "amount": amount,
         "category": str(payload.get("category") or "식비/외식"),
         "owner": str(payload.get("owner") or "모두"),
         "pay_method": str(payload.get("pay_method") or "신용/체크카드"),
-        "account_id": str(payload.get("account_id") or ""),
-        "account_name": str(payload.get("account_name") or ""),
+        "account_id": linked_acc_id,
+        "account_name": linked_acc_name,
+        "applied_delta": applied_delta,
         "merchant": str(payload.get("merchant") or payload.get("description") or "").strip(),
         "memo": str(payload.get("memo") or "").strip(),
         "is_recurring": bool(payload.get("is_recurring", False)),
@@ -221,16 +289,34 @@ def update_transaction(tx_id: str, payload: dict[str, Any], username: str | None
     data = read_ledger(username=username)
     for idx, tx in enumerate(data.get("transactions", [])):
         if tx.get("id") == tx_id:
+            old_delta = float(tx.get("applied_delta") or 0.0)
+            old_acc_id = tx.get("account_id")
+
+            # 1. Rollback old balance delta if existed
+            if old_acc_id and abs(old_delta) > 1e-6:
+                _apply_account_balance_delta(old_acc_id, -old_delta, username=username)
+
             for k in ["date", "type", "category", "owner", "pay_method", "account_id", "account_name", "merchant", "memo", "is_recurring"]:
                 if k in payload:
-                    if k == "amount":
-                        tx[k] = max(0.0, float(payload[k]))
-                    elif k == "is_recurring":
+                    if k == "is_recurring":
                         tx[k] = bool(payload[k])
                     else:
-                        tx[k] = payload[k]
+                        tx[k] = str(payload[k]).strip() if payload[k] is not None else ""
             if "amount" in payload:
                 tx["amount"] = max(0.0, float(payload["amount"]))
+
+            # 2. Apply new delta
+            new_acc_id = str(tx.get("account_id") or "").strip()
+            new_amount = float(tx.get("amount") or 0.0)
+            new_type = str(tx.get("type") or "expense")
+            apply_to_account = bool(payload.get("apply_to_account", False) or new_acc_id)
+
+            new_delta = 0.0
+            if apply_to_account and new_acc_id and new_amount > 0:
+                new_delta = new_amount if new_type == "income" else -new_amount
+                _apply_account_balance_delta(new_acc_id, new_delta, username=username)
+
+            tx["applied_delta"] = new_delta
             tx["updated_at"] = datetime.now().isoformat()
             data["transactions"][idx] = tx
             write_ledger(data, username=username)
@@ -241,6 +327,15 @@ def update_transaction(tx_id: str, payload: dict[str, Any], username: str | None
 def delete_transaction(tx_id: str, username: str | None = None) -> bool:
     data = read_ledger(username=username)
     before = len(data.get("transactions", []))
+    target_tx = next((t for t in data.get("transactions", []) if t.get("id") == tx_id), None)
+
+    # Rollback account balance delta if existed
+    if target_tx:
+        old_delta = float(target_tx.get("applied_delta") or 0.0)
+        old_acc_id = target_tx.get("account_id")
+        if old_acc_id and abs(old_delta) > 1e-6:
+            _apply_account_balance_delta(old_acc_id, -old_delta, username=username)
+
     data["transactions"] = [t for t in data.get("transactions", []) if t.get("id") != tx_id]
     after = len(data["transactions"])
     if before != after:
