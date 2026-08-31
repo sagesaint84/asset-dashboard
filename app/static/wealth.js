@@ -932,8 +932,8 @@ function renderSummary(data) {
   });
 
   const totalAllDebt = totalPureDebt + totalMinusBankDebt + totalLandlordDepositDebt;
-  const grossAssets = totalInvestVal + totalPositiveBankVal + totalSavingVal + totalREVal + totalTenantDepositVal + insuranceTotal;
-  const netWorth = grossAssets - totalAllDebt;
+  const totalInvestAll = totalREEquity + totalStockVal + totalAllCash + insuranceTotal;
+  const netWorth = totalInvestAll - (totalPureDebt + totalMinusBankDebt);
 
   // 1. 순자산 (흰색) & 총 부채 (붉은색)
   if ($("#summaryNetWorth")) $("#summaryNetWorth").textContent = money(netWorth);
@@ -943,8 +943,8 @@ function renderSummary(data) {
       : `- 부채 ₩0`;
   }
 
-  // 2. 총 투자자산 (흰색) & 4대 세부 자산 (연보라)
-  if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestVal);
+  // 2. 총 투자자산 (흰색) & 4대 세부 자산 (연보라 4줄)
+  if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestAll);
   if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `- 부동산 ${money(totalREEquity)}`;
   if ($("#subStockVal")) $("#subStockVal").textContent = `- 주식 ${money(totalStockVal)}`;
   if ($("#subCashVal")) $("#subCashVal").textContent = `- 예수금 및 예금 ${money(totalAllCash)}`;
