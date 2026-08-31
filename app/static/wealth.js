@@ -4868,6 +4868,10 @@ async function saveEditAccount() {
   const form = document.getElementById("accountEditForm");
   if (!form) return;
   const accountId = form.dataset.accountId;
+  if (!accountId) {
+    toast("계좌 ID를 찾을 수 없습니다. 다시 시도해 주세요.", true);
+    return;
+  }
   const broker = (form.querySelector("[name='broker']")?.value || "").trim();
   const name = (form.querySelector("[name='name']")?.value || "").trim();
   const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
@@ -4885,6 +4889,9 @@ async function saveEditAccount() {
   }
 
   isSubmittingEditAccount = true;
+  const saveBtn = document.getElementById("accountEditSaveBtn");
+  if (saveBtn) busy(saveBtn, true);
+
   try {
     const res = await api(`/api/accounts/${accountId}`, {
       method: "PUT",
@@ -4908,6 +4915,7 @@ async function saveEditAccount() {
     toast(err.message, true);
   } finally {
     isSubmittingEditAccount = false;
+    if (saveBtn) busy(saveBtn, false);
   }
 }
 

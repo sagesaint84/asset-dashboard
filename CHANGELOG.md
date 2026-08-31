@@ -1,3 +1,11 @@
+v5.0.3
+
+(fix) 🛡️ 계좌 정보 수정 시 busy 상태 피드백, 유효성 검사 및 실시간 UI 갱신 완비
+- **계좌 정보 수정 프로세스 불릿프루프 강화**:
+  - `saveEditAccount` 실행 시 버튼 `busy` 상태 처리로 중복 클릭 방지 및 시각 피드백 제공
+  - `tax_deductible`, `annual_deposit`, `income_level` 등 모든 변경 사항을 즉시 PUT 요청 및 대시보드 리로드 연동
+(perf) 서비스 워커 캐시 버전(wealth-cache-v53) 및 정적 자산 쿼리(v503) 갱신
+
 v5.0.1
 
 (fix) 🎯 계좌 정보 수정 버튼에 명시적 인라인 이벤트 핸들러(onclick) 바인딩 및 전역 노출
