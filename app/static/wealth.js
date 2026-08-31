@@ -4687,12 +4687,12 @@ $("#accountList")?.addEventListener("click", async (e) => {
   const editBtn = e.target.closest("[data-account-id]");
   const delBtn = e.target.closest("[data-account-del-id]");
   if (cashBtn) {
-    const acct = dashboard?.accounts?.find(a => a.id === cashBtn.dataset.cashId);
+    const acct = (dashboard?.accounts || []).find(a => a.id === cashBtn.dataset.cashId) || (rawDashboard?.accounts || []).find(a => a.id === cashBtn.dataset.cashId);
     if (acct) openAccountCashDialog(acct);
     return;
   }
   if (editBtn) {
-    const acct = dashboard?.accounts?.find(a => a.id === editBtn.dataset.accountId);
+    const acct = (dashboard?.accounts || []).find(a => a.id === editBtn.dataset.accountId) || (rawDashboard?.accounts || []).find(a => a.id === editBtn.dataset.accountId);
     if (acct) openAccountEditDialog(acct);
     return;
   }
@@ -4862,14 +4862,12 @@ $("#accountCashForm")?.addEventListener("submit", async (e) => {
   }
 });
 
-let isSubmittingEditAccount = false;
 async function saveEditAccount() {
-  if (isSubmittingEditAccount) return;
   const form = document.getElementById("accountEditForm");
   if (!form) return;
   const accountId = form.dataset.accountId;
   if (!accountId) {
-    toast("계좌 ID를 찾을 수 없습니다. 다시 시도해 주세요.", true);
+    alert("계좌 식별자(ID)를 찾을 수 없습니다. 다시 시도해 주세요.");
     return;
   }
   const broker = (form.querySelector("[name='broker']")?.value || "").trim();
@@ -4884,15 +4882,36 @@ async function saveEditAccount() {
   const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
   if (!broker || !name) {
-    toast("증권사와 계좌 이름을 모두 입력해 주세요.", true);
+    alert("증권사와 계좌 이름을 모두 입력해 주세요.");
     return;
   }
 
-  isSubmittingEditAccount = true;
   const saveBtn = document.getElementById("accountEditSaveBtn");
   if (saveBtn) busy(saveBtn, true);
 
   try {
+    // 1. 메모리 데이터 즉시 갱신 (Optimistic Update)
+    if (rawDashboard && Array.isArray(rawDashboard.accounts)) {
+      const localAcct = rawDashboard.accounts.find(a => a.id === accountId);
+      if (localAcct) {
+        localAcct.broker = broker;
+        localAcct.name = name;
+        localAcct.owner = owner;
+        localAcct.account_type = account_type;
+        localAcct.tax_deductible = isDeductible;
+        localAcct.income_level = income_level;
+        localAcct.annual_deposit = annual_deposit;
+        localAcct.isa_transfer_amount = isa_transfer_amount;
+        localAcct.isa_transfer_year = isa_transfer_year;
+      }
+    }
+    // 2. 화면 즉시 재렌더링
+    if (rawDashboard) renderWithOwner(rawDashboard, currentOwner);
+
+    // 3. 다이얼로그 즉시 닫기
+    document.getElementById("accountEditDialog")?.close();
+
+    // 4. 서버 PUT API 전송
     const res = await api(`/api/accounts/${accountId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -4908,20 +4927,20 @@ async function saveEditAccount() {
         isa_transfer_year
       })
     });
-    document.getElementById("accountEditDialog")?.close();
+
     toast(`[${name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} (납입 ₩${number(annual_deposit, 0)}) 저장되었습니다.`);
     await loadDashboard();
   } catch (err) {
+    console.error("계좌 수정 오류:", err);
+    alert(`계좌 정보 저장 중 오류가 발생했습니다: ${err.message}`);
     toast(err.message, true);
+    await loadDashboard();
   } finally {
-    isSubmittingEditAccount = false;
     if (saveBtn) busy(saveBtn, false);
   }
 }
 
-let isSubmittingAccount = false;
 async function saveNewAccount() {
-  if (isSubmittingAccount) return;
   const form = document.getElementById("accountAddForm");
   if (!form) return;
   const broker = (form.querySelector("[name='broker']")?.value || "").trim();
@@ -4935,11 +4954,13 @@ async function saveNewAccount() {
   const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
   if (!broker || !account_name) {
-    toast("증권사와 계좌 이름을 모두 입력해 주세요.", true);
+    alert("증권사와 계좌 이름을 모두 입력해 주세요.");
     return;
   }
 
-  isSubmittingAccount = true;
+  const saveBtn = document.getElementById("accountAddSaveBtn");
+  if (saveBtn) busy(saveBtn, true);
+
   try {
     const res = await api("/api/accounts", {
       method: "POST",
@@ -4961,9 +4982,11 @@ async function saveNewAccount() {
     toast(`[${account_name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} 계좌가 추가되었습니다.`);
     await loadDashboard();
   } catch (err) {
+    console.error("계좌 추가 오류:", err);
+    alert(`계좌 추가 중 오류가 발생했습니다: ${err.message}`);
     toast(err.message, true);
   } finally {
-    isSubmittingAccount = false;
+    if (saveBtn) busy(saveBtn, false);
   }
 }
 
