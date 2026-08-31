@@ -6902,7 +6902,8 @@ const SECTION_MAP = {
   pnl: '#realizedPnlPanel',
   market: '#marketPanel',
   accounts: '#accountsPanel',
-  holdings: '#holdingsPanel'
+  holdings: '#holdingsPanel',
+  ledger: '#ledgerSectionPanel'
 };
 
 function getCollapsedSections() {

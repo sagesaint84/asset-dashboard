@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v542" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v544" />
   </head>
   <body>
     <main class="shell">
@@ -295,13 +295,13 @@
         </div>
       </section>
 
-      <!-- 2. 자산기록 -->
+      <!-- 3. 기록 (구 자산기록) -->
       <section id="recordsPanel" class="panel records-panel">
         <div class="panel-head records-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <div>
               <p class="eyebrow">ASSET RECORDS</p>
-              <h2>자산기록 <button type="button" class="section-collapse-btn" data-section="records" title="접기/펼치기" aria-label="자산기록 접기/펼치기">▼</button></h2>
+              <h2>기록 <button type="button" class="section-collapse-btn" data-section="records" title="접기/펼치기" aria-label="기록 접기/펼치기">▼</button></h2>
             </div>
             <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
             <div class="family-tabs" id="recordsFamilyTabs" style="margin-left:4px;"></div>
@@ -332,13 +332,13 @@
         </div>
       </section>
 
-      <!-- 3. 포트폴리오 히트맵 (기간별: 일간/주간/월간/연초부터/연간/진입가 + 색상 테마 선택) -->
+      <!-- 4. 히트맵 (구 자산 히트맵) -->
       <section id="assetHeatmapPanel" class="panel heatmap-panel">
         <div class="panel-head heatmap-head">
           <div class="heatmap-title-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <div>
               <p class="eyebrow">PORTFOLIO HEATMAP</p>
-              <h2>자산 히트맵 <button type="button" class="section-collapse-btn" data-section="heatmap" title="접기/펼치기" aria-label="자산 히트맵 접기/펼치기">▼</button></h2>
+              <h2>히트맵 <button type="button" class="section-collapse-btn" data-section="heatmap" title="접기/펼치기" aria-label="히트맵 접기/펼치기">▼</button></h2>
             </div>
             <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
             <div class="family-tabs" id="heatmapFamilyTabs" style="margin-left:4px;"></div>
@@ -388,149 +388,13 @@
         </div>
       </section>
 
-      <!-- 3.5 배당금 -->
-      <section id="dividendPanel" class="panel dividend-panel">
-        <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
-          <div class="dividend-title-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div>
-              <p class="eyebrow">DIVIDEND</p>
-              <h2>배당금 <button type="button" class="section-collapse-btn" data-section="dividend" title="접기/펼치기" aria-label="배당금 접기/펼치기">▼</button></h2>
-            </div>
-            <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
-            <div class="family-tabs" id="dividendFamilyTabs" style="margin-left:4px;"></div>
-          </div>
-          <div class="heatmap-period-tabs" id="dividendModeTabs" style="margin-left:8px;">
-            <button type="button" class="heatmap-tab active" data-div-mode="estimated">🔮 예상</button>
-            <button type="button" class="heatmap-tab" data-div-mode="actual">💵 실제</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
-            <select id="dividendYearSelect" class="heatmap-select" style="min-width:90px;font-size:12px;" aria-label="배당 연도 선택">
-              <option value="2026">2026년</option>
-              <option value="all">전체 기간</option>
-            </select>
-          </div>
-          <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
-            <button id="refreshDividendBtn" class="button secondary compact" type="button" title="배당 정보 재조회">↻ 조회</button>
-            <button id="addDividendBtn" class="button secondary compact" type="button" title="실제 입금 배당금 추가" style="display:none;">➕ 배당 추가</button>
-            <button id="importDividendBtn" class="button secondary compact" type="button" title="실제 배당금 엑셀 가져오기" style="display:none;">📂 가져오기</button>
-            <button id="clearAllDividendBtn" class="button secondary danger compact" type="button" title="실제 배당금 전체 일괄 삭제" style="display:none;">🗑️ 일괄삭제</button>
-          </div>
-        </div>
-
-        <div class="dividend-body">
-          <!-- 상단 배당 4대 요약 카드 -->
-          <div class="dividend-summary-cards">
-            <div class="div-summary-card">
-              <span class="div-card-label" id="divCardLabel1">연간 예상 배당금</span>
-              <strong id="divTotalAnnual" class="div-card-val">₩0</strong>
-              <small id="divTotalAnnualUsd" class="muted">$0.00 환산 포함</small>
-            </div>
-            <div class="div-summary-card">
-              <span class="div-card-label" id="divCardLabel2">포트폴리오 배당수익률</span>
-              <strong id="divYield" class="div-card-val gain">0.00%</strong>
-              <small id="divYieldSub" class="muted">총 평가금액 대비</small>
-            </div>
-            <div class="div-summary-card">
-              <span class="div-card-label" id="divCardLabel3">월평균 예상 배당금</span>
-              <strong id="divMonthlyAvg" class="div-card-val">₩0</strong>
-              <small class="muted">연간 배당금 ÷ 12개월</small>
-            </div>
-            <div class="div-summary-card">
-              <span class="div-card-label" id="divCardLabel4">배당 지급 종목 수</span>
-              <strong id="divPayingCount" class="div-card-val">0개</strong>
-              <small id="divTotalHoldings" class="muted">전체 0개 종목 중</small>
-            </div>
-          </div>
-
-          <!-- 1월~12월 월별 예상/실제 배당금 막대그래프 -->
-          <div class="dividend-chart-section">
-            <div class="dividend-chart-header">
-              <span id="dividendChartTitle">📊 1월 ~ 12월 월별 예상 배당금 추이</span>
-              <small class="muted">막대를 클릭하면 해당 월의 배당 내역을 확인할 수 있습니다.</small>
-            </div>
-            <div id="dividendBarChartWrap" class="dividend-chart-wrap"></div>
-          </div>
-
-          <!-- 선택 월별 배당 상세 목록 -->
-          <div id="dividendMonthlyDetail" class="dividend-detail-wrap"></div>
-        </div>
-      </section>
-
-      <!-- 3.7 실현손익 -->
-      <section id="realizedPnlPanel" class="panel dividend-panel pnl-panel">
-        <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
-          <div class="dividend-title-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div>
-              <p class="eyebrow">PROFIT & LOSS</p>
-              <h2>실현손익 <button type="button" class="section-collapse-btn" data-section="pnl" title="접기/펼치기" aria-label="실현손익 접기/펼치기">▼</button></h2>
-            </div>
-            <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
-            <div class="family-tabs" id="pnlFamilyTabs" style="margin-left:4px;"></div>
-          </div>
-          <div class="heatmap-period-tabs" id="pnlTradeTypeTabs" style="margin-left:8px;">
-            <button type="button" class="heatmap-tab active" data-trade-type="all">🏢 전체</button>
-            <button type="button" class="heatmap-tab" data-trade-type="ipo">📦 공모주</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
-            <select id="pnlYearSelect" class="heatmap-select" style="min-width:90px;font-size:12px;" aria-label="실현손익 연도 선택">
-              <option value="2026">2026년</option>
-              <option value="all">전체 기간</option>
-            </select>
-          </div>
-          <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
-            <button id="addPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 추가">➕ 손익 추가</button>
-            <button id="importPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 엑셀 가져오기">📂 가져오기</button>
-            <button id="clearAllPnlBtn" class="button secondary danger compact" type="button" title="매도 실현손익 전체 일괄 삭제">🗑️ 일괄삭제</button>
-          </div>
-        </div>
-
-        <div class="dividend-body">
-          <!-- 상단 실현손익 4대 요약 카드 -->
-          <div class="dividend-summary-cards">
-            <div class="div-summary-card">
-              <span class="div-card-label">총 실현손익</span>
-              <strong id="pnlTotal" class="div-card-val">₩0</strong>
-              <small id="pnlTotalCount" class="muted">총 0건 매도</small>
-            </div>
-            <div class="div-summary-card">
-              <span class="div-card-label">수익 실현 합계</span>
-              <strong id="pnlTotalWin" class="div-card-val gain">+₩0</strong>
-              <small id="pnlWinCount" class="muted">0건 실현</small>
-            </div>
-            <div class="div-summary-card">
-              <span class="div-card-label">손실 실현 합계</span>
-              <strong id="pnlTotalLoss" class="div-card-val loss">-₩0</strong>
-              <small id="pnlLossCount" class="muted">0건 실현</small>
-            </div>
-            <div class="div-summary-card">
-              <span class="div-card-label">매도 승률 (Win Rate)</span>
-              <strong id="pnlWinRate" class="div-card-val">0.0%</strong>
-              <small class="muted">수익 건수 비율</small>
-            </div>
-          </div>
-
-          <!-- 1월~12월 월별 실현손익 막대그래프 -->
-          <div class="dividend-chart-section">
-            <div class="dividend-chart-header">
-              <span id="pnlChartTitle">📊 1월 ~ 12월 월별 매도 실현손익 추이</span>
-              <small class="muted">막대를 클릭하면 해당 월의 매도 손익 내역을 확인할 수 있습니다.</small>
-            </div>
-            <div id="pnlBarChartWrap" class="dividend-chart-wrap"></div>
-          </div>
-
-          <!-- 선택 월별 실현손익 상세 목록 -->
-          <div id="pnlMonthlyDetail" class="dividend-detail-wrap"></div>
-        </div>
-      </section>
-
-
-      <!-- 5. 계좌 (증권 / 은행 / 보험 통합 섹션) -->
+      <!-- 5. 자산 (구 계좌 - 증권 / 은행 / 보험 / 부동산 통합 섹션) -->
       <section id="accountsPanel" class="panel">
         <div class="account-panel-head-row">
           <div class="panel-head" style="flex-wrap:wrap;gap:0.5rem;display:flex;align-items:center;">
             <div>
               <p class="eyebrow">ACCOUNTS & WEALTH</p>
-              <h2>계좌 <button type="button" class="section-collapse-btn" data-section="accounts" title="접기/펼치기" aria-label="계좌 접기/펼치기">▼</button></h2>
+              <h2>자산 <button type="button" class="section-collapse-btn" data-section="accounts" title="접기/펼치기" aria-label="자산 접기/펼치기">▼</button></h2>
             </div>
 
             <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
@@ -538,7 +402,7 @@
               <button type="button" class="family-tab active" data-owner="모두">모두</button>
             </div>
 
-            <!-- 3대 금융자산 분류 탭 (증권 / 은행 / 보험) -->
+            <!-- 4대 자산 분류 탭 (증권 / 은행 / 보험 / 부동산) -->
             <div class="account-category-tabs" style="display:flex;gap:6px;align-items:center;margin-left:8px;flex-wrap:wrap;">
               <button type="button" class="account-cat-tab active" data-cat="securities">📈 증권 (<span id="securitiesTabCount">0</span>)</button>
               <button type="button" class="account-cat-tab" data-cat="banking">🏦 은행 (<span id="bankingTabCount">0</span>)</button>
@@ -695,6 +559,141 @@
           </div>
 
 
+        </div>
+      </section>
+
+      <!-- 6. 실현손익 -->
+      <section id="realizedPnlPanel" class="panel dividend-panel pnl-panel">
+        <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
+          <div class="dividend-title-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div>
+              <p class="eyebrow">PROFIT & LOSS</p>
+              <h2>실현손익 <button type="button" class="section-collapse-btn" data-section="pnl" title="접기/펼치기" aria-label="실현손익 접기/펼치기">▼</button></h2>
+            </div>
+            <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
+            <div class="family-tabs" id="pnlFamilyTabs" style="margin-left:4px;"></div>
+          </div>
+          <div class="heatmap-period-tabs" id="pnlTradeTypeTabs" style="margin-left:8px;">
+            <button type="button" class="heatmap-tab active" data-trade-type="all">🏢 전체</button>
+            <button type="button" class="heatmap-tab" data-trade-type="ipo">📦 공모주</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+            <select id="pnlYearSelect" class="heatmap-select" style="min-width:90px;font-size:12px;" aria-label="실현손익 연도 선택">
+              <option value="2026">2026년</option>
+              <option value="all">전체 기간</option>
+            </select>
+          </div>
+          <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+            <button id="addPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 추가">➕ 손익 추가</button>
+            <button id="importPnlBtn" class="button secondary compact" type="button" title="매도 실현손익 엑셀 가져오기">📂 가져오기</button>
+            <button id="clearAllPnlBtn" class="button secondary danger compact" type="button" title="매도 실현손익 전체 일괄 삭제">🗑️ 일괄삭제</button>
+          </div>
+        </div>
+
+        <div class="dividend-body">
+          <!-- 상단 실현손익 4대 요약 카드 -->
+          <div class="dividend-summary-cards">
+            <div class="div-summary-card">
+              <span class="div-card-label">총 실현손익</span>
+              <strong id="pnlTotal" class="div-card-val">₩0</strong>
+              <small id="pnlTotalCount" class="muted">총 0건 매도</small>
+            </div>
+            <div class="div-summary-card">
+              <span class="div-card-label">수익 실현 합계</span>
+              <strong id="pnlTotalWin" class="div-card-val gain">+₩0</strong>
+              <small id="pnlWinCount" class="muted">0건 실현</small>
+            </div>
+            <div class="div-summary-card">
+              <span class="div-card-label">손실 실현 합계</span>
+              <strong id="pnlTotalLoss" class="div-card-val loss">-₩0</strong>
+              <small id="pnlLossCount" class="muted">0건 실현</small>
+            </div>
+            <div class="div-summary-card">
+              <span class="div-card-label">매도 승률 (Win Rate)</span>
+              <strong id="pnlWinRate" class="div-card-val">0.0%</strong>
+              <small class="muted">수익 건수 비율</small>
+            </div>
+          </div>
+
+          <!-- 1월~12월 월별 실현손익 막대그래프 -->
+          <div class="dividend-chart-section">
+            <div class="dividend-chart-header">
+              <span id="pnlChartTitle">📊 1월 ~ 12월 월별 매도 실현손익 추이</span>
+              <small class="muted">막대를 클릭하면 해당 월의 매도 손익 내역을 확인할 수 있습니다.</small>
+            </div>
+            <div id="pnlBarChartWrap" class="dividend-chart-wrap"></div>
+          </div>
+
+          <!-- 선택 월별 실현손익 상세 목록 -->
+          <div id="pnlMonthlyDetail" class="dividend-detail-wrap"></div>
+        </div>
+      </section>
+
+      <!-- 7. 배당금 -->
+      <section id="dividendPanel" class="panel dividend-panel">
+        <div class="panel-head dividend-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
+          <div class="dividend-title-wrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div>
+              <p class="eyebrow">DIVIDEND</p>
+              <h2>배당금 <button type="button" class="section-collapse-btn" data-section="dividend" title="접기/펼치기" aria-label="배당금 접기/펼치기">▼</button></h2>
+            </div>
+            <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
+            <div class="family-tabs" id="dividendFamilyTabs" style="margin-left:4px;"></div>
+          </div>
+          <div class="heatmap-period-tabs" id="dividendModeTabs" style="margin-left:8px;">
+            <button type="button" class="heatmap-tab active" data-div-mode="estimated">🔮 예상</button>
+            <button type="button" class="heatmap-tab" data-div-mode="actual">💵 실제</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+            <select id="dividendYearSelect" class="heatmap-select" style="min-width:90px;font-size:12px;" aria-label="배당 연도 선택">
+              <option value="2026">2026년</option>
+              <option value="all">전체 기간</option>
+            </select>
+          </div>
+          <div class="toolbar" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+            <button id="refreshDividendBtn" class="button secondary compact" type="button" title="배당 정보 재조회">↻ 조회</button>
+            <button id="addDividendBtn" class="button secondary compact" type="button" title="실제 입금 배당금 추가" style="display:none;">➕ 배당 추가</button>
+            <button id="importDividendBtn" class="button secondary compact" type="button" title="실제 배당금 엑셀 가져오기" style="display:none;">📂 가져오기</button>
+            <button id="clearAllDividendBtn" class="button secondary danger compact" type="button" title="실제 배당금 전체 일괄 삭제" style="display:none;">🗑️ 일괄삭제</button>
+          </div>
+        </div>
+
+        <div class="dividend-body">
+          <!-- 상단 배당 4대 요약 카드 -->
+          <div class="dividend-summary-cards">
+            <div class="div-summary-card">
+              <span class="div-card-label" id="divCardLabel1">연간 예상 배당금</span>
+              <strong id="divTotalAnnual" class="div-card-val">₩0</strong>
+              <small id="divTotalAnnualUsd" class="muted">$0.00 환산 포함</small>
+            </div>
+            <div class="div-summary-card">
+              <span class="div-card-label" id="divCardLabel2">포트폴리오 배당수익률</span>
+              <strong id="divYield" class="div-card-val gain">0.00%</strong>
+              <small id="divYieldSub" class="muted">총 평가금액 대비</small>
+            </div>
+            <div class="div-summary-card">
+              <span class="div-card-label" id="divCardLabel3">월평균 예상 배당금</span>
+              <strong id="divMonthlyAvg" class="div-card-val">₩0</strong>
+              <small class="muted">연간 배당금 ÷ 12개월</small>
+            </div>
+            <div class="div-summary-card">
+              <span class="div-card-label" id="divCardLabel4">배당 지급 종목 수</span>
+              <strong id="divPayingCount" class="div-card-val">0개</strong>
+              <small id="divTotalHoldings" class="muted">전체 0개 종목 중</small>
+            </div>
+          </div>
+
+          <!-- 1월~12월 월별 예상/실제 배당금 막대그래프 -->
+          <div class="dividend-chart-section">
+            <div class="dividend-chart-header">
+              <span id="dividendChartTitle">📊 1월 ~ 12월 월별 예상 배당금 추이</span>
+              <small class="muted">막대를 클릭하면 해당 월의 배당 내역을 확인할 수 있습니다.</small>
+            </div>
+            <div id="dividendBarChartWrap" class="dividend-chart-wrap"></div>
+          </div>
+
+          <!-- 선택 월별 배당 상세 목록 -->
+          <div id="dividendMonthlyDetail" class="dividend-detail-wrap"></div>
         </div>
       </section>
 
@@ -2306,7 +2305,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260901-v542"></script>
+    <script src="/static/wealth.js?v=20260901-v544"></script>
   </body>
 </html>
 

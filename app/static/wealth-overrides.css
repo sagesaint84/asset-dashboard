@@ -1753,7 +1753,9 @@ dialog.dialog .dialog-actions {
 .panel.is-collapsed #catPanelSecurities,
 .panel.is-collapsed #catPanelBanking,
 .panel.is-collapsed #catPanelInsurance,
-.panel.is-collapsed #marketGrid {
+.panel.is-collapsed #marketGrid,
+.panel.is-collapsed #ledgerSectionContent,
+.panel.is-collapsed .section-collapsible-content {
   display: none !important;
 }
 
