@@ -8003,7 +8003,11 @@ function renderLedgerTransactions(txs) {
           ${t.memo ? `<small style="display:block;color:#64748b;font-size:11px;font-weight:normal;">${html(t.memo)}</small>` : ''}
         </td>
         <td style="white-space:nowrap;"><span class="saving-owner-badge" style="font-size:10px;padding:2px 6px;">${html(t.owner || '모두')}</span></td>
-        <td style="color:#94a3b8;font-size:11.5px;white-space:nowrap;">${html(t.pay_method || '-')}</td>
+        <td style="color:#94a3b8;font-size:11.5px;white-space:nowrap;">
+          ${html(t.pay_method || '-')}
+          ${t.is_card_payment && !t.is_settled ? `<span style="font-size:9.5px;color:#f43f5e;background:rgba(244,63,94,0.1);padding:1px 4px;border-radius:3px;margin-left:4px;">미결제</span>` : ''}
+          ${t.is_card_payment && t.is_settled ? `<span style="font-size:9.5px;color:#38bdf8;background:rgba(56,189,248,0.1);padding:1px 4px;border-radius:3px;margin-left:4px;">정산완료</span>` : ''}
+        </td>
         <td style="text-align:right;font-weight:700;font-size:13.5px;color:${amtColor};white-space:nowrap;">
           ${amtSign}₩${number(t.amount, 0)}
         </td>
@@ -8072,7 +8076,7 @@ window.updateLedgerCategoryOptions = updateLedgerCategoryOptions;
 
 function populateLedgerAccountOptions(selectedAccountId = '', filterOwner = '모두') {
   const accSelect = document.getElementById("ledgerTxAccountSelect");
-  if (!accSelect) return;
+  const cardLinkedSelect = document.getElementById("ledgerCardLinkedAccountSelect");
 
   const src = rawDashboard || dashboard || {};
   const banks = src.bank_accounts || rawBankAccounts || [];
@@ -8123,10 +8127,127 @@ function populateLedgerAccountOptions(selectedAccountId = '', filterOwner = '모
     html += `</optgroup>`;
   }
 
-  accSelect.innerHTML = html;
-  if (selectedAccountId) accSelect.value = selectedAccountId;
+  if (accSelect) {
+    accSelect.innerHTML = html;
+    if (selectedAccountId) accSelect.value = selectedAccountId;
+  }
+
+  // 신용카드 모달 내 출금통장 드롭다운에는 은행 통장 우선 주입
+  if (cardLinkedSelect) {
+    let bankHtml = `<option value="">-- 출금 결제계좌 선택 --</option>`;
+    banks.forEach(b => {
+      const name = `${b.bank_name || '은행'} ${b.account_name || b.alias || '통장'}`.trim();
+      const ownerBadge = b.owner && b.owner !== '모두' ? ` (${b.owner})` : '';
+      bankHtml += `<option value="${b.id}" data-name="${name}">${name}${ownerBadge} (잔액 ₩${number(b.balance || 0, 0)})</option>`;
+    });
+    cardLinkedSelect.innerHTML = bankHtml;
+  }
 }
 window.populateLedgerAccountOptions = populateLedgerAccountOptions;
+
+function populateLedgerCardOptions(selectedCardId = '', filterOwner = '모두') {
+  const cardSelect = document.getElementById("ledgerTxCardSelect");
+  if (!cardSelect) return;
+
+  const cards = rawLedgerData?.cards || [];
+  const filterCards = (!filterOwner || filterOwner === '모두')
+    ? cards
+    : cards.filter(c => (c.owner || '모두') === filterOwner || (c.owner || '모두') === '모두');
+
+  let html = `<option value="">-- 등록된 신용카드 선택 --</option>`;
+  if (filterCards.length > 0) {
+    filterCards.forEach(c => {
+      const unpaid = Number(c.unpaid_amount || 0);
+      const label = `[${c.card_company}] ${c.card_name} (${c.owner || '모두'}, 매월 ${c.payment_day}일 결제) - 미결제 ₩${number(unpaid, 0)}`;
+      html += `<option value="${c.id}" data-company="${c.card_company}" data-name="${c.card_name}" data-owner="${c.owner}" data-account-id="${c.linked_account_id || ''}" data-account-name="${c.linked_account_name || ''}" data-unpaid="${unpaid}" ${c.id === selectedCardId ? 'selected' : ''}>${label}</option>`;
+    });
+  } else {
+    html += `<option value="" disabled>(등록된 카드가 없습니다. 카드 관리에서 등록해주세요)</option>`;
+  }
+  cardSelect.innerHTML = html;
+  if (selectedCardId) cardSelect.value = selectedCardId;
+}
+window.populateLedgerCardOptions = populateLedgerCardOptions;
+
+function onLedgerTxTypeChanged() {
+  const form = document.getElementById("ledgerTxForm");
+  if (!form) return;
+  const typeVal = form.querySelector("[name='type']")?.value || "expense";
+  const payMethodTypeLabel = document.getElementById("ledgerTxPayMethodTypeLabel");
+  const cardBox = document.getElementById("ledgerTxCardSelectBox");
+  const accBox = document.getElementById("ledgerTxAccountSelectBox");
+  const accLabel = document.getElementById("ledgerTxAccountSelectLabel");
+  const nextBalLabel = document.getElementById("ledgerNextBalanceLabel");
+
+  updateLedgerCategoryOptions();
+
+  if (typeVal === "income") {
+    // 💰 수입: 결제수단/카드 숨김, 입금 계좌 표시
+    if (payMethodTypeLabel) payMethodTypeLabel.style.display = "none";
+    if (cardBox) cardBox.style.display = "none";
+    if (accBox) accBox.style.display = "block";
+    if (accLabel) accLabel.textContent = "🏦 입금 연동 계좌 선택 (선택 시 잔액 즉시 증가)";
+    if (nextBalLabel) nextBalLabel.textContent = "적용 후 예상 잔액 (+입금):";
+  } else if (typeVal === "transfer") {
+    // 🔄 이체: 결제수단/카드 숨김, 출금 계좌 표시
+    if (payMethodTypeLabel) payMethodTypeLabel.style.display = "none";
+    if (cardBox) cardBox.style.display = "none";
+    if (accBox) accBox.style.display = "block";
+    if (accLabel) accLabel.textContent = "🏦 출금 연동 계좌 선택 (선택 시 잔액 즉시 차감)";
+    if (nextBalLabel) nextBalLabel.textContent = "적용 후 예상 잔액 (-출금):";
+  } else {
+    // 💳 지출: 결제 방식(신용카드 vs 계좌) 노출
+    if (payMethodTypeLabel) payMethodTypeLabel.style.display = "block";
+    onLedgerPayMethodTypeChanged();
+    return;
+  }
+  updateLedgerBalancePreview();
+}
+window.onLedgerTxTypeChanged = onLedgerTxTypeChanged;
+
+function onLedgerPayMethodTypeChanged() {
+  const form = document.getElementById("ledgerTxForm");
+  if (!form) return;
+  const payMethodType = form.querySelector("[name='pay_method_type']")?.value || "credit_card";
+  const cardBox = document.getElementById("ledgerTxCardSelectBox");
+  const accBox = document.getElementById("ledgerTxAccountSelectBox");
+  const accLabel = document.getElementById("ledgerTxAccountSelectLabel");
+  const nextBalLabel = document.getElementById("ledgerNextBalanceLabel");
+  const previewBox = document.getElementById("ledgerBalancePreviewBox");
+
+  const owner = form.querySelector("[name='owner']")?.value || currentOwner || "모두";
+
+  if (payMethodType === "credit_card") {
+    if (cardBox) cardBox.style.display = "block";
+    if (accBox) accBox.style.display = "none";
+    if (previewBox) previewBox.style.display = "none";
+    populateLedgerCardOptions(form.querySelector("[name='card_id']")?.value, owner);
+  } else {
+    if (cardBox) cardBox.style.display = "none";
+    if (accBox) accBox.style.display = "block";
+    if (accLabel) accLabel.textContent = "🏦 출금 연동 계좌 선택 (선택 시 잔액 즉시 차감)";
+    if (nextBalLabel) nextBalLabel.textContent = "적용 후 예상 잔액 (-출금):";
+    updateLedgerBalancePreview();
+  }
+}
+window.onLedgerPayMethodTypeChanged = onLedgerPayMethodTypeChanged;
+
+function onLedgerTxOwnerChanged() {
+  const form = document.getElementById("ledgerTxForm");
+  if (!form) return;
+  const owner = form.querySelector("[name='owner']")?.value || "모두";
+  const curAcc = form.querySelector("[name='account_id']")?.value || "";
+  const curCard = form.querySelector("[name='card_id']")?.value || "";
+  populateLedgerAccountOptions(curAcc, owner);
+  populateLedgerCardOptions(curCard, owner);
+  updateLedgerBalancePreview();
+}
+window.onLedgerTxOwnerChanged = onLedgerTxOwnerChanged;
+
+function onLedgerCardSelectChanged() {
+  // 신용카드 선택 변경 시 동작
+}
+window.onLedgerCardSelectChanged = onLedgerCardSelectChanged;
 
 function updateLedgerBalancePreview() {
   const form = document.getElementById("ledgerTxForm");
@@ -8134,6 +8255,15 @@ function updateLedgerBalancePreview() {
   const prevEl = document.getElementById("ledgerPrevBalanceText");
   const nextEl = document.getElementById("ledgerNextBalanceText");
   if (!form || !previewBox || !prevEl || !nextEl) return;
+
+  const typeVal = form.querySelector("[name='type']")?.value || "expense";
+  const payMethodType = form.querySelector("[name='pay_method_type']")?.value || "credit_card";
+
+  // 지출이면서 신용카드인 경우 계좌 잔액 프리뷰 불필요
+  if (typeVal === "expense" && payMethodType === "credit_card") {
+    previewBox.style.display = "none";
+    return;
+  }
 
   const accSelect = form.querySelector("[name='account_id']");
   const selectedOpt = accSelect?.selectedOptions?.[0];
@@ -8145,7 +8275,6 @@ function updateLedgerBalancePreview() {
   }
 
   const prevBal = Number(selectedOpt.dataset.balance) || 0;
-  const typeVal = form.querySelector("[name='type']")?.value || "expense";
   const amtVal = Number(form.querySelector("[name='amount']")?.value) || 0;
 
   let nextBal = prevBal;
@@ -8180,20 +8309,6 @@ function openLedgerTxModal(txId = null) {
     amountInput.dataset.previewBound = "true";
     amountInput.addEventListener("input", updateLedgerBalancePreview);
   }
-  const typeSelect = form.querySelector("[name='type']");
-  if (typeSelect && !typeSelect.dataset.previewBound) {
-    typeSelect.dataset.previewBound = "true";
-    typeSelect.addEventListener("change", updateLedgerBalancePreview);
-  }
-  const ownerSelect = form.querySelector("[name='owner']");
-  if (ownerSelect && !ownerSelect.dataset.previewBound) {
-    ownerSelect.dataset.previewBound = "true";
-    ownerSelect.addEventListener("change", () => {
-      const curAcc = form.querySelector("[name='account_id']")?.value || "";
-      populateLedgerAccountOptions(curAcc, ownerSelect.value);
-      updateLedgerBalancePreview();
-    });
-  }
 
   if (txId && rawLedgerData?.transactions) {
     const tx = rawLedgerData.transactions.find(t => t.id === txId);
@@ -8201,14 +8316,22 @@ function openLedgerTxModal(txId = null) {
       if (title) title.textContent = "수입 / 지출 내역 수정";
       form.querySelector("[name='date']").value = tx.date || new Date().toISOString().slice(0, 10);
       form.querySelector("[name='type']").value = tx.type || "expense";
-      updateLedgerCategoryOptions(tx.category);
-      form.querySelector("[name='amount']").value = tx.amount || "";
       form.querySelector("[name='owner']").value = tx.owner || "모두";
-      form.querySelector("[name='pay_method']").value = tx.pay_method || "신용/체크카드";
+      form.querySelector("[name='amount']").value = tx.amount || "";
       form.querySelector("[name='merchant']").value = tx.merchant || tx.description || "";
       form.querySelector("[name='memo']").value = tx.memo || "";
-      
+
+      // 카드 지출인지 체크
+      const isCard = Boolean(tx.card_id || tx.is_card_payment);
+      const payMethodTypeSelect = form.querySelector("[name='pay_method_type']");
+      if (payMethodTypeSelect) {
+        payMethodTypeSelect.value = isCard ? "credit_card" : "bank_account";
+      }
+
+      onLedgerTxTypeChanged();
+      updateLedgerCategoryOptions(tx.category);
       populateLedgerAccountOptions(tx.account_id || "", tx.owner || "모두");
+      populateLedgerCardOptions(tx.card_id || "", tx.owner || "모두");
       updateLedgerBalancePreview();
       dialog.showModal();
       return;
@@ -8220,8 +8343,12 @@ function openLedgerTxModal(txId = null) {
   form.querySelector("[name='date']").value = new Date().toISOString().slice(0, 10);
   form.querySelector("[name='owner']").value = currentOwner || "모두";
   form.querySelector("[name='type']").value = "expense";
-  updateLedgerCategoryOptions();
+  const payMethodTypeSelect = form.querySelector("[name='pay_method_type']");
+  if (payMethodTypeSelect) payMethodTypeSelect.value = "credit_card";
+
+  onLedgerTxTypeChanged();
   populateLedgerAccountOptions("", currentOwner || "모두");
+  populateLedgerCardOptions("", currentOwner || "모두");
   updateLedgerBalancePreview();
   dialog.showModal();
 }
@@ -8237,14 +8364,8 @@ async function saveLedgerTransaction() {
   const amountVal = Number(form.querySelector("[name='amount']")?.value) || 0;
   const categoryVal = form.querySelector("[name='category']")?.value;
   const ownerVal = form.querySelector("[name='owner']")?.value || "모두";
-  const payMethodVal = form.querySelector("[name='pay_method']")?.value || "";
   const merchantVal = (form.querySelector("[name='merchant']")?.value || "").trim();
   const memoVal = (form.querySelector("[name='memo']")?.value || "").trim();
-
-  const accSelect = form.querySelector("[name='account_id']");
-  const selectedOpt = accSelect?.selectedOptions?.[0];
-  const accountIdVal = accSelect?.value || "";
-  const accountNameVal = selectedOpt ? (selectedOpt.dataset.name || selectedOpt.textContent || "") : "";
 
   if (!amountVal || amountVal <= 0) {
     alert("금액을 0원보다 크게 입력해 주세요.");
@@ -8255,6 +8376,51 @@ async function saveLedgerTransaction() {
     return;
   }
 
+  let payMethodVal = "신용/체크카드";
+  let cardIdVal = "";
+  let cardNameVal = "";
+  let accountIdVal = "";
+  let accountNameVal = "";
+  let isCard = false;
+
+  if (typeVal === "income") {
+    const accSelect = form.querySelector("[name='account_id']");
+    const selectedOpt = accSelect?.selectedOptions?.[0];
+    accountIdVal = accSelect?.value || "";
+    accountNameVal = selectedOpt ? (selectedOpt.dataset.name || selectedOpt.textContent || "") : "";
+    payMethodVal = accountNameVal ? `입금 (${accountNameVal})` : "계좌입금";
+  } else if (typeVal === "transfer") {
+    const accSelect = form.querySelector("[name='account_id']");
+    const selectedOpt = accSelect?.selectedOptions?.[0];
+    accountIdVal = accSelect?.value || "";
+    accountNameVal = selectedOpt ? (selectedOpt.dataset.name || selectedOpt.textContent || "") : "";
+    payMethodVal = accountNameVal ? `이체출금 (${accountNameVal})` : "계좌이체";
+  } else {
+    // expense
+    const payMethodType = form.querySelector("[name='pay_method_type']")?.value || "credit_card";
+    if (payMethodType === "credit_card") {
+      const cardSelect = form.querySelector("[name='card_id']");
+      const selectedCardOpt = cardSelect?.selectedOptions?.[0];
+      cardIdVal = cardSelect?.value || "";
+      if (cardIdVal && selectedCardOpt) {
+        cardNameVal = selectedCardOpt.dataset.name ? `[${selectedCardOpt.dataset.company || '신용카드'}] ${selectedCardOpt.dataset.name}` : selectedCardOpt.textContent;
+        payMethodVal = cardNameVal;
+        isCard = true;
+      } else {
+        payMethodVal = "신용카드";
+      }
+    } else if (payMethodType === "cash") {
+      payMethodVal = "현금";
+    } else {
+      // bank_account
+      const accSelect = form.querySelector("[name='account_id']");
+      const selectedOpt = accSelect?.selectedOptions?.[0];
+      accountIdVal = accSelect?.value || "";
+      accountNameVal = selectedOpt ? (selectedOpt.dataset.name || selectedOpt.textContent || "") : "";
+      payMethodVal = accountNameVal ? `체크/계좌출금 (${accountNameVal})` : "계좌출금";
+    }
+  }
+
   const payload = {
     date: dateVal,
     type: typeVal,
@@ -8262,6 +8428,9 @@ async function saveLedgerTransaction() {
     category: categoryVal,
     owner: ownerVal,
     pay_method: payMethodVal,
+    card_id: cardIdVal,
+    card_name: cardNameVal,
+    is_card_payment: isCard,
     account_id: accountIdVal,
     account_name: accountNameVal,
     merchant: merchantVal,
@@ -8286,8 +8455,8 @@ async function saveLedgerTransaction() {
     }
     document.getElementById("ledgerTxDialog")?.close();
     await loadLedger();
-    // 계좌 잔액 연동 변동 시 대시보드 및 계좌 데이터 즉시 새로고침
-    if (accountIdVal) {
+    // 은행 계좌 연동 변동 시 대시보드 새로고침
+    if (accountIdVal && !isCard) {
       loadDashboard();
     }
   } catch (err) {
@@ -8295,6 +8464,242 @@ async function saveLedgerTransaction() {
   }
 }
 window.saveLedgerTransaction = saveLedgerTransaction;
+
+// ---------------------------------------------------------------------------
+// Credit Cards Management & Billing Settlement UI
+// ---------------------------------------------------------------------------
+
+let activePayTargetCard = null;
+
+async function openLedgerCardsModal() {
+  const dialog = document.getElementById("ledgerCardsDialog");
+  if (!dialog) return;
+  resetLedgerCardForm();
+  populateLedgerAccountOptions();
+  await refreshLedgerCardsList();
+  dialog.showModal();
+}
+window.openLedgerCardsModal = openLedgerCardsModal;
+
+async function refreshLedgerCardsList() {
+  const listContainer = document.getElementById("ledgerCardsList");
+  if (!listContainer) return;
+
+  try {
+    const owner = currentOwner || "모두";
+    const cards = await api(`/api/ledger/cards?owner=${encodeURIComponent(owner)}`);
+    if (rawLedgerData) rawLedgerData.cards = cards;
+    renderLedgerCardsList(cards || []);
+  } catch (err) {
+    console.error("카드 목록 조회 오류:", err);
+  }
+}
+
+function renderLedgerCardsList(cards) {
+  const listContainer = document.getElementById("ledgerCardsList");
+  if (!listContainer) return;
+
+  if (!cards || cards.length === 0) {
+    listContainer.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:24px 0;"><p style="margin:0;font-size:12.5px;color:#94a3b8;">등록된 신용카드가 없습니다. 아래 폼에서 카드를 추가해 보세요!</p></div>`;
+    return;
+  }
+
+  listContainer.innerHTML = cards.map(c => {
+    const unpaid = Number(c.unpaid_amount || 0);
+    const count = Number(c.unpaid_count || 0);
+    const hasUnpaid = unpaid > 0;
+    const cardDataJson = html(JSON.stringify(c));
+
+    return `
+      <div style="background:linear-gradient(135deg,#0d1527,#131f37);border:1px solid #23314f;border-radius:10px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <span style="font-size:11px;font-weight:700;color:#38bdf8;background:rgba(56,189,248,0.1);padding:2px 6px;border-radius:4px;">${html(c.card_company)}</span>
+              <span style="font-size:11px;color:#cbd5e1;margin-left:4px;">(${html(c.owner || '모두')})</span>
+            </div>
+            <div style="display:flex;gap:4px;">
+              <button class="account-action-button" onclick='editLedgerCard(${JSON.stringify(c)})' title="카드 정보 수정" type="button">✎</button>
+              <button class="account-action-button" onclick="deleteLedgerCard('${c.id}')" title="카드 삭제" type="button" style="color:#f43f5e;">🗑</button>
+            </div>
+          </div>
+          <h4 style="margin:6px 0 2px 0;font-size:14px;font-weight:800;color:#f8fafc;">${html(c.card_name)}</h4>
+          <p style="margin:0;font-size:11.5px;color:#94a3b8;">
+            📅 매월 <strong style="color:#f1f5f9;">${c.payment_day}일</strong> 결제 · 결제계좌: <strong style="color:#cbd5e1;">${html(c.linked_account_name || '미지정')}</strong>
+          </p>
+          ${c.memo ? `<p style="margin:4px 0 0 0;font-size:11px;color:#64748b;">${html(c.memo)}</p>` : ''}
+        </div>
+
+        <div style="border-top:1px dashed #23314f;padding-top:8px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span style="font-size:11px;color:#94a3b8;">청구 예정액</span>
+            <div style="font-size:14px;font-weight:800;color:${hasUnpaid ? '#f43f5e' : '#94a3b8'};">₩${number(unpaid, 0)} <span style="font-size:11px;font-weight:normal;color:#64748b;">(${count}건)</span></div>
+          </div>
+          <button class="button compact ${hasUnpaid ? 'primary' : 'secondary'}" type="button" onclick='openLedgerCardPayModal(${JSON.stringify(c)})' ${!hasUnpaid ? 'disabled style="opacity:0.5;"' : 'style="font-size:11.5px;padding:4px 10px;background:linear-gradient(135deg,#38bdf8,#2563eb);color:#fff;"'}>
+            💳 결제/정산
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function resetLedgerCardForm() {
+  const form = document.getElementById("ledgerCardForm");
+  const title = document.getElementById("ledgerCardFormTitle");
+  const cancelBtn = document.getElementById("ledgerCardFormCancelBtn");
+  if (!form) return;
+  form.reset();
+  delete form.dataset.cardId;
+  if (title) title.textContent = "➕ 신규 카드 등록";
+  if (cancelBtn) cancelBtn.style.display = "none";
+}
+window.resetLedgerCardForm = resetLedgerCardForm;
+
+function editLedgerCard(card) {
+  const form = document.getElementById("ledgerCardForm");
+  const title = document.getElementById("ledgerCardFormTitle");
+  const cancelBtn = document.getElementById("ledgerCardFormCancelBtn");
+  if (!form || !card) return;
+
+  form.dataset.cardId = card.id;
+  form.querySelector("[name='card_company']").value = card.card_company || "현대카드";
+  form.querySelector("[name='card_name']").value = card.card_name || "";
+  form.querySelector("[name='owner']").value = card.owner || "모두";
+  form.querySelector("[name='payment_day']").value = card.payment_day || "14";
+  form.querySelector("[name='linked_account_id']").value = card.linked_account_id || "";
+  form.querySelector("[name='memo']").value = card.memo || "";
+
+  if (title) title.textContent = "✎ 카드 정보 수정";
+  if (cancelBtn) cancelBtn.style.display = "inline-block";
+}
+window.editLedgerCard = editLedgerCard;
+
+async function saveLedgerCard() {
+  const form = document.getElementById("ledgerCardForm");
+  if (!form) return;
+
+  const cardId = form.dataset.cardId;
+  const company = form.querySelector("[name='card_company']")?.value;
+  const name = (form.querySelector("[name='card_name']")?.value || "").trim();
+  const owner = form.querySelector("[name='owner']")?.value || "모두";
+  const day = Number(form.querySelector("[name='payment_day']")?.value) || 14;
+  const linkedAccSelect = form.querySelector("[name='linked_account_id']");
+  const linkedAccId = linkedAccSelect?.value || "";
+  const linkedAccOpt = linkedAccSelect?.selectedOptions?.[0];
+  const linkedAccName = linkedAccOpt ? (linkedAccOpt.dataset.name || linkedAccOpt.textContent || "") : "";
+  const memo = (form.querySelector("[name='memo']")?.value || "").trim();
+
+  if (!name) {
+    alert("카드명을 입력해 주세요.");
+    return;
+  }
+
+  const payload = {
+    card_company: company,
+    card_name: name,
+    owner: owner,
+    payment_day: day,
+    linked_account_id: linkedAccId,
+    linked_account_name: linkedAccName,
+    memo: memo
+  };
+
+  try {
+    if (cardId) {
+      await api(`/api/ledger/cards/${cardId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast("카드 정보가 수정되었습니다.");
+    } else {
+      await api("/api/ledger/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast("신규 카드가 등록되었습니다.");
+    }
+    resetLedgerCardForm();
+    await refreshLedgerCardsList();
+    await loadLedger();
+  } catch (err) {
+    alert(`카드 저장 오류: ${err.message}`);
+  }
+}
+window.saveLedgerCard = saveLedgerCard;
+
+async function deleteLedgerCard(cardId) {
+  if (!confirm("이 카드를 삭제하시겠습니까? (이전 거래 내역은 유지됩니다)")) return;
+  try {
+    await api(`/api/ledger/cards/${cardId}`, { method: "DELETE" });
+    toast("카드가 삭제되었습니다.");
+    await refreshLedgerCardsList();
+    await loadLedger();
+  } catch (err) {
+    alert(`카드 삭제 오류: ${err.message}`);
+  }
+}
+window.deleteLedgerCard = deleteLedgerCard;
+
+function openLedgerCardPayModal(card) {
+  if (!card) return;
+  activePayTargetCard = card;
+  const dialog = document.getElementById("ledgerCardPayDialog");
+  const nameEl = document.getElementById("ledgerPayCardName");
+  const unpaidEl = document.getElementById("ledgerPayUnpaidAmount");
+  const accEl = document.getElementById("ledgerPayAccountName");
+  const dateInput = document.getElementById("ledgerPayDateInput");
+  const amountInput = document.getElementById("ledgerPayAmountInput");
+
+  if (nameEl) nameEl.textContent = `[${card.card_company}] ${card.card_name} (${card.owner || '모두'})`;
+  if (unpaidEl) unpaidEl.textContent = `₩${number(card.unpaid_amount || 0, 0)}`;
+  if (accEl) accEl.textContent = card.linked_account_name || "(연결된 결제계좌 없음)";
+  if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+  if (amountInput) amountInput.value = card.unpaid_amount || 0;
+
+  if (dialog) dialog.showModal();
+}
+window.openLedgerCardPayModal = openLedgerCardPayModal;
+
+async function executeCardPayment() {
+  if (!activePayTargetCard) return;
+  const dateInput = document.getElementById("ledgerPayDateInput");
+  const amountInput = document.getElementById("ledgerPayAmountInput");
+  const payDate = dateInput?.value || new Date().toISOString().slice(0, 10);
+  const payAmount = Number(amountInput?.value) || 0;
+
+  if (payAmount <= 0) {
+    alert("결제 금액은 0원보다 커야 합니다.");
+    return;
+  }
+
+  const payload = {
+    date: payDate,
+    amount: payAmount,
+    account_id: activePayTargetCard.linked_account_id || "",
+    account_name: activePayTargetCard.linked_account_name || ""
+  };
+
+  try {
+    const res = await api(`/api/ledger/cards/${activePayTargetCard.id}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    toast(res.message || "카드대금 결제 및 정산이 완료되었습니다.");
+    document.getElementById("ledgerCardPayDialog")?.close();
+    await refreshLedgerCardsList();
+    await loadLedger();
+    if (activePayTargetCard.linked_account_id) {
+      loadDashboard();
+    }
+  } catch (err) {
+    alert(`결제 처리 오류: ${err.message}`);
+  }
+}
+window.executeCardPayment = executeCardPayment;
 
 async function deleteLedgerTransaction(txId) {
   if (!confirm("이 거래 내역을 삭제하시겠습니까?")) return;

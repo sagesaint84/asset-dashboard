@@ -1935,6 +1935,11 @@ from app.services.ledger import (
     delete_transaction,
     add_recurring,
     delete_recurring,
+    get_cards,
+    create_card,
+    update_card,
+    delete_card,
+    settle_card_payment,
     read_ledger,
 )
 
@@ -1946,7 +1951,7 @@ async def get_ledger(
     month: int | None = None,
     owner: str = "모두",
 ) -> dict:
-    """Get ledger summary, category analytics, trend, and transactions for the specified month/owner."""
+    """Get ledger summary, category analytics, trend, cards, and transactions for the specified month/owner."""
     username = get_current_username(request)
     return get_ledger_summary(username=username, year=year, month=month, owner=owner)
 
@@ -2002,6 +2007,61 @@ async def remove_recurring(rec_id: str, request: Request) -> dict:
     if not success:
         raise HTTPException(404, "삭제할 고정지출 항목을 찾을 수 없습니다.")
     return {"message": "고정지출 항목이 삭제되었습니다."}
+
+
+# ---------------------------------------------------------------------------
+# Credit / Debit Card Routes
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ledger/cards")
+async def get_ledger_cards(request: Request, owner: str = "모두") -> list[dict]:
+    """Get all cards with unpaid bill amount."""
+    username = get_current_username(request)
+    return get_cards(username=username, owner=owner)
+
+
+@app.post("/api/ledger/cards")
+async def add_ledger_card(request: Request) -> dict:
+    """Register a new credit or debit card."""
+    username = get_current_username(request)
+    payload = await request.json()
+    if not payload.get("card_name"):
+        raise HTTPException(400, "카드명을 입력해 주세요.")
+    card = create_card(payload, username=username)
+    return {"message": "신용카드가 등록되었습니다.", "card": card}
+
+
+@app.put("/api/ledger/cards/{card_id}")
+async def edit_ledger_card(card_id: str, request: Request) -> dict:
+    """Update card details."""
+    username = get_current_username(request)
+    payload = await request.json()
+    card = update_card(card_id, payload, username=username)
+    if not card:
+        raise HTTPException(404, "수정할 카드를 찾을 수 없습니다.")
+    return {"message": "카드 정보가 수정되었습니다.", "card": card}
+
+
+@app.delete("/api/ledger/cards/{card_id}")
+async def remove_ledger_card(card_id: str, request: Request) -> dict:
+    """Delete a card."""
+    username = get_current_username(request)
+    ok = delete_card(card_id, username=username)
+    if not ok:
+        raise HTTPException(404, "삭제할 카드를 찾을 수 없습니다.")
+    return {"message": "카드가 삭제되었습니다."}
+
+
+@app.post("/api/ledger/cards/{card_id}/pay")
+async def pay_ledger_card(card_id: str, request: Request) -> dict:
+    """Settle unpaid credit card bills via linked bank account."""
+    username = get_current_username(request)
+    payload = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    try:
+        res = settle_card_payment(card_id, payload, username=username)
+        return res
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 # ---------------------------------------------------------------------------

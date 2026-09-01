@@ -53,6 +53,7 @@ def default_ledger_data() -> dict[str, Any]:
         "categories": DEFAULT_CATEGORIES,
         "transactions": [],
         "recurring": [],
+        "cards": [],
         "budgets": {},
     }
 
@@ -70,6 +71,7 @@ def read_ledger(username: str | None = None) -> dict[str, Any]:
         data.setdefault("categories", DEFAULT_CATEGORIES)
         data.setdefault("transactions", [])
         data.setdefault("recurring", [])
+        data.setdefault("cards", [])
         data.setdefault("budgets", {})
         return data
     except Exception:
@@ -168,6 +170,7 @@ def get_ledger_summary(
 
     # 정렬: 날짜 내림차순
     month_txs_sorted = sorted(month_txs, key=lambda x: str(x.get("date", "")), reverse=True)
+    cards_summary = get_cards(username=username, owner=owner)
 
     return {
         "year": target_year,
@@ -190,6 +193,7 @@ def get_ledger_summary(
         "monthly_trend": trend_months,
         "transactions": month_txs_sorted,
         "recurring": recurring_list,
+        "cards": cards_summary,
         "categories": data.get("categories", DEFAULT_CATEGORIES),
     }
 
@@ -232,7 +236,6 @@ def _apply_account_balance_delta(
                 if a.get("id") == acc_id:
                     curr = float(a.get("cash") or 0.0)
                     a["cash"] = max(0.0, curr + delta)
-                    # Also update settings.cash_balances if exists
                     settings = pf.setdefault("settings", {})
                     cb = settings.setdefault("cash_balances", {})
                     if acc_id in cb and isinstance(cb[acc_id], dict):
@@ -248,6 +251,141 @@ def _apply_account_balance_delta(
     return False
 
 
+# ---------------------------------------------------------------------------
+# Credit / Debit Cards Management & Billing Settlement
+# ---------------------------------------------------------------------------
+
+def get_cards(username: str | None = None, owner: str = "모두") -> list[dict[str, Any]]:
+    data = read_ledger(username=username)
+    cards = data.get("cards", [])
+    if owner and owner != "모두":
+        cards = [c for c in cards if c.get("owner") == owner or c.get("owner") == "모두"]
+
+    txs = data.get("transactions", [])
+    result = []
+    for c in cards:
+        cid = c.get("id")
+        unpaid_txs = [
+            t for t in txs
+            if t.get("card_id") == cid and t.get("type") == "expense" and not t.get("is_settled", False)
+        ]
+        unpaid_amount = sum(float(t.get("amount") or 0.0) for t in unpaid_txs)
+        c_copy = dict(c)
+        c_copy["unpaid_amount"] = unpaid_amount
+        c_copy["unpaid_count"] = len(unpaid_txs)
+        result.append(c_copy)
+    return result
+
+
+def create_card(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    data = read_ledger(username=username)
+    cid = payload.get("id") or str(uuid.uuid4())
+    card = {
+        "id": cid,
+        "card_company": str(payload.get("card_company") or "신용카드").strip(),
+        "card_name": str(payload.get("card_name") or "신용카드").strip(),
+        "card_type": str(payload.get("card_type") or "credit").strip(),
+        "owner": str(payload.get("owner") or "모두").strip(),
+        "payment_day": max(1, min(31, int(payload.get("payment_day") or 14))),
+        "linked_account_id": str(payload.get("linked_account_id") or "").strip(),
+        "linked_account_name": str(payload.get("linked_account_name") or "").strip(),
+        "statement_period": str(payload.get("statement_period") or "").strip(),
+        "memo": str(payload.get("memo") or "").strip(),
+        "created_at": datetime.now().isoformat(),
+    }
+    data.setdefault("cards", []).append(card)
+    write_ledger(data, username=username)
+    card["unpaid_amount"] = 0.0
+    card["unpaid_count"] = 0
+    return card
+
+
+def update_card(card_id: str, payload: dict[str, Any], username: str | None = None) -> dict[str, Any] | None:
+    data = read_ledger(username=username)
+    for idx, c in enumerate(data.get("cards", [])):
+        if c.get("id") == card_id:
+            for k in ["card_company", "card_name", "card_type", "owner", "linked_account_id", "linked_account_name", "statement_period", "memo"]:
+                if k in payload:
+                    c[k] = str(payload[k]).strip() if payload[k] is not None else ""
+            if "payment_day" in payload:
+                c["payment_day"] = max(1, min(31, int(payload["payment_day"] or 14)))
+            c["updated_at"] = datetime.now().isoformat()
+            data["cards"][idx] = c
+            write_ledger(data, username=username)
+            return c
+    return None
+
+
+def delete_card(card_id: str, username: str | None = None) -> bool:
+    data = read_ledger(username=username)
+    before = len(data.get("cards", []))
+    data["cards"] = [c for c in data.get("cards", []) if c.get("id") != card_id]
+    if before != len(data["cards"]):
+        write_ledger(data, username=username)
+        return True
+    return False
+
+
+def settle_card_payment(card_id: str, payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
+    data = read_ledger(username=username)
+    target_card = next((c for c in data.get("cards", []) if c.get("id") == card_id), None)
+    if not target_card:
+        raise ValueError("신용카드를 찾을 수 없습니다.")
+
+    acc_id = str(payload.get("account_id") or target_card.get("linked_account_id") or "").strip()
+    acc_name = str(payload.get("account_name") or target_card.get("linked_account_name") or "").strip()
+    pay_date = str(payload.get("date") or date.today().isoformat())
+
+    unpaid_txs = [
+        t for t in data.get("transactions", [])
+        if t.get("card_id") == card_id and t.get("type") == "expense" and not t.get("is_settled", False)
+    ]
+    auto_sum = sum(float(t.get("amount") or 0.0) for t in unpaid_txs)
+    amount_to_pay = float(payload.get("amount") or auto_sum)
+
+    if amount_to_pay <= 0:
+        raise ValueError("결제할 카드 청구 금액이 없습니다 (0원).")
+
+    # 1. 은행 계좌에서 카드 대금 출금 차감
+    if acc_id:
+        _apply_account_balance_delta(acc_id, -amount_to_pay, username=username)
+
+    # 2. 가계부에 카드대금결제 거래 생성
+    settle_tx_id = str(uuid.uuid4())
+    settle_tx = {
+        "id": settle_tx_id,
+        "date": pay_date,
+        "type": "transfer",
+        "category": "카드대금결제",
+        "amount": amount_to_pay,
+        "owner": target_card.get("owner", "모두"),
+        "pay_method": f"계좌출금 ({acc_name})" if acc_name else "계좌출금",
+        "account_id": acc_id,
+        "account_name": acc_name,
+        "applied_delta": -amount_to_pay if acc_id else 0.0,
+        "merchant": f"[{target_card.get('card_name', '신용카드')}] 카드대금 결제",
+        "memo": f"{len(unpaid_txs)}건 카드 이용대금 결제 완료",
+        "is_recurring": False,
+        "created_at": datetime.now().isoformat(),
+    }
+    data.setdefault("transactions", []).append(settle_tx)
+
+    # 3. 해당 카드 미결제 거래들을 정산 완료(settled) 처리하여 카드 누적액 리셋!
+    now_iso = datetime.now().isoformat()
+    for t in unpaid_txs:
+        t["is_settled"] = True
+        t["settled_at"] = now_iso
+        t["settled_tx_id"] = settle_tx_id
+
+    write_ledger(data, username=username)
+    return {
+        "message": f"[{target_card.get('card_name')}] 카드대금 ₩{int(amount_to_pay):,}원이 결제 처리되었습니다.",
+        "settled_amount": amount_to_pay,
+        "settled_count": len(unpaid_txs),
+        "transaction": settle_tx,
+    }
+
+
 def add_transaction(payload: dict[str, Any], username: str | None = None) -> dict[str, Any]:
     data = read_ledger(username=username)
     tx_id = payload.get("id") or str(uuid.uuid4())
@@ -255,12 +393,15 @@ def add_transaction(payload: dict[str, Any], username: str | None = None) -> dic
     amount = max(0.0, float(payload.get("amount") or 0.0))
     linked_acc_id = str(payload.get("account_id") or "").strip()
     linked_acc_name = str(payload.get("account_name") or "").strip()
-    apply_to_account = bool(payload.get("apply_to_account", False) or linked_acc_id)
+    card_id = str(payload.get("card_id") or "").strip()
+    card_name = str(payload.get("card_name") or "").strip()
+    is_card = bool(card_id or payload.get("is_card_payment", False))
 
     # Calculate delta for account balance
-    # income -> +amount, expense -> -amount, transfer -> -amount
+    # 신용카드 지출인 경우 즉시 은행 계좌를 차감하지 않고 카드에 누적
     applied_delta = 0.0
-    if apply_to_account and linked_acc_id and amount > 0:
+    apply_to_account = bool(payload.get("apply_to_account", False) or linked_acc_id)
+    if apply_to_account and linked_acc_id and amount > 0 and not is_card:
         applied_delta = amount if tx_type == "income" else -amount
         _apply_account_balance_delta(linked_acc_id, applied_delta, username=username)
 
@@ -271,7 +412,11 @@ def add_transaction(payload: dict[str, Any], username: str | None = None) -> dic
         "amount": amount,
         "category": str(payload.get("category") or "식비/외식"),
         "owner": str(payload.get("owner") or "모두"),
-        "pay_method": str(payload.get("pay_method") or "신용/체크카드"),
+        "pay_method": str(payload.get("pay_method") or (card_name if is_card else "신용/체크카드")),
+        "card_id": card_id,
+        "card_name": card_name,
+        "is_card_payment": is_card,
+        "is_settled": False if is_card else True,
         "account_id": linked_acc_id,
         "account_name": linked_acc_name,
         "applied_delta": applied_delta,
@@ -296,9 +441,9 @@ def update_transaction(tx_id: str, payload: dict[str, Any], username: str | None
             if old_acc_id and abs(old_delta) > 1e-6:
                 _apply_account_balance_delta(old_acc_id, -old_delta, username=username)
 
-            for k in ["date", "type", "category", "owner", "pay_method", "account_id", "account_name", "merchant", "memo", "is_recurring"]:
+            for k in ["date", "type", "category", "owner", "pay_method", "card_id", "card_name", "is_card_payment", "is_settled", "account_id", "account_name", "merchant", "memo", "is_recurring"]:
                 if k in payload:
-                    if k == "is_recurring":
+                    if k in ["is_recurring", "is_card_payment", "is_settled"]:
                         tx[k] = bool(payload[k])
                     else:
                         tx[k] = str(payload[k]).strip() if payload[k] is not None else ""
@@ -309,10 +454,11 @@ def update_transaction(tx_id: str, payload: dict[str, Any], username: str | None
             new_acc_id = str(tx.get("account_id") or "").strip()
             new_amount = float(tx.get("amount") or 0.0)
             new_type = str(tx.get("type") or "expense")
+            is_card = bool(tx.get("card_id") or tx.get("is_card_payment", False))
             apply_to_account = bool(payload.get("apply_to_account", False) or new_acc_id)
 
             new_delta = 0.0
-            if apply_to_account and new_acc_id and new_amount > 0:
+            if apply_to_account and new_acc_id and new_amount > 0 and not is_card:
                 new_delta = new_amount if new_type == "income" else -new_amount
                 _apply_account_balance_delta(new_acc_id, new_delta, username=username)
 

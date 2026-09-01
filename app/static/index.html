@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v548" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v550" />
   </head>
   <body>
     <main class="shell">
@@ -759,10 +759,13 @@
           </div>
 
           <div class="toolbar" style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button id="ledgerOpenCardsBtn" class="button secondary compact" type="button" onclick="openLedgerCardsModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#38bdf8;border-color:rgba(56,189,248,0.4);">
+              💳 카드 관리
+            </button>
             <button id="ledgerOpenRecurringBtn" class="button secondary compact" type="button" onclick="openLedgerRecurringModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#c084fc;border-color:rgba(192,132,252,0.4);">
               🛡️ 고정지출 관리
             </button>
-            <button id="ledgerOpenExcelBtn" class="button secondary compact" type="button" onclick="openLedgerExcelModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#38bdf8;border-color:rgba(56,189,248,0.4);">
+            <button id="ledgerOpenExcelBtn" class="button secondary compact" type="button" onclick="openLedgerExcelModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#94a3b8;border-color:rgba(148,163,184,0.3);">
               📤 엑셀 업로드
             </button>
             <button id="ledgerAddTxBtn" class="button primary compact" type="button" onclick="openLedgerTxModal()" style="font-size:12.5px;padding:6px 14px;border-radius:8px;background:linear-gradient(135deg,#38bdf8,#2563eb);color:#fff;font-weight:700;">
@@ -1693,14 +1696,14 @@
     <form id="ledgerTxForm" onsubmit="return false;">
       <div class="dialog-head">
         <h2 id="ledgerTxDialogTitle">수입 / 지출 내역 등록</h2>
-        <button value="cancel" class="close" aria-label="닫기">×</button>
+        <button value="cancel" class="close" aria-label="닫기" onclick="this.closest('dialog')?.close()">×</button>
       </div>
       <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-top:14px;">
         <label>거래 일자
           <input type="date" name="date" required />
         </label>
         <label>구분
-          <select name="type" id="ledgerTxTypeSelect" onchange="updateLedgerCategoryOptions(); updateLedgerBalancePreview();">
+          <select name="type" id="ledgerTxTypeSelect" onchange="onLedgerTxTypeChanged()">
             <option value="expense" selected>💳 지출</option>
             <option value="income">💰 수입</option>
             <option value="transfer">🔄 이체/저축</option>
@@ -1714,23 +1717,48 @@
             <!-- JS 동적 주입 -->
           </select>
         </label>
-        <label>소유자
-          <select name="owner" id="ledgerTxOwnerSelect" onchange="populateLedgerAccountOptions(this.form.account_id.value, this.value); updateLedgerBalancePreview();">
+        <label id="ledgerTxOwnerLabel">소유자
+          <select name="owner" id="ledgerTxOwnerSelect" onchange="onLedgerTxOwnerChanged()">
             <option value="모두">모두 (가족공통)</option>
             <option value="아빠">아빠</option>
             <option value="엄마">엄마</option>
             <option value="자녀">자녀</option>
           </select>
         </label>
-        <label>결제 수단 / 출금처
-          <input name="pay_method" placeholder="현대카드, 국민은행, 현금 등" value="신용/체크카드" />
+
+        <!-- 지출일 때 결제 방식 (신용카드 vs 계좌/체크카드/현금) -->
+        <label id="ledgerTxPayMethodTypeLabel">결제 방식
+          <select name="pay_method_type" id="ledgerTxPayMethodTypeSelect" onchange="onLedgerPayMethodTypeChanged()">
+            <option value="credit_card" selected>💳 신용카드 (청구 누적)</option>
+            <option value="bank_account">🏦 계좌출금 / 체크카드</option>
+            <option value="cash">💵 현금 / 기타</option>
+          </select>
         </label>
-        <label style="grid-column:1/-1;">
-          🏦 연동 계좌 선택 (선택 시 출금/입금 잔액 자동 변동)
+
+        <!-- 신용카드 선택 박스 (지출 - 신용카드일 때) -->
+        <div id="ledgerTxCardSelectBox" style="grid-column:1/-1;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <label style="margin:0;font-weight:700;font-size:12.5px;color:#cbd5e1;">💳 신용카드 선택</label>
+            <button type="button" class="button secondary compact" onclick="openLedgerCardsModal()" style="font-size:11px;padding:2px 8px;border-radius:6px;color:#38bdf8;">⚙️ 카드 등록·관리</button>
+          </div>
+          <select name="card_id" id="ledgerTxCardSelect" onchange="onLedgerCardSelectChanged()">
+            <option value="">-- 등록된 신용카드 선택 --</option>
+          </select>
+          <div style="margin-top:6px;font-size:11.5px;color:#94a3b8;background:rgba(56,189,248,0.05);padding:6px 10px;border-radius:6px;border:1px dashed rgba(56,189,248,0.2);">
+            💡 신용카드로 지출 시 당월 카드값으로 누적되며, 결제일에 연결 결제계좌에서 일괄 출금(정산)됩니다.
+          </div>
+        </div>
+
+        <!-- 연동 계좌 선택 박스 (수입 또는 계좌/체크카드 지출 시) -->
+        <div id="ledgerTxAccountSelectBox" style="grid-column:1/-1;display:none;">
+          <label style="margin:0 0 6px 0;font-weight:700;font-size:12.5px;color:#cbd5e1;" id="ledgerTxAccountSelectLabel">
+            🏦 연동 계좌 선택 (선택 시 출금/입금 잔액 자동 변동)
+          </label>
           <select name="account_id" id="ledgerTxAccountSelect" onchange="updateLedgerBalancePreview()">
             <option value="">-- 계좌 연동 안 함 (단순 기록) --</option>
           </select>
-        </label>
+        </div>
+
         <!-- 실시간 계좌 잔액 변동 인포 바 -->
         <div id="ledgerBalancePreviewBox" style="display:none;grid-column:1/-1;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:10px 14px;font-size:12.5px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -1738,10 +1766,11 @@
             <strong id="ledgerPrevBalanceText" style="color:#f1f5f9;">₩0</strong>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:#38bdf8;font-weight:700;">적용 후 예상 잔액:</span>
+            <span style="color:#38bdf8;font-weight:700;" id="ledgerNextBalanceLabel">적용 후 예상 잔액:</span>
             <strong id="ledgerNextBalanceText" style="color:#38bdf8;font-size:14px;font-weight:800;">₩0</strong>
           </div>
         </div>
+
         <label style="grid-column:1/-1;">내용 / 가맹점
           <input name="merchant" placeholder="예: 이마트, 스타벅스, 월급, 쿠팡 등" required />
         </label>
@@ -1752,6 +1781,129 @@
       <div class="dialog-actions" style="margin-top:16px;">
         <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
         <button id="ledgerTxSaveBtn" class="button primary" type="button" onclick="saveLedgerTransaction()">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 가계부 신용카드 관리 다이얼로그 -->
+  <dialog id="ledgerCardsDialog" class="dialog" style="max-width:680px;width:95vw;">
+    <div class="dialog-head">
+      <h2>💳 신용카드 등록 & 관리</h2>
+      <button value="cancel" class="close" aria-label="닫기" onclick="this.closest('dialog')?.close()">×</button>
+    </div>
+    <p class="dialog-description">신용카드별 결제일 및 출금 결제계좌를 등록하여 카드값 청구 누적 및 결제일 일괄 정산을 관리합니다.</p>
+
+    <!-- 등록된 카드 목록 -->
+    <div style="margin:14px 0;">
+      <h3 style="font-size:14px;font-weight:800;color:#f8fafc;margin:0 0 10px 0;">내 신용카드 목록 & 당월 청구 현황</h3>
+      <div id="ledgerCardsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;max-height:280px;overflow-y:auto;">
+        <!-- JS 동적 주입 -->
+      </div>
+    </div>
+
+    <!-- 신규 카드 등록 / 수정 폼 -->
+    <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:14px;margin-top:12px;">
+      <h3 id="ledgerCardFormTitle" style="font-size:13.5px;font-weight:700;color:#38bdf8;margin:0 0 10px 0;">➕ 신규 카드 등록</h3>
+      <form id="ledgerCardForm" onsubmit="return false;">
+        <div class="form-grid" style="grid-template-columns:repeat(2,1fr);">
+          <label>카드사
+            <select name="card_company" required>
+              <option value="현대카드">현대카드</option>
+              <option value="삼성카드">삼성카드</option>
+              <option value="신한카드">신한카드</option>
+              <option value="KB국민카드">KB국민카드</option>
+              <option value="롯데카드">롯데카드</option>
+              <option value="우리카드">우리카드</option>
+              <option value="하나카드">하나카드</option>
+              <option value="NH농협카드">NH농협카드</option>
+              <option value="BC카드">BC카드</option>
+              <option value="기타카드">기타카드</option>
+            </select>
+          </label>
+          <label>카드명 (별칭)
+            <input name="card_name" placeholder="예: 현대카드 M Edition3" required />
+          </label>
+          <label>소유자
+            <select name="owner">
+              <option value="모두">모두 (가족공통)</option>
+              <option value="아빠">아빠</option>
+              <option value="엄마">엄마</option>
+              <option value="자녀">자녀</option>
+            </select>
+          </label>
+          <label>매월 결제일
+            <select name="payment_day">
+              <option value="1">매월 1일</option>
+              <option value="5">매월 5일</option>
+              <option value="10">매월 10일</option>
+              <option value="12">매월 12일</option>
+              <option value="14" selected>매월 14일</option>
+              <option value="15">매월 15일</option>
+              <option value="20">매월 20일</option>
+              <option value="23">매월 23일</option>
+              <option value="25">매월 25일</option>
+              <option value="27">매월 27일</option>
+              <option value="28">매월 28일</option>
+              <option value="30">매월 말일</option>
+            </select>
+          </label>
+          <label style="grid-column:1/-1;">연결 결제계좌 (카드값 출금 은행통장)
+            <select name="linked_account_id" id="ledgerCardLinkedAccountSelect">
+              <!-- 은행 계좌 동적 주입 -->
+            </select>
+          </label>
+          <label style="grid-column:1/-1;">메모 / 혜택 요약
+            <input name="memo" placeholder="예: 대중교통 10% 청구할인, 스타벅스 500원 할인" />
+          </label>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+          <button id="ledgerCardFormCancelBtn" class="button secondary compact" type="button" onclick="resetLedgerCardForm()" style="display:none;">수정 취소</button>
+          <button class="button primary compact" type="button" onclick="saveLedgerCard()">카드 저장</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="dialog-actions" style="margin-top:14px;">
+      <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">닫기</button>
+    </div>
+  </dialog>
+
+  <!-- 카드대금 결제 / 정산 다이얼로그 -->
+  <dialog id="ledgerCardPayDialog" class="dialog" style="max-width:480px;width:95vw;">
+    <form id="ledgerCardPayForm" onsubmit="return false;">
+      <div class="dialog-head">
+        <h2>💳 카드대금 결제 / 정산</h2>
+        <button value="cancel" class="close" aria-label="닫기" onclick="this.closest('dialog')?.close()">×</button>
+      </div>
+      <p class="dialog-description">연결된 은행 계좌에서 누적 카드값을 출금하고 가계부에 결제 내역을 등록하여 카드값을 0원으로 정산합니다.</p>
+
+      <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:14px;margin:12px 0;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#94a3b8;">결제 대상 카드:</span>
+          <strong id="ledgerPayCardName" style="color:#f8fafc;">-</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#94a3b8;">미결제 청구 누적액:</span>
+          <strong id="ledgerPayUnpaidAmount" style="color:#f43f5e;font-size:15px;font-weight:800;">₩0</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#94a3b8;">출금 은행 계좌:</span>
+          <strong id="ledgerPayAccountName" style="color:#38bdf8;">-</strong>
+        </div>
+      </div>
+
+      <div class="form-grid" style="grid-template-columns:1fr;">
+        <label>실제 결제(출금) 일자
+          <input type="date" name="pay_date" id="ledgerPayDateInput" required />
+        </label>
+        <label>결제 금액 (KRW)
+          <input type="number" name="pay_amount" id="ledgerPayAmountInput" placeholder="0" min="0" step="any" required data-korean-currency />
+        </label>
+      </div>
+
+      <div class="dialog-actions" style="margin-top:16px;">
+        <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
+        <button class="button primary" type="button" onclick="executeCardPayment()" style="background:linear-gradient(135deg,#38bdf8,#2563eb);">결제 및 정산 실행</button>
       </div>
     </form>
   </dialog>
@@ -2302,7 +2454,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260901-v548"></script>
+    <script src="/static/wealth.js?v=20260901-v550"></script>
   </body>
 </html>
 
