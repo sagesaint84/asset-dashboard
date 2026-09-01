@@ -8070,6 +8070,102 @@ function updateLedgerCategoryOptions(selectedCat = null) {
 }
 window.updateLedgerCategoryOptions = updateLedgerCategoryOptions;
 
+function populateLedgerAccountOptions(selectedAccountId = '', filterOwner = '모두') {
+  const accSelect = document.getElementById("ledgerTxAccountSelect");
+  if (!accSelect) return;
+
+  const src = rawDashboard || dashboard || {};
+  const banks = src.bank_accounts || rawBankAccounts || [];
+  const savings = src.savings_accounts || rawSavingsAccounts || [];
+  const securities = src.accounts || [];
+
+  const filterFn = (arr) => {
+    if (!filterOwner || filterOwner === '모두') return arr;
+    return arr.filter(x => (x.owner || '모두') === filterOwner || (x.owner || '모두') === '모두');
+  };
+
+  const filteredBanks = filterFn(banks);
+  const filteredSavings = filterFn(savings);
+  const filteredSecurities = filterFn(securities);
+
+  let html = `<option value="">-- 계좌 연동 안 함 (단순 기록) --</option>`;
+
+  if (filteredBanks.length > 0) {
+    html += `<optgroup label="🏦 은행 자유입출금 통장">`;
+    filteredBanks.forEach(b => {
+      const name = `${b.bank_name || '은행'} ${b.account_name || b.alias || '자유통장'}`.trim();
+      const bal = Number(b.balance) || 0;
+      const ownerBadge = b.owner && b.owner !== '모두' ? ` (${b.owner})` : '';
+      html += `<option value="${b.id}" data-balance="${bal}" data-name="${name}" ${b.id === selectedAccountId ? 'selected' : ''}>${name}${ownerBadge} (잔액 ₩${number(bal, 0)})</option>`;
+    });
+    html += `</optgroup>`;
+  }
+
+  if (filteredSavings.length > 0) {
+    html += `<optgroup label="💰 예·적금 계좌">`;
+    filteredSavings.forEach(s => {
+      const name = `${s.bank_name || '은행'} ${s.product_name || '예적금'}`.trim();
+      const bal = Number(s.balance) || Number(s.current_paid_amount) || 0;
+      const ownerBadge = s.owner && s.owner !== '모두' ? ` (${s.owner})` : '';
+      html += `<option value="${s.id}" data-balance="${bal}" data-name="${name}" ${s.id === selectedAccountId ? 'selected' : ''}>${name}${ownerBadge} (불입액 ₩${number(bal, 0)})</option>`;
+    });
+    html += `</optgroup>`;
+  }
+
+  if (filteredSecurities.length > 0) {
+    html += `<optgroup label="📈 증권사 예수금 계좌">`;
+    filteredSecurities.forEach(a => {
+      const name = `${a.broker || a.name || '증권사'} (${a.account_type || '위탁'})`.trim();
+      const bal = Number(a.cash_krw || a.cash || 0);
+      const ownerBadge = a.owner && a.owner !== '모두' ? ` (${a.owner})` : '';
+      html += `<option value="${a.id}" data-balance="${bal}" data-name="${name}" ${a.id === selectedAccountId ? 'selected' : ''}>${name}${ownerBadge} (예수금 ₩${number(bal, 0)})</option>`;
+    });
+    html += `</optgroup>`;
+  }
+
+  accSelect.innerHTML = html;
+  if (selectedAccountId) accSelect.value = selectedAccountId;
+}
+window.populateLedgerAccountOptions = populateLedgerAccountOptions;
+
+function updateLedgerBalancePreview() {
+  const form = document.getElementById("ledgerTxForm");
+  const previewBox = document.getElementById("ledgerBalancePreviewBox");
+  const prevEl = document.getElementById("ledgerPrevBalanceText");
+  const nextEl = document.getElementById("ledgerNextBalanceText");
+  if (!form || !previewBox || !prevEl || !nextEl) return;
+
+  const accSelect = form.querySelector("[name='account_id']");
+  const selectedOpt = accSelect?.selectedOptions?.[0];
+  const accId = accSelect?.value;
+
+  if (!accId || !selectedOpt || selectedOpt.value === "") {
+    previewBox.style.display = "none";
+    return;
+  }
+
+  const prevBal = Number(selectedOpt.dataset.balance) || 0;
+  const typeVal = form.querySelector("[name='type']")?.value || "expense";
+  const amtVal = Number(form.querySelector("[name='amount']")?.value) || 0;
+
+  let nextBal = prevBal;
+  if (typeVal === "income") {
+    nextBal = prevBal + amtVal;
+  } else {
+    nextBal = Math.max(0, prevBal - amtVal);
+  }
+
+  prevEl.textContent = `₩${number(prevBal, 0)}`;
+  nextEl.textContent = `₩${number(nextBal, 0)}`;
+  if (typeVal === "income") {
+    nextEl.style.color = "#4ade80";
+  } else {
+    nextEl.style.color = "#38bdf8";
+  }
+  previewBox.style.display = "block";
+}
+window.updateLedgerBalancePreview = updateLedgerBalancePreview;
+
 function openLedgerTxModal(txId = null) {
   const dialog = document.getElementById("ledgerTxDialog");
   const form = document.getElementById("ledgerTxForm");
@@ -8077,6 +8173,27 @@ function openLedgerTxModal(txId = null) {
   if (!dialog || !form) return;
 
   form.dataset.txId = txId || "";
+
+  // 입력 변경 시 실시간 잔액 미리보기 이벤트 연결
+  const amountInput = form.querySelector("[name='amount']");
+  if (amountInput && !amountInput.dataset.previewBound) {
+    amountInput.dataset.previewBound = "true";
+    amountInput.addEventListener("input", updateLedgerBalancePreview);
+  }
+  const typeSelect = form.querySelector("[name='type']");
+  if (typeSelect && !typeSelect.dataset.previewBound) {
+    typeSelect.dataset.previewBound = "true";
+    typeSelect.addEventListener("change", updateLedgerBalancePreview);
+  }
+  const ownerSelect = form.querySelector("[name='owner']");
+  if (ownerSelect && !ownerSelect.dataset.previewBound) {
+    ownerSelect.dataset.previewBound = "true";
+    ownerSelect.addEventListener("change", () => {
+      const curAcc = form.querySelector("[name='account_id']")?.value || "";
+      populateLedgerAccountOptions(curAcc, ownerSelect.value);
+      updateLedgerBalancePreview();
+    });
+  }
 
   if (txId && rawLedgerData?.transactions) {
     const tx = rawLedgerData.transactions.find(t => t.id === txId);
@@ -8090,6 +8207,9 @@ function openLedgerTxModal(txId = null) {
       form.querySelector("[name='pay_method']").value = tx.pay_method || "신용/체크카드";
       form.querySelector("[name='merchant']").value = tx.merchant || tx.description || "";
       form.querySelector("[name='memo']").value = tx.memo || "";
+      
+      populateLedgerAccountOptions(tx.account_id || "", tx.owner || "모두");
+      updateLedgerBalancePreview();
       dialog.showModal();
       return;
     }
@@ -8101,6 +8221,8 @@ function openLedgerTxModal(txId = null) {
   form.querySelector("[name='owner']").value = currentOwner || "모두";
   form.querySelector("[name='type']").value = "expense";
   updateLedgerCategoryOptions();
+  populateLedgerAccountOptions("", currentOwner || "모두");
+  updateLedgerBalancePreview();
   dialog.showModal();
 }
 window.openLedgerTxModal = openLedgerTxModal;
@@ -8119,6 +8241,11 @@ async function saveLedgerTransaction() {
   const merchantVal = (form.querySelector("[name='merchant']")?.value || "").trim();
   const memoVal = (form.querySelector("[name='memo']")?.value || "").trim();
 
+  const accSelect = form.querySelector("[name='account_id']");
+  const selectedOpt = accSelect?.selectedOptions?.[0];
+  const accountIdVal = accSelect?.value || "";
+  const accountNameVal = selectedOpt ? (selectedOpt.dataset.name || selectedOpt.textContent || "") : "";
+
   if (!amountVal || amountVal <= 0) {
     alert("금액을 0원보다 크게 입력해 주세요.");
     return;
@@ -8135,6 +8262,8 @@ async function saveLedgerTransaction() {
     category: categoryVal,
     owner: ownerVal,
     pay_method: payMethodVal,
+    account_id: accountIdVal,
+    account_name: accountNameVal,
     merchant: merchantVal,
     memo: memoVal
   };
@@ -8157,6 +8286,10 @@ async function saveLedgerTransaction() {
     }
     document.getElementById("ledgerTxDialog")?.close();
     await loadLedger();
+    // 계좌 잔액 연동 변동 시 대시보드 및 계좌 데이터 즉시 새로고침
+    if (accountIdVal) {
+      loadDashboard();
+    }
   } catch (err) {
     alert(`저장 중 오류: ${err.message}`);
   }

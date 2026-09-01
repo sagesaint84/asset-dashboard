@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v546" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v548" />
   </head>
   <body>
     <main class="shell">
@@ -1700,14 +1700,14 @@
           <input type="date" name="date" required />
         </label>
         <label>구분
-          <select name="type" id="ledgerTxTypeSelect" onchange="updateLedgerCategoryOptions()">
+          <select name="type" id="ledgerTxTypeSelect" onchange="updateLedgerCategoryOptions(); updateLedgerBalancePreview();">
             <option value="expense" selected>💳 지출</option>
             <option value="income">💰 수입</option>
             <option value="transfer">🔄 이체/저축</option>
           </select>
         </label>
         <label>금액 (KRW)
-          <input type="number" name="amount" placeholder="0" min="0" step="any" required data-korean-currency />
+          <input type="number" name="amount" placeholder="0" min="0" step="any" required data-korean-currency oninput="updateLedgerBalancePreview()" />
         </label>
         <label>카테고리
           <select name="category" id="ledgerTxCategorySelect">
@@ -1715,7 +1715,7 @@
           </select>
         </label>
         <label>소유자
-          <select name="owner" id="ledgerTxOwnerSelect">
+          <select name="owner" id="ledgerTxOwnerSelect" onchange="populateLedgerAccountOptions(this.form.account_id.value, this.value); updateLedgerBalancePreview();">
             <option value="모두">모두 (가족공통)</option>
             <option value="아빠">아빠</option>
             <option value="엄마">엄마</option>
@@ -2302,7 +2302,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260901-v546"></script>
+    <script src="/static/wealth.js?v=20260901-v548"></script>
   </body>
 </html>
 
