@@ -8508,7 +8508,6 @@ function renderLedgerCardsList(cards) {
     const unpaid = Number(c.unpaid_amount || 0);
     const count = Number(c.unpaid_count || 0);
     const hasUnpaid = unpaid > 0;
-    const cardDataJson = html(JSON.stringify(c));
 
     return `
       <div style="background:linear-gradient(135deg,#0d1527,#131f37);border:1px solid #23314f;border-radius:10px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
@@ -8519,7 +8518,7 @@ function renderLedgerCardsList(cards) {
               <span style="font-size:11px;color:#cbd5e1;margin-left:4px;">(${html(c.owner || '모두')})</span>
             </div>
             <div style="display:flex;gap:4px;">
-              <button class="account-action-button" onclick='editLedgerCard(${JSON.stringify(c)})' title="카드 정보 수정" type="button">✎</button>
+              <button class="account-action-button" onclick="editLedgerCard('${c.id}')" title="카드 정보 수정" type="button">✎</button>
               <button class="account-action-button" onclick="deleteLedgerCard('${c.id}')" title="카드 삭제" type="button" style="color:#f43f5e;">🗑</button>
             </div>
           </div>
@@ -8535,7 +8534,7 @@ function renderLedgerCardsList(cards) {
             <span style="font-size:11px;color:#94a3b8;">청구 예정액</span>
             <div style="font-size:14px;font-weight:800;color:${hasUnpaid ? '#f43f5e' : '#94a3b8'};">₩${number(unpaid, 0)} <span style="font-size:11px;font-weight:normal;color:#64748b;">(${count}건)</span></div>
           </div>
-          <button class="button compact ${hasUnpaid ? 'primary' : 'secondary'}" type="button" onclick='openLedgerCardPayModal(${JSON.stringify(c)})' ${!hasUnpaid ? 'disabled style="opacity:0.5;"' : 'style="font-size:11.5px;padding:4px 10px;background:linear-gradient(135deg,#38bdf8,#2563eb);color:#fff;"'}>
+          <button class="button compact ${hasUnpaid ? 'primary' : 'secondary'}" type="button" onclick="openLedgerCardPayModal('${c.id}')" ${!hasUnpaid ? 'disabled style="opacity:0.5;"' : 'style="font-size:11.5px;padding:4px 10px;background:linear-gradient(135deg,#38bdf8,#2563eb);color:#fff;"'}>
             💳 결제/정산
           </button>
         </div>
@@ -8556,11 +8555,15 @@ function resetLedgerCardForm() {
 }
 window.resetLedgerCardForm = resetLedgerCardForm;
 
-function editLedgerCard(card) {
+function editLedgerCard(cardId) {
   const form = document.getElementById("ledgerCardForm");
   const title = document.getElementById("ledgerCardFormTitle");
   const cancelBtn = document.getElementById("ledgerCardFormCancelBtn");
-  if (!form || !card) return;
+  if (!form || !cardId) return;
+
+  const cards = rawLedgerData?.cards || [];
+  const card = cards.find(c => c.id === cardId);
+  if (!card) return;
 
   form.dataset.cardId = card.id;
   form.querySelector("[name='card_company']").value = card.card_company || "현대카드";
@@ -8643,8 +8646,11 @@ async function deleteLedgerCard(cardId) {
 }
 window.deleteLedgerCard = deleteLedgerCard;
 
-function openLedgerCardPayModal(card) {
+function openLedgerCardPayModal(cardId) {
+  const cards = rawLedgerData?.cards || [];
+  const card = cards.find(c => c.id === cardId);
   if (!card) return;
+
   activePayTargetCard = card;
   const dialog = document.getElementById("ledgerCardPayDialog");
   const nameEl = document.getElementById("ledgerPayCardName");
