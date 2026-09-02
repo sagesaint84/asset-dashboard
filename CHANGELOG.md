@@ -1,3 +1,9 @@
+v5.5.8
+
+(chore) 🧹 불필요한 .env.example 더미 파일 삭제 및 README 설치 가이드 간소화
+- OpenAPI 설정이 웹 UI(`[⚙️ OpenAPI]` 모달) 및 사용자별 격리 JSON 파일로 100% 이전됨에 따라 더 이상 사용되지 않는 `.env.example` 더미 템플릿 파일 완전 삭제
+- `README.md` 내 5대 증권사(토스, KB, NH, 한투, 키움) 웹 UI 설정 안내 최신화 및 실행 절차 간소화
+
 v5.5.6
 
 (feat) 🟪 키움증권(Kiwoom) REST API 연동 및 원클릭 계좌 동기화 지원

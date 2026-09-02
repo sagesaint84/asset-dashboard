@@ -95,30 +95,9 @@
 소스코드나 `.env` 파일을 직접 열지 않고도 웹 화면에서 안전하게 OpenAPI 인증키를 관리할 수 있습니다:
 
 1. 로그인 후 상단 헤더 우측의 **`[⚙️ OpenAPI]`** 버튼을 클릭합니다.
-2. **토스증권**, **KB증권**, **NH투자증권(나무)** 중 보유한 증권사의 AppKey(또는 Client ID)와 AppSecret을 입력하고 **[💾 설정 저장]**을 누릅니다.
-3. 이미 등록된 키는 자동으로 안전하게 마스킹(`****`) 처리됩니다.
+2. **토스증권**, **KB증권**, **NH투자증권(나무)**, **한국투자증권(KIS)**, **키움증권** 중 보유한 증권사의 AppKey와 AppSecret(계좌번호)을 입력하고 **[💾 설정 저장]**을 누릅니다.
+3. 이미 등록된 키는 자동으로 안전하게 마스킹(`****`) 처리되어 계정별 폴더(`data/users/{username}/`)에 격리 보관됩니다.
 4. 연결을 해제하거나 키를 변경하고 싶을 때는 상태 뱃지 옆의 **`[🗑️ 삭제]`** 버튼을 누르면 해당 증권사의 키와 토큰 캐시가 즉시 완전히 초기화됩니다.
-
----
-
-## 🔑 환경변수(.env) 초기 설정
-
-프로젝트 루트의 `.env.example`을 복사하여 `.env`를 생성합니다:
-
-```bash
-cp .env.example .env
-```
-
-```env
-# 대시보드 세션 암호화 키 (임의의 긴 문자열)
-DASHBOARD_SECRET_KEY=generate_a_long_random_secret_key_here
-
-# (선택) 초기 기본 사용자 계정명
-DASHBOARD_USERNAME=sagesaint
-DASHBOARD_PASSWORD=your_initial_password
-```
-
-> 💡 **참고**: `sagesaint` 계정은 기존 `.env`에 설정된 증권사 키가 있는 경우 자동으로 호환 유지되며, 이후 웹의 `[⚙️ OpenAPI]` 메뉴에서 언제든지 개별 관리할 수 있습니다.
 
 ---
 
@@ -142,9 +121,8 @@ OpenAPI 미지원 증권사나 과거 거래 내역은 화면의 **`[📂 가져
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# 패키지 설치 및 환경파일 복사
+# 패키지 설치
 pip install -r requirements.txt
-copy .env.example .env
 ```
 
 ### 3. 대시보드 실행
@@ -159,10 +137,9 @@ copy .env.example .env
 ## 🐧 Linux / Docker 설치, 실행 및 업데이트 방법
 
 ```bash
-# 1. 저장소 복제 및 환경파일 설정
+# 1. 저장소 복제 및 이동
 git clone https://github.com/sagesaint84/asset-dashboard.git
 cd asset-dashboard
-cp .env.example .env
 
 # 2. Docker Compose 빌드 및 실행
 docker compose up -d --build
