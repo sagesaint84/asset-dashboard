@@ -7341,6 +7341,9 @@ async function openUserOpenApiModal() {
   const kisKey = document.getElementById('openapiKisKey');
   const kisSec = document.getElementById('openapiKisSecret');
   const kisAcc = document.getElementById('openapiKisAccountNo');
+  const kiwoomKey = document.getElementById('openapiKiwoomKey');
+  const kiwoomSec = document.getElementById('openapiKiwoomSecret');
+  const kiwoomAcc = document.getElementById('openapiKiwoomAccountNo');
 
   if (tossKey) tossKey.value = '';
   if (tossSec) tossSec.value = '';
@@ -7351,6 +7354,9 @@ async function openUserOpenApiModal() {
   if (kisKey) kisKey.value = '';
   if (kisSec) kisSec.value = '';
   if (kisAcc) kisAcc.value = '';
+  if (kiwoomKey) kiwoomKey.value = '';
+  if (kiwoomSec) kiwoomSec.value = '';
+  if (kiwoomAcc) kiwoomAcc.value = '';
 
   modal.showModal();
 
@@ -7446,6 +7452,30 @@ async function openUserOpenApiModal() {
       if (kisSec) kisSec.placeholder = '한투 App Secret 입력';
       if (kisAcc) kisAcc.value = (config.kis && config.kis.account_no) || '';
     }
+
+    // Kiwoom (키움증권)
+    const kiwoomBadge = document.getElementById('openapiKiwoomBadge');
+    const kiwoomDelBtn = document.getElementById('openapiKiwoomDeleteBtn');
+    if (config.kiwoom && config.kiwoom.configured) {
+      if (kiwoomBadge) {
+        kiwoomBadge.textContent = '연결됨';
+        kiwoomBadge.style.background = 'rgba(66,213,163,0.15)';
+        kiwoomBadge.style.color = '#42d5a3';
+      }
+      if (kiwoomDelBtn) kiwoomDelBtn.style.display = 'inline-flex';
+      if (kiwoomKey) kiwoomKey.value = config.kiwoom.app_key || '';
+      if (kiwoomSec) kiwoomSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
+      if (kiwoomAcc) kiwoomAcc.value = config.kiwoom.account_no || '';
+    } else {
+      if (kiwoomBadge) {
+        kiwoomBadge.textContent = '미연결';
+        kiwoomBadge.style.background = 'rgba(255,255,255,0.06)';
+        kiwoomBadge.style.color = '#91a0c1';
+      }
+      if (kiwoomDelBtn) kiwoomDelBtn.style.display = 'none';
+      if (kiwoomSec) kiwoomSec.placeholder = '키움 App Secret 입력';
+      if (kiwoomAcc) kiwoomAcc.value = (config.kiwoom && config.kiwoom.account_no) || '';
+    }
   } catch (err) {
     console.error('[OPENAPI] 설정 조회 실패:', err);
   }
@@ -7453,7 +7483,7 @@ async function openUserOpenApiModal() {
 window.openUserOpenApiModal = openUserOpenApiModal;
 
 async function handleDeleteBrokerApi(broker) {
-  const names = { toss: '토스증권', kb: 'KB증권', nh: '나무증권', kis: '한국투자증권' };
+  const names = { toss: '토스증권', kb: 'KB증권', nh: '나무증권', kis: '한국투자증권', kiwoom: '키움증권' };
   const bname = names[broker] || broker;
   if (!confirm(`정말로 ${bname} OpenAPI 키와 시크릿을 삭제(연결 해제)하시겠습니까?`)) return;
 
@@ -7491,6 +7521,11 @@ async function handleSaveUserOpenApi(e) {
       app_key: (document.getElementById('openapiKisKey')?.value || '').trim(),
       app_secret: (document.getElementById('openapiKisSecret')?.value || '').trim(),
       account_no: (document.getElementById('openapiKisAccountNo')?.value || '').trim(),
+    },
+    kiwoom: {
+      app_key: (document.getElementById('openapiKiwoomKey')?.value || '').trim(),
+      app_secret: (document.getElementById('openapiKiwoomSecret')?.value || '').trim(),
+      account_no: (document.getElementById('openapiKiwoomAccountNo')?.value || '').trim(),
     },
   };
 

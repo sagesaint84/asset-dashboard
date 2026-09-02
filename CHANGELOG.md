@@ -1,3 +1,20 @@
+v5.5.6
+
+(feat) 🟪 키움증권(Kiwoom) REST API 연동 및 원클릭 계좌 동기화 지원
+- **증권사 OpenAPI 설정 모달에 키움증권(Kiwoom) 추가**:
+  - `App Key`, `App Secret`, `계좌번호 (8자리 또는 8자리-01)` 등록/수정/삭제 지원
+  - 안전한 마스킹(`****`) 표시 및 보존
+- **키움증권(Kiwoom) REST API 연동 클라이언트 (`app/services/kiwoom_openapi.py`) 구현**:
+  - OAuth 2.0 Access Token 자동 발급 및 파일 캐싱 (`kiwoom_token_cache.json`)
+  - 국내주식 잔고 및 예수금 조회 API 지원
+  - 해외주식(미국주식) 잔고 및 외화예수금 조회 API 지원
+- **백엔드 동기화 라우트 연동 (`/api/sync/kiwoom`, `/api/sync/all`)**:
+  - 키움증권 단독 동기화 및 5대 증권사(토스·KB·NH·한투·키움) 일괄 동기화 지원
+  - 키움증권 계좌 자동 생성 및 사용자 지정 이름 보존 (`broker: "키움증권"`, `source: "kiwoom_api"`)
+- **환경변수 템플릿(`.env.example`) 업데이트**:
+  - 키움증권 REST API 설정 가이드 추가
+(perf) 서비스 워커 캐시 버전(wealth-cache-v106) 및 정적 자산 쿼리(v556) 갱신
+
 v5.5.4
 
 (feat) 📈 한국투자증권(KIS) Open Trading API 연동 및 계좌 자동 동기화 지원
