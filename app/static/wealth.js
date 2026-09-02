@@ -7338,6 +7338,9 @@ async function openUserOpenApiModal() {
   const kbSec = document.getElementById('openapiKbSecret');
   const nhKey = document.getElementById('openapiNhKey');
   const nhSec = document.getElementById('openapiNhSecret');
+  const kisKey = document.getElementById('openapiKisKey');
+  const kisSec = document.getElementById('openapiKisSecret');
+  const kisAcc = document.getElementById('openapiKisAccountNo');
 
   if (tossKey) tossKey.value = '';
   if (tossSec) tossSec.value = '';
@@ -7345,6 +7348,9 @@ async function openUserOpenApiModal() {
   if (kbSec) kbSec.value = '';
   if (nhKey) nhKey.value = '';
   if (nhSec) nhSec.value = '';
+  if (kisKey) kisKey.value = '';
+  if (kisSec) kisSec.value = '';
+  if (kisAcc) kisAcc.value = '';
 
   modal.showModal();
 
@@ -7416,6 +7422,30 @@ async function openUserOpenApiModal() {
       if (nhDelBtn) nhDelBtn.style.display = 'none';
       if (nhSec) nhSec.placeholder = '나무 App Secret 입력';
     }
+
+    // KIS (한국투자증권)
+    const kisBadge = document.getElementById('openapiKisBadge');
+    const kisDelBtn = document.getElementById('openapiKisDeleteBtn');
+    if (config.kis && config.kis.configured) {
+      if (kisBadge) {
+        kisBadge.textContent = '연결됨';
+        kisBadge.style.background = 'rgba(66,213,163,0.15)';
+        kisBadge.style.color = '#42d5a3';
+      }
+      if (kisDelBtn) kisDelBtn.style.display = 'inline-flex';
+      if (kisKey) kisKey.value = config.kis.app_key || '';
+      if (kisSec) kisSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
+      if (kisAcc) kisAcc.value = config.kis.account_no || '';
+    } else {
+      if (kisBadge) {
+        kisBadge.textContent = '미연결';
+        kisBadge.style.background = 'rgba(255,255,255,0.06)';
+        kisBadge.style.color = '#91a0c1';
+      }
+      if (kisDelBtn) kisDelBtn.style.display = 'none';
+      if (kisSec) kisSec.placeholder = '한투 App Secret 입력';
+      if (kisAcc) kisAcc.value = (config.kis && config.kis.account_no) || '';
+    }
   } catch (err) {
     console.error('[OPENAPI] 설정 조회 실패:', err);
   }
@@ -7423,7 +7453,7 @@ async function openUserOpenApiModal() {
 window.openUserOpenApiModal = openUserOpenApiModal;
 
 async function handleDeleteBrokerApi(broker) {
-  const names = { toss: '토스증권', kb: 'KB증권', nh: '나무증권' };
+  const names = { toss: '토스증권', kb: 'KB증권', nh: '나무증권', kis: '한국투자증권' };
   const bname = names[broker] || broker;
   if (!confirm(`정말로 ${bname} OpenAPI 키와 시크릿을 삭제(연결 해제)하시겠습니까?`)) return;
 
@@ -7456,6 +7486,11 @@ async function handleSaveUserOpenApi(e) {
     nh: {
       app_key: (document.getElementById('openapiNhKey')?.value || '').trim(),
       app_secret: (document.getElementById('openapiNhSecret')?.value || '').trim(),
+    },
+    kis: {
+      app_key: (document.getElementById('openapiKisKey')?.value || '').trim(),
+      app_secret: (document.getElementById('openapiKisSecret')?.value || '').trim(),
+      account_no: (document.getElementById('openapiKisAccountNo')?.value || '').trim(),
     },
   };
 

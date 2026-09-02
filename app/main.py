@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from app.services.kb_openapi import KBOpenAPI, KBOpenAPIError
 from app.services.nhplug_openapi import NhPlugOpenAPI, NhPlugOpenAPIError
 from app.services.toss_openapi import TossOpenAPI, TossOpenAPIError
+from app.services.kis_openapi import KISOpenAPI, KISOpenAPIError
 from app.services.web_finance import (
     get_web_market_overview,
     fetch_fx_rate_usd_krw,
@@ -1806,6 +1807,82 @@ async def sync_namoo(request: Request = None) -> dict:
     return {"message": f"나무증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
 
 
+@app.post("/api/sync/kis")
+async def sync_kis(request: Request = None) -> dict:
+    username = get_current_username(request) if request else "sagesaint"
+    client = KISOpenAPI(username=username)
+    if not client.configured:
+        return {"message": "한국투자증권 OpenAPI 키가 설정되지 않았습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "count": 0}
+    try:
+        records = await client.sync_holdings()
+    except KISOpenAPIError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    data = read_portfolio(username=username)
+    cash_balances = data["settings"].setdefault("cash_balances", {})
+
+    def resolve_kis_account(data_accounts, acct_no, default_name):
+        suffix = str(acct_no)[-4:] if acct_no else ""
+        for a in data_accounts:
+            if a.get("broker") == "한국투자증권" and (a.get("account_key") == suffix or a.get("account_no") == str(acct_no)):
+                return a
+        if suffix:
+            for a in data_accounts:
+                if a.get("broker") == "한국투자증권" and (suffix in a.get("name", "") or a.get("name") == default_name):
+                    return a
+        return None
+
+    account_map = {}
+    for account in client.last_accounts:
+        account_no = str(account.get("account_number", ""))
+        default_name = account.get("account_name", f"한국투자증권 ({account_no})")
+        suffix = account_no[-4:] if account_no else ""
+        if account_no:
+            existing = resolve_kis_account(data["accounts"], account_no, default_name)
+            if existing:
+                account_id = existing["id"]
+                account_name = existing["name"]  # 사용자 지정 이름 100% 보존
+                existing["source"] = "kis_api"
+                existing["account_key"] = suffix
+                existing["account_no"] = account_no
+            else:
+                account_id = str(uuid.uuid4())
+                account_name = default_name
+                data["accounts"].append({
+                    "id": account_id,
+                    "broker": "한국투자증권",
+                    "name": account_name,
+                    "family_group": "All",
+                    "source": "kis_api",
+                    "account_key": suffix,
+                    "account_no": account_no,
+                    "owner": "모두",
+                })
+            account_map[account_no] = (account_id, account_name)
+            if account_no in client.account_cash:
+                cash_balances.setdefault(account_id, {})
+                for ccy, amt in client.account_cash[account_no].items():
+                    cash_balances[account_id][ccy] = amt
+
+    holdings = []
+    for record in records:
+        acct_no = str(record.get("account_number", ""))
+        if acct_no in account_map:
+            account_id, account_name = account_map[acct_no]
+        else:
+            first_acct = next(iter(account_map.values()), None)
+            if first_acct:
+                account_id, account_name = first_acct
+            else:
+                account_id = get_or_add_account(data, "한국투자증권", "한국투자증권 계좌", "kis_api")
+                account_name = "한국투자증권 계좌"
+        holdings.append(normalize_holding(record, account_id, "한국투자증권", account_name, "kis_api"))
+
+    upsert_holdings(data, holdings, replace_source="kis_api")
+    data["settings"]["cash_balances"] = cash_balances
+    write_portfolio(data, username=username)
+    return {"message": f"한국투자증권 보유종목 {len(holdings)}개 및 예수금을 동기화했습니다.", "count": len(holdings)}
+
+
 @app.post("/api/fx/refresh")
 async def refresh_fx_rate(request: Request) -> dict:
     username = get_current_username(request)
@@ -1915,6 +1992,15 @@ async def sync_all_accounts(request: Request) -> dict:
             results.append(r.get("message", "나무 동기화 완료"))
         except Exception as e:
             errors.append(f"나무: {e}")
+
+    # 4. KIS (한국투자증권)
+    kis = KISOpenAPI(username=username)
+    if kis.configured:
+        try:
+            r = await sync_kis(request)
+            results.append(r.get("message", "한국투자증권 동기화 완료"))
+        except Exception as e:
+            errors.append(f"한투: {e}")
             
     if not results and not errors:
         return {"message": "등록된 증권사 OpenAPI 설정이 없습니다. 상단 [OpenAPI] 버튼에서 키를 등록하세요.", "synced": 0}

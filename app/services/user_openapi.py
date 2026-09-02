@@ -46,6 +46,11 @@ def get_user_openapi_config(username: str) -> dict[str, dict[str, str]]:
                 "app_key": os.getenv("NHPLUG_APP_KEY", "").strip(),
                 "app_secret": os.getenv("NHPLUG_APP_SECRET", "").strip(),
             },
+            "kis": {
+                "app_key": os.getenv("KIS_APP_KEY", "").strip(),
+                "app_secret": os.getenv("KIS_APP_SECRET", "").strip(),
+                "account_no": os.getenv("KIS_ACCOUNT_NO", "").strip(),
+            },
         }
         return env_config
 
@@ -53,6 +58,7 @@ def get_user_openapi_config(username: str) -> dict[str, dict[str, str]]:
         "toss": {"app_key": "", "app_secret": ""},
         "kb": {"app_key": "", "app_secret": ""},
         "nh": {"app_key": "", "app_secret": ""},
+        "kis": {"app_key": "", "app_secret": "", "account_no": ""},
     }
 
 
@@ -60,7 +66,10 @@ def delete_user_broker_openapi(username: str, broker: str) -> dict[str, Any]:
     """특정 증권사의 OpenAPI 키, 시크릿 및 캐시 토큰을 완전히 삭제합니다."""
     current = get_user_openapi_config(username)
     if broker in current:
-        current[broker] = {"app_key": "", "app_secret": ""}
+        if broker == "kis":
+            current[broker] = {"app_key": "", "app_secret": "", "account_no": ""}
+        else:
+            current[broker] = {"app_key": "", "app_secret": ""}
 
     file_path = _get_user_openapi_file(username)
     file_path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -71,6 +80,7 @@ def delete_user_broker_openapi(username: str, broker: str) -> dict[str, Any]:
         "toss": "toss_token_cache.json",
         "kb": "kb_token_cache.json",
         "nh": "nhplug_token_cache.json",
+        "kis": "kis_token_cache.json",
     }
     c_filename = cache_map.get(broker)
     if c_filename:
@@ -89,7 +99,7 @@ def save_user_openapi_config(username: str, update_data: dict[str, dict[str, Any
     """사용자의 OpenAPI 설정을 저장합니다. 마스킹된 값(****)이나 빈 시크릿은 기존 값을 보존합니다."""
     current = get_user_openapi_config(username)
 
-    for broker in ("toss", "kb", "nh"):
+    for broker in ("toss", "kb", "nh", "kis"):
         if broker in update_data:
             b_data = update_data[broker]
             current.setdefault(broker, {})
@@ -97,7 +107,10 @@ def save_user_openapi_config(username: str, update_data: dict[str, dict[str, Any
             # 1) 명시적 삭제 플래그가 있는 경우
             if b_data.get("delete") is True:
                 delete_user_broker_openapi(username, broker)
-                current[broker] = {"app_key": "", "app_secret": ""}
+                if broker == "kis":
+                    current[broker] = {"app_key": "", "app_secret": "", "account_no": ""}
+                else:
+                    current[broker] = {"app_key": "", "app_secret": ""}
                 continue
 
             # 2) app_key 처리
@@ -112,8 +125,15 @@ def save_user_openapi_config(username: str, update_data: dict[str, dict[str, Any
             if new_sec and not new_sec.startswith("****") and new_sec != "********":
                 current[broker]["app_secret"] = new_sec
             elif new_key == "" and new_sec == "":
-                # 둘 다 명시적으로 빈 칸으로 제출한 경우 삭제로 처리
                 current[broker]["app_secret"] = ""
+
+            # 4) account_no 처리 (kis 등)
+            if "account_no" in b_data:
+                new_acc = str(b_data.get("account_no", "")).strip()
+                if new_acc and not new_acc.endswith("****"):
+                    current[broker]["account_no"] = new_acc
+                elif new_acc == "":
+                    current[broker]["account_no"] = ""
 
     file_path = _get_user_openapi_file(username)
     file_path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -126,10 +146,11 @@ def get_masked_user_openapi_config(username: str) -> dict[str, dict[str, Any]]:
     cfg = get_user_openapi_config(username)
     masked: dict[str, dict[str, Any]] = {}
 
-    for broker in ("toss", "kb", "nh"):
+    for broker in ("toss", "kb", "nh", "kis"):
         b_cfg = cfg.get(broker, {})
         key = b_cfg.get("app_key", "")
         sec = b_cfg.get("app_secret", "")
+        acc = b_cfg.get("account_no", "")
 
         masked_key = ""
         if key:
@@ -138,11 +159,17 @@ def get_masked_user_openapi_config(username: str) -> dict[str, dict[str, Any]]:
 
         masked_sec = "********" if sec else ""
 
+        masked_acc = ""
+        if acc:
+            masked_acc = f"{acc[:4]}****" if len(acc) >= 4 else acc
+
         masked[broker] = {
             "app_key": masked_key,
             "has_app_key": bool(key),
             "app_secret": masked_sec,
             "has_app_secret": bool(sec),
+            "account_no": masked_acc,
+            "has_account_no": bool(acc),
             "configured": bool(key and sec),
         }
 

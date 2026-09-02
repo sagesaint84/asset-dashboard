@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260901-v552" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260902-v554" />
   </head>
   <body>
     <main class="shell">
@@ -2440,6 +2440,33 @@
             </div>
           </div>
 
+          <!-- 4. 한국투자증권 (KIS) -->
+          <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:700;color:#f97316;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+                🟧 한국투자증권 (KIS)
+              </span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span id="openapiKisBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
+                <button id="openapiKisDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kis')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="한국투자증권 연결 삭제">🗑️ 삭제</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Key</label>
+                <input id="openapiKisKey" type="text" placeholder="한투 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
+              </div>
+              <div>
+                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Secret</label>
+                <input id="openapiKisSecret" type="password" placeholder="한투 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
+              </div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">계좌번호 (CANO 8자리 또는 8자리-01)</label>
+              <input id="openapiKisAccountNo" type="text" placeholder="예: 12345678-01 또는 12345678" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
+            </div>
+          </div>
+
           <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:8px;padding:10px 12px;font-size:11.5px;color:#bae6fd;line-height:1.5;">
             💡 <strong>안내</strong>: 이미 등록된 인증키는 마스킹(<code>****</code>)되어 표시되며, 변경하지 않고 비워두면 기존 키가 안전하게 보존됩니다.
           </div>
@@ -2454,7 +2481,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260901-v552"></script>
+    <script src="/static/wealth.js?v=20260902-v554"></script>
   </body>
 </html>
 
