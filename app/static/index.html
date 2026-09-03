@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260903-v557" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260903-v558" />
   </head>
   <body>
     <main class="shell">
@@ -1371,10 +1371,62 @@
             누적 총 납입액 (KRW)
             <input type="number" name="total_paid_amount" placeholder="현재까지 납입한 원금 총액" min="0" step="any" data-korean-currency />
           </label>
-          <label>
+          <!-- 수령 방식 선택 (일시금 vs 월지급식 연금형) -->
+          <div style="grid-column: 1 / -1; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 12px; margin-bottom: 4px;">
+            <div style="font-size: 12px; font-weight: 700; color: #94a3b8; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+              <span>💰 만기/수령 방식 선택</span>
+            </div>
+            <div style="display: flex; gap: 18px; flex-wrap: wrap;">
+              <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                <input type="radio" name="payout_type" value="lump_sum" checked id="payoutTypeLumpSum" />
+                <span>일시금 / 해약환급금형 <small style="color:#94a3b8;">(일반 보장성·만기적금)</small></span>
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: #38bdf8;">
+                <input type="radio" name="payout_type" value="monthly_pension" id="payoutTypeMonthlyPension" />
+                <span>💎 월 지급식 / 연금형 <small style="color:#7dd3fc;">(국민연금·연금보험·주택연금)</small></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 1) 일시금형 입력 필드 -->
+          <label id="lumpSumAmountGroup">
             예상 수령액 / 해약환급금 (KRW)
-            <input type="number" name="expected_amount" placeholder="만기 예상액 또는 해약환급금" min="0" step="any" data-korean-currency />
+            <input type="number" name="expected_amount" id="insuranceExpectedAmount" placeholder="만기 예상액 또는 해약환급금" min="0" step="any" data-korean-currency />
           </label>
+
+          <!-- 2) 월지급식 연금형 전용 입력 & 자동 20년 환산 구역 -->
+          <div id="pensionPayoutGroup" style="display:none; grid-column: 1 / -1; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 14px; margin-bottom: 4px;">
+            <div style="font-size: 12.5px; font-weight: 700; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+              <span>💎 월 지급식 연금 자산 환산 설정</span>
+              <span style="font-size: 11px; font-weight: 400; color: #94a3b8;">※ 월 수령액 × 총 수령 개월수로 안전자산에 자동 합산</span>
+            </div>
+            <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 10px;">
+              <label>
+                월 예상 수령액 (KRW)
+                <input type="number" name="monthly_payout" id="pensionMonthlyPayout" placeholder="예: 1250000" min="0" step="any" data-korean-currency />
+              </label>
+              <label>
+                기대 수령 기간
+                <select name="payout_duration_years" id="pensionDurationSelect">
+                  <option value="10">10년 (120개월 분할)</option>
+                  <option value="15">15년 (180개월 분할)</option>
+                  <option value="20" selected>20년 (240개월 / 국민연금·종신 권장 🌟)</option>
+                  <option value="25">25년 (300개월 분할)</option>
+                  <option value="30">30년 (360개월 분할)</option>
+                </select>
+              </label>
+            </div>
+            <div id="pensionAssetPreviewBox" style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span>총 수령 기간: </span>
+                <strong id="pensionDurationText" style="color: #f1f5f9;">20년 (240개월)</strong>
+              </div>
+              <div>
+                <span>총자산 환산 가치: </span>
+                <strong id="pensionConvertedTotalText" style="color: #38bdf8; font-size: 14px;">₩0</strong>
+              </div>
+            </div>
+          </div>
           <label>
             가입일
             <input type="date" name="start_date" />
@@ -2508,7 +2560,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260903-v557"></script>
+    <script src="/static/wealth.js?v=20260903-v558"></script>
   </body>
 </html>
 

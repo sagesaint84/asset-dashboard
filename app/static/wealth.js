@@ -2399,17 +2399,57 @@ function renderInsuranceWithOwner(owner = '모두') {
 
         ${yuTaxBox}
 
-        <div class="saving-interest-box" style="margin-top:${isYU ? '6px' : '10px'};">
-          <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
-            <span>예상 수령액 / 해약환급금</span>
-            <span style="color:#42d5a3;font-size:14px;">₩${number(ins.expected_amount || 0, 0)}</span>
+        ${(ins.payout_type === 'monthly_pension' || (Number(ins.monthly_payout) || 0) > 0) ? `
+          <div class="saving-interest-box" style="margin-top:10px;background:rgba(56,189,248,0.06);border-color:rgba(56,189,248,0.35);">
+            <div class="saving-interest-row">
+              <span style="color:#7dd3fc;">💎 월 예상 수령액</span>
+              <span style="color:#38bdf8;font-weight:700;font-size:13.5px;">월 ₩${number(ins.monthly_payout || 0, 0)}</span>
+            </div>
+            <div class="saving-interest-row maturity-row" style="border-top:1px dashed rgba(56,189,248,0.3);padding-top:5px;margin-top:5px;">
+              <span style="color:#e2e8f0;">총자산 환산액 (${ins.payout_duration_years || 20}년)</span>
+              <span style="color:#4ade80;font-size:14.5px;font-weight:800;">₩${number(ins.expected_amount || ins.converted_total_asset || 0, 0)}</span>
+            </div>
           </div>
-        </div>
+        ` : `
+          <div class="saving-interest-box" style="margin-top:${isYU ? '6px' : '10px'};">
+            <div class="saving-interest-row maturity-row" style="padding-top:0;border-top:none;">
+              <span>예상 수령액 / 해약환급금</span>
+              <span style="color:#42d5a3;font-size:14px;">₩${number(ins.expected_amount || 0, 0)}</span>
+            </div>
+          </div>
+        `}
       </div>
     `;
   }).join('');
 
   grid.innerHTML = (pensionCardsHtml + insuranceCardsHtml) || '<div class="empty">등록된 보험/연금 상품이 없습니다.</div>';
+}
+
+function updatePensionPayoutFields() {
+  const isPension = $("#payoutTypeMonthlyPension")?.checked;
+  const lumpSumGroup = $("#lumpSumAmountGroup");
+  const pensionGroup = $("#pensionPayoutGroup");
+
+  if (lumpSumGroup) lumpSumGroup.style.display = isPension ? "none" : "block";
+  if (pensionGroup) pensionGroup.style.display = isPension ? "block" : "none";
+
+  if (isPension) {
+    const monthly = Number($("#pensionMonthlyPayout")?.value) || 0;
+    const years = Number($("#pensionDurationSelect")?.value) || 20;
+    const totalMonths = Math.round(years * 12);
+    const converted = Math.round(monthly * totalMonths);
+
+    if ($("#pensionDurationText")) {
+      $("#pensionDurationText").textContent = `${years}년 (${totalMonths}개월)`;
+    }
+    if ($("#pensionConvertedTotalText")) {
+      $("#pensionConvertedTotalText").textContent = `₩${number(converted, 0)}`;
+    }
+    // 일시금 필드에도 동기화하여 안전자산 및 호환성 보장
+    if ($("#insuranceExpectedAmount")) {
+      $("#insuranceExpectedAmount").value = converted > 0 ? converted : "";
+    }
+  }
 }
 
 function updateYellowUmbrellaFields() {
@@ -2456,13 +2496,26 @@ function openInsuranceAccountDialog(item = null) {
     form.querySelector("[name='monthly_premium']").value = item.monthly_premium || "";
     form.querySelector("[name='total_paid_amount']").value = item.total_paid_amount || "";
     form.querySelector("[name='expected_amount']").value = item.expected_amount || "";
+
+    const isMonthlyPension = item.payout_type === "monthly_pension" || (Number(item.monthly_payout) || 0) > 0 || item.insurance_type === "national_pension";
+    if (isMonthlyPension) {
+      if ($("#payoutTypeMonthlyPension")) $("#payoutTypeMonthlyPension").checked = true;
+      if ($("#pensionMonthlyPayout")) $("#pensionMonthlyPayout").value = item.monthly_payout || "";
+      if ($("#pensionDurationSelect")) $("#pensionDurationSelect").value = String(item.payout_duration_years || 20);
+    } else {
+      if ($("#payoutTypeLumpSum")) $("#payoutTypeLumpSum").checked = true;
+    }
+
     form.querySelector("[name='start_date']").value = item.start_date || "";
     form.querySelector("[name='maturity_date']").value = item.maturity_date || "";
     form.querySelector("[name='memo']").value = item.memo || "";
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
+    if ($("#payoutTypeLumpSum")) $("#payoutTypeLumpSum").checked = true;
+    if ($("#pensionDurationSelect")) $("#pensionDurationSelect").value = "20";
   }
   updateYellowUmbrellaFields();
+  updatePensionPayoutFields();
   refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
@@ -7672,12 +7725,33 @@ function initSavingsListeners() {
 
   const insForm = $("#insuranceAccountForm");
   if (insForm) {
-    insForm.addEventListener("input", updateYellowUmbrellaFields);
-    insForm.addEventListener("change", updateYellowUmbrellaFields);
+    const handleInsuranceFormChange = () => {
+      updateYellowUmbrellaFields();
+      updatePensionPayoutFields();
+    };
+    insForm.addEventListener("input", handleInsuranceFormChange);
+    insForm.addEventListener("change", handleInsuranceFormChange);
+
+    $("#insuranceTypeSelect")?.addEventListener("change", (e) => {
+      if (e.target.value === "national_pension") {
+        const pRadio = $("#payoutTypeMonthlyPension");
+        if (pRadio) pRadio.checked = true;
+        const compInput = insForm.querySelector("[name='company_name']");
+        if (compInput && !compInput.value.trim()) compInput.value = "국민연금공단";
+        const prodInput = insForm.querySelector("[name='product_name']");
+        if (prodInput && !prodInput.value.trim()) prodInput.value = "국민연금 (노령연금)";
+        updatePensionPayoutFields();
+      }
+    });
 
     insForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(insForm);
+      const pType = fd.get("payout_type") || "lump_sum";
+      const mPayout = Number(fd.get("monthly_payout")) || 0;
+      const pYears = Number(fd.get("payout_duration_years")) || 20;
+      const convertedTotal = Math.round(mPayout * 12 * pYears);
+
       const payload = {
         id: fd.get("id") || undefined,
         insurance_type: fd.get("insurance_type") || "protection",
@@ -7689,7 +7763,11 @@ function initSavingsListeners() {
         marginal_tax_rate: Number(fd.get("marginal_tax_rate")) || 26.4,
         monthly_premium: Number(fd.get("monthly_premium")) || 0,
         total_paid_amount: Number(fd.get("total_paid_amount")) || 0,
-        expected_amount: Number(fd.get("expected_amount")) || 0,
+        expected_amount: pType === "monthly_pension" ? convertedTotal : (Number(fd.get("expected_amount")) || 0),
+        payout_type: pType,
+        monthly_payout: mPayout,
+        payout_duration_years: pYears,
+        converted_total_asset: pType === "monthly_pension" ? convertedTotal : (Number(fd.get("expected_amount")) || 0),
         start_date: fd.get("start_date") || "",
         maturity_date: fd.get("maturity_date") || "",
         memo: fd.get("memo") || "",

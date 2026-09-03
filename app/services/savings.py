@@ -215,7 +215,18 @@ def get_savings_data(username: str | None = None) -> dict[str, Any]:
         item = deepcopy(ins)
         monthly = float(item.get("monthly_premium") or 0.0)
         paid = float(item.get("total_paid_amount") or 0.0)
-        expected = float(item.get("expected_amount") or 0.0)
+        payout_type = item.get("payout_type") or "lump_sum"
+
+        if payout_type == "monthly_pension":
+            monthly_payout = float(item.get("monthly_payout") or 0.0)
+            years = float(item.get("payout_duration_years") or 20.0)
+            converted = round(monthly_payout * 12.0 * years)
+            item["converted_total_asset"] = converted
+            item["expected_amount"] = converted
+            expected = float(converted)
+        else:
+            expected = float(item.get("expected_amount") or 0.0)
+            item["converted_total_asset"] = expected
 
         total_insurance_monthly += monthly
         total_insurance_paid += paid
@@ -403,6 +414,17 @@ def save_insurance_account(payload: dict[str, Any], username: str | None = None)
     ins_id = payload.get("id") or f"ins-{uuid.uuid4().hex[:12]}"
     existing_index = next((i for i, ins in enumerate(insurances) if ins.get("id") == ins_id), None)
 
+    payout_type = (payload.get("payout_type") or "lump_sum").strip()
+    monthly_payout = max(0.0, float(payload.get("monthly_payout") or 0.0))
+    payout_duration_years = max(1.0, float(payload.get("payout_duration_years") or 20.0))
+
+    if payout_type == "monthly_pension":
+        converted_total = round(monthly_payout * 12.0 * payout_duration_years)
+        expected_amount = float(converted_total)
+    else:
+        expected_amount = max(0.0, float(payload.get("expected_amount") or 0.0))
+        converted_total = expected_amount
+
     record = {
         "id": ins_id,
         "insurance_type": (payload.get("insurance_type") or "protection").strip(),
@@ -414,7 +436,11 @@ def save_insurance_account(payload: dict[str, Any], username: str | None = None)
         "marginal_tax_rate": float(payload.get("marginal_tax_rate") or 0.0) if payload.get("marginal_tax_rate") else None,
         "monthly_premium": max(0.0, float(payload.get("monthly_premium") or 0.0)),
         "total_paid_amount": max(0.0, float(payload.get("total_paid_amount") or 0.0)),
-        "expected_amount": max(0.0, float(payload.get("expected_amount") or 0.0)),
+        "expected_amount": expected_amount,
+        "payout_type": payout_type,
+        "monthly_payout": monthly_payout,
+        "payout_duration_years": payout_duration_years,
+        "converted_total_asset": converted_total,
         "start_date": (payload.get("start_date") or "").strip(),
         "maturity_date": (payload.get("maturity_date") or "").strip(),
         "memo": (payload.get("memo") or "").strip(),
