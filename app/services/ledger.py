@@ -95,6 +95,7 @@ def get_ledger_summary(
     month: int | None = None,
     owner: str = "모두",
 ) -> dict[str, Any]:
+    process_recurring_deductions(username=username)
     data = read_ledger(username=username)
     now = datetime.now()
     target_year = year or now.year
@@ -502,12 +503,46 @@ def add_recurring(payload: dict[str, Any], username: str | None = None) -> dict[
         "category": str(payload.get("category") or "주거/통신"),
         "owner": str(payload.get("owner") or "모두"),
         "pay_method": str(payload.get("pay_method") or "자동이체"),
+        "linked_account_id": str(payload.get("linked_account_id") or "").strip(),
+        "linked_account_name": str(payload.get("linked_account_name") or "").strip(),
+        "auto_deduct": bool(payload.get("auto_deduct", True)),
+        "last_deducted_date": str(payload.get("last_deducted_date") or "").strip(),
         "memo": str(payload.get("memo") or "").strip(),
         "active": bool(payload.get("active", True)),
     }
     data["recurring"].append(rec)
     write_ledger(data, username=username)
+    # 등록 즉시 오늘 이전 이체일인 경우 자동 출금 처리 시도
+    process_recurring_deductions(username=username)
     return rec
+
+
+def edit_recurring(rec_id: str, payload: dict[str, Any], username: str | None = None) -> dict[str, Any] | None:
+    data = read_ledger(username=username)
+    for idx, r in enumerate(data.get("recurring", [])):
+        if r.get("id") == rec_id:
+            r["name"] = str(payload.get("name") or r.get("name")).strip()
+            r["amount"] = max(0.0, float(payload.get("amount") if "amount" in payload else r.get("amount", 0)))
+            r["day_of_month"] = max(1, min(31, int(payload.get("day_of_month") if "day_of_month" in payload else r.get("day_of_month", 1))))
+            r["category"] = str(payload.get("category") or r.get("category"))
+            r["owner"] = str(payload.get("owner") or r.get("owner"))
+            r["pay_method"] = str(payload.get("pay_method") or r.get("pay_method"))
+            if "linked_account_id" in payload:
+                r["linked_account_id"] = str(payload.get("linked_account_id") or "").strip()
+            if "linked_account_name" in payload:
+                r["linked_account_name"] = str(payload.get("linked_account_name") or "").strip()
+            if "auto_deduct" in payload:
+                r["auto_deduct"] = bool(payload.get("auto_deduct"))
+            if "memo" in payload:
+                r["memo"] = str(payload.get("memo") or "").strip()
+            if "active" in payload:
+                r["active"] = bool(payload.get("active"))
+            
+            data["recurring"][idx] = r
+            write_ledger(data, username=username)
+            process_recurring_deductions(username=username)
+            return r
+    return None
 
 
 def delete_recurring(rec_id: str, username: str | None = None) -> bool:
@@ -519,6 +554,82 @@ def delete_recurring(rec_id: str, username: str | None = None) -> bool:
         write_ledger(data, username=username)
         return True
     return False
+
+
+def process_recurring_deductions(username: str | None = None) -> list[dict[str, Any]]:
+    """당월 지정일에 도래한 자동이체 고정지출을 연동 통장에서 자동 출금하고 가계부에 기록합니다."""
+    import calendar
+    data = read_ledger(username=username)
+    today = date.today()
+    cur_year = today.year
+    cur_month = today.month
+    cur_prefix = f"{cur_year:04d}-{cur_month:02d}"
+    _, max_day = calendar.monthrange(cur_year, cur_month)
+
+    processed = []
+    has_changes = False
+
+    for rec in data.get("recurring", []):
+        if not rec.get("active", True):
+            continue
+        if not rec.get("auto_deduct", False):
+            continue
+        linked_acc_id = str(rec.get("linked_account_id") or "").strip()
+        if not linked_acc_id:
+            continue
+        amount = float(rec.get("amount") or 0.0)
+        if amount <= 0:
+            continue
+
+        target_day = max(1, min(max_day, int(rec.get("day_of_month") or 1)))
+        due_date = date(cur_year, cur_month, target_day)
+
+        # 오늘 날짜가 지정일 이상이고, 당월 아직 출금되지 않은 경우
+        if today >= due_date:
+            last_deducted = str(rec.get("last_deducted_date") or "")
+            if not last_deducted.startswith(cur_prefix):
+                # 1. 연동 계좌 잔액 차감
+                applied_ok = _apply_account_balance_delta(linked_acc_id, -amount, username=username)
+                applied_delta = -amount if applied_ok else 0.0
+
+                # 2. 가계부 지출 내역 1건 생성
+                tx_date_str = due_date.isoformat()
+                acc_name = str(rec.get("linked_account_name") or "연동 통장").strip()
+                rec_name = str(rec.get("name") or "정기 고정지출").strip()
+
+                tx = {
+                    "id": str(uuid.uuid4()),
+                    "date": tx_date_str,
+                    "type": str(rec.get("type") or "expense"),
+                    "amount": amount,
+                    "category": str(rec.get("category") or "주거/통신"),
+                    "owner": str(rec.get("owner") or "모두"),
+                    "pay_method": str(rec.get("pay_method") or "자동이체"),
+                    "account_id": linked_acc_id,
+                    "account_name": acc_name,
+                    "merchant": rec_name,
+                    "memo": f"[정기 자동이체] {rec_name}",
+                    "applied_delta": applied_delta,
+                    "is_recurring": True,
+                    "recurring_id": rec.get("id"),
+                    "created_at": datetime.now().isoformat(),
+                }
+                data.setdefault("transactions", []).append(tx)
+                rec["last_deducted_date"] = tx_date_str
+                processed.append({
+                    "recurring_id": rec.get("id"),
+                    "name": rec_name,
+                    "amount": amount,
+                    "account_name": acc_name,
+                    "deducted_date": tx_date_str,
+                    "balance_deducted": applied_ok,
+                })
+                has_changes = True
+
+    if has_changes:
+        write_ledger(data, username=username)
+
+    return processed
 
 
 def import_ledger_from_file_bytes(

@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260903-v558" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260903-v559" />
   </head>
   <body>
     <main class="shell">
@@ -1967,15 +1967,20 @@
         <h2>🛡️ 정기 고정지출 관리</h2>
         <button value="cancel" class="close" aria-label="닫기">×</button>
       </div>
-      <p class="dialog-description">매월 정기적으로 나가는 공과금, 보험료, 구독료, 학원비 등을 등록하여 관리합니다.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <p class="dialog-description" style="margin:0;">매월 정기적으로 나가는 공과금, 보험료, 구독료 등을 관리합니다.</p>
+        <button id="triggerRecurringBtn" class="button compact secondary" type="button" onclick="triggerRecurringProcess()" title="지정일 도래 항목 즉시 출금 정산" style="font-size:11px;padding:3px 8px;border-color:#38bdf8;color:#38bdf8;">
+          ⚡ 이번 달 자동이체 즉시 실행
+        </button>
+      </div>
 
-      <div id="ledgerRecurringList" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;max-height:240px;overflow-y:auto;"></div>
+      <div id="ledgerRecurringList" style="display:flex;flex-direction:column;gap:8px;margin:10px 0;max-height:260px;overflow-y:auto;"></div>
 
       <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:12px;margin-top:10px;">
         <h4 style="margin:0 0 10px;font-size:13px;color:#c084fc;">➕ 새 고정지출 추가</h4>
         <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin:0;gap:8px;">
           <label>항목 이름
-            <input id="recName" placeholder="예: 아파트 관리비, 넷플릭스" required />
+            <input id="recName" placeholder="예: 아파트 관리비, 인터넷 요금" required />
           </label>
           <label>월 금액 (KRW)
             <input id="recAmount" type="number" placeholder="0" min="0" required data-korean-currency />
@@ -2002,8 +2007,26 @@
             </select>
           </label>
           <label>결제 수단
-            <input id="recPayMethod" placeholder="자동이체, 카드결제 등" value="자동이체" />
+            <select id="recPayMethod" onchange="toggleRecurringAccountSelect()">
+              <option value="자동이체" selected>🏦 자동이체 (계좌 출금)</option>
+              <option value="신용/체크카드">💳 신용/체크카드</option>
+              <option value="기타">기타</option>
+            </select>
           </label>
+
+          <!-- 자동이체 선택 시 노출되는 출금 통장 연동 구역 -->
+          <div id="recAccountGroup" style="grid-column:1/-1;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:8px;padding:10px 12px;margin-top:2px;">
+            <label style="margin:0;font-size:12px;font-weight:600;color:#38bdf8;">
+              🏦 출금 연동 통장 선택
+              <select id="recAccountSelect" style="margin-top:4px;width:100%;">
+                <option value="">-- 출금 통장 선택 (은행/증권 계좌) --</option>
+              </select>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#cbd5e1;cursor:pointer;">
+              <input type="checkbox" id="recAutoDeduct" checked />
+              <span>매월 이체일에 위 통장에서 <strong>금액 자동 차감 & 가계부 지출 등록</strong></span>
+            </label>
+          </div>
         </div>
         <button id="addRecurringBtn" class="button primary compact" type="button" onclick="saveNewRecurringItem()" style="margin-top:10px;width:100%;background:linear-gradient(135deg,#a855f7,#7c3aed);">
           고정지출 항목 추가
@@ -2560,7 +2583,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260903-v558"></script>
+    <script src="/static/wealth.js?v=20260903-v559"></script>
   </body>
 </html>
 

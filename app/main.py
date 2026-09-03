@@ -2106,7 +2106,9 @@ from app.services.ledger import (
     update_transaction,
     delete_transaction,
     add_recurring,
+    edit_recurring,
     delete_recurring,
+    process_recurring_deductions,
     get_cards,
     create_card,
     update_card,
@@ -2179,6 +2181,27 @@ async def remove_recurring(rec_id: str, request: Request) -> dict:
     if not success:
         raise HTTPException(404, "삭제할 고정지출 항목을 찾을 수 없습니다.")
     return {"message": "고정지출 항목이 삭제되었습니다."}
+
+
+@app.put("/api/ledger/recurring/{rec_id}")
+async def update_recurring_entry(rec_id: str, request: Request) -> dict:
+    """Update a recurring entry."""
+    username = get_current_username(request)
+    payload = await request.json()
+    rec = edit_recurring(rec_id, payload, username=username)
+    if not rec:
+        raise HTTPException(404, "수정할 고정지출 항목을 찾을 수 없습니다.")
+    return {"message": "고정지출 항목이 수정되었습니다.", "recurring": rec}
+
+
+@app.post("/api/ledger/recurring/process")
+async def trigger_recurring_deductions(request: Request) -> dict:
+    """Trigger processing of recurring bank deductions for current month."""
+    username = get_current_username(request)
+    processed = process_recurring_deductions(username=username)
+    count = len(processed)
+    msg = f"당월 자동이체 고정지출 {count}건이 통장에서 정상 출금 처리되었습니다." if count > 0 else "당월 추가로 출금 처리할 자동이체 항목이 없습니다."
+    return {"message": msg, "count": count, "processed": processed}
 
 
 # ---------------------------------------------------------------------------

@@ -8868,36 +8868,125 @@ async function deleteLedgerTransaction(txId) {
 window.deleteLedgerTransaction = deleteLedgerTransaction;
 
 // 고정지출 모달 관리
+function toggleRecurringAccountSelect() {
+  const method = document.getElementById("recPayMethod")?.value;
+  const grp = document.getElementById("recAccountGroup");
+  if (grp) {
+    grp.style.display = method === "자동이체" ? "block" : "none";
+  }
+}
+window.toggleRecurringAccountSelect = toggleRecurringAccountSelect;
+
+function populateRecurringAccounts() {
+  const sel = document.getElementById("recAccountSelect");
+  if (!sel) return;
+
+  const banks = rawBankAccounts || [];
+  const secAccounts = dashboard?.accounts || [];
+  let htmlOpts = '<option value="">-- 출금 통장 선택 (은행/증권 계좌) --</option>';
+
+  if (banks.length > 0) {
+    htmlOpts += '<optgroup label="🏦 일반 은행 통장">';
+    banks.forEach(b => {
+      const bName = b.bank_name || b.name || "은행";
+      const pName = b.product_name || "입출금통장";
+      const bal = Number(b.balance) || 0;
+      htmlOpts += `<option value="${html(b.id)}">[${html(bName)}] ${html(pName)} (${html(b.owner || '모두')}) - 잔액 ₩${number(bal, 0)}</option>`;
+    });
+    htmlOpts += '</optgroup>';
+  }
+
+  if (secAccounts.length > 0) {
+    htmlOpts += '<optgroup label="📈 증권사 계좌 (예수금)">';
+    secAccounts.forEach(a => {
+      const broker = a.broker || "증권사";
+      const aName = a.name || "계좌";
+      const cash = Number(a.cash_krw || a.cash || 0);
+      htmlOpts += `<option value="${html(a.id)}">[${html(broker)}] ${html(aName)} (${html(a.owner || '모두')}) - 예수금 ₩${number(cash, 0)}</option>`;
+    });
+    htmlOpts += '</optgroup>';
+  }
+
+  sel.innerHTML = htmlOpts;
+}
+
 function openLedgerRecurringModal() {
   const dialog = document.getElementById("ledgerRecurringDialog");
   const listContainer = document.getElementById("ledgerRecurringList");
   if (!dialog || !listContainer) return;
 
+  populateRecurringAccounts();
+  toggleRecurringAccountSelect();
+
   const recs = rawLedgerData?.recurring || [];
+  const now = new Date();
+  const curPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   if (recs.length === 0) {
     listContainer.innerHTML = `<div class="empty" style="padding:15px 0;"><p style="margin:0;font-size:12px;color:#94a3b8;">등록된 정기 고정지출이 없습니다.</p></div>`;
   } else {
-    listContainer.innerHTML = recs.map(r => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#090e1c;border:1px solid #23314f;border-radius:8px;">
-        <div>
-          <div style="font-weight:700;color:#f8fafc;font-size:13px;">
-            ${html(r.name)} <span class="saving-owner-badge" style="font-size:10px;padding:1px 5px;">${html(r.owner || '모두')}</span>
+    listContainer.innerHTML = recs.map(r => {
+      const isDeductedThisMonth = (r.last_deducted_date || "").startsWith(curPrefix);
+      let statusBadge = "";
+      if (r.auto_deduct && r.linked_account_id) {
+        if (isDeductedThisMonth) {
+          statusBadge = `<span style="color:#4ade80;font-size:11px;font-weight:600;">✅ 당월 자동출금 완료 (${r.last_deducted_date})</span>`;
+        } else {
+          statusBadge = `<span style="color:#facc15;font-size:11px;font-weight:600;">⏳ 매월 ${r.day_of_month}일 자동출금 대기</span>`;
+        }
+      } else {
+        statusBadge = `<span style="color:#94a3b8;font-size:11px;">수동 납부</span>`;
+      }
+
+      const acctBadge = r.linked_account_name ? `
+        <span style="display:inline-block;font-size:10px;background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);padding:1px 6px;border-radius:4px;margin-left:4px;">
+          🏦 ${html(r.linked_account_name)}
+        </span>
+      ` : "";
+
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#090e1c;border:1px solid #23314f;border-radius:8px;">
+          <div>
+            <div style="font-weight:700;color:#f8fafc;font-size:13.5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+              <span>${html(r.name)}</span>
+              <span class="saving-owner-badge" style="font-size:10px;padding:1px 5px;">${html(r.owner || '모두')}</span>
+              ${acctBadge}
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span>매월 ${r.day_of_month}일</span>
+              <span>·</span>
+              <span>${html(r.category)}</span>
+              <span>·</span>
+              <span>${html(r.pay_method)}</span>
+              <span>·</span>
+              ${statusBadge}
+            </div>
           </div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
-            매월 ${r.day_of_month}일 · ${html(r.category)} · ${html(r.pay_method)}
+          <div style="display:flex;align-items:center;gap:8px;">
+            <strong style="color:#c084fc;font-size:14px;">₩${number(r.amount, 0)}</strong>
+            <button class="account-action-button mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button">🗑️</button>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <strong style="color:#c084fc;font-size:13.5px;">₩${number(r.amount, 0)}</strong>
-          <button class="account-action-button mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button">🗑️</button>
-        </div>
-      </div>
-    `).join("");
+      `;
+    }).join("");
   }
 
   dialog.showModal();
 }
 window.openLedgerRecurringModal = openLedgerRecurringModal;
+
+async function triggerRecurringProcess() {
+  try {
+    const res = await api("/api/ledger/recurring/process", { method: "POST" });
+    toast(res.message || "자동이체 출금 정산이 완료되었습니다.");
+    await loadLedger();
+    await loadDashboard();
+    openLedgerRecurringModal();
+  } catch (err) {
+    alert(`자동이체 정산 오류: ${err.message}`);
+  }
+}
+window.triggerRecurringProcess = triggerRecurringProcess;
 
 async function saveNewRecurringItem() {
   const name = document.getElementById("recName")?.value.trim();
@@ -8905,10 +8994,25 @@ async function saveNewRecurringItem() {
   const day = Number(document.getElementById("recDay")?.value) || 1;
   const category = document.getElementById("recCategory")?.value;
   const owner = document.getElementById("recOwner")?.value || "모두";
-  const payMethod = document.getElementById("recPayMethod")?.value.trim() || "자동이체";
+  const payMethod = document.getElementById("recPayMethod")?.value || "자동이체";
+  const isAutoTransfer = payMethod === "자동이체";
+
+  const acctSel = document.getElementById("recAccountSelect");
+  const linked_account_id = isAutoTransfer ? (acctSel?.value || "").trim() : "";
+  let linked_account_name = "";
+  if (isAutoTransfer && acctSel && acctSel.selectedIndex > 0) {
+    const optText = acctSel.options[acctSel.selectedIndex].text;
+    linked_account_name = optText.split(" - 잔액")[0].split(" - 예수금")[0].trim();
+  }
+  const auto_deduct = isAutoTransfer ? (document.getElementById("recAutoDeduct")?.checked ?? true) : false;
 
   if (!name || amount <= 0) {
     alert("항목 이름과 올바른 금액을 입력해 주세요.");
+    return;
+  }
+
+  if (isAutoTransfer && auto_deduct && !linked_account_id) {
+    alert("자동이체 출금 처리를 위해 연동할 통장(계좌)을 선택해 주세요.");
     return;
   }
 
@@ -8922,13 +9026,17 @@ async function saveNewRecurringItem() {
         day_of_month: day,
         category,
         owner,
-        pay_method: payMethod
+        pay_method: payMethod,
+        linked_account_id,
+        linked_account_name,
+        auto_deduct,
       })
     });
-    toast(`[${name}] 고정지출 항목이 추가되었습니다.`);
+    toast(`[${name}] 고정지출 항목이 등록되었습니다.`);
     document.getElementById("recName").value = "";
     document.getElementById("recAmount").value = "";
     await loadLedger();
+    await loadDashboard();
     openLedgerRecurringModal();
   } catch (err) {
     alert(`고정지출 추가 오류: ${err.message}`);
@@ -8942,6 +9050,7 @@ async function deleteRecurringItem(recId) {
     await api(`/api/ledger/recurring/${recId}`, { method: "DELETE" });
     toast("고정지출 항목이 삭제되었습니다.");
     await loadLedger();
+    await loadDashboard();
     openLedgerRecurringModal();
   } catch (err) {
     alert(`삭제 중 오류: ${err.message}`);
