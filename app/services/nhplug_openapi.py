@@ -177,35 +177,82 @@ class NhPlugOpenAPI:
                 {"act_no": account_no, "bnc_bse_cd": "5", "ltg_aot_dit_cd": "9", "aet_bse": "2", "qut_dit_cd": "UNT"},
             )
             out_0 = domestic.get("Output_0") or {}
-            krw_cash = as_float(out_0.get("orr_pbl_amt1") or out_0.get("dca") or out_0.get("drn_pbl_amt"))
+            
+            # 예수금: D+2 결제반영 추정 예수금(nxt2_dd_dca) 또는 원장 예수금(dca) 우선
+            krw_cash = 0.0
+            for k in ("nxt2_dd_dca", "dca", "nas_amt", "drn_pbl_amt", "orr_pbl_amt1"):
+                val = out_0.get(k)
+                if val is not None:
+                    f_val = as_float(val)
+                    if f_val > 0:
+                        krw_cash = f_val
+                        break
+            if krw_cash == 0.0 and out_0.get("dca") is not None:
+                krw_cash = as_float(out_0.get("dca"))
+
+            usd_cash = 0.0
             self.account_cash[account_no] = {"KRW": krw_cash, "USD": 0.0}
+
             for item in domestic.get("Output_1", []) or []:
+                # 수량: 결제기준(itg_bnc_qty)이 0인 경우 체결기준 잔여수량(rsdl_qty, ny_stl_qty) 확인
+                qty = as_float(item.get("itg_bnc_qty"))
+                if qty <= 0:
+                    qty = as_float(item.get("rsdl_qty") or item.get("ny_stl_qty", 0))
+                
+                if qty <= 0:
+                    continue
+
+                code = str(item.get("iem_cd", "")).strip()
+                name = str(item.get("iem_nm", "")).strip() or code
+                avg_price = as_float(item.get("phs_pr", 0))
+                current_price = as_float(item.get("now_pr", 0)) or avg_price
+
                 records.append({
                     "account_key": account_no,
                     "account_name": account_name,
-                    "code": item.get("iem_cd", ""),
-                    "name": item.get("iem_nm", ""),
-                    "quantity": as_float(item.get("itg_bnc_qty")),
-                    "avg_price": as_float(item.get("phs_pr")),
-                    "current_price": as_float(item.get("now_pr")),
+                    "code": code,
+                    "name": name,
+                    "quantity": qty,
+                    "avg_price": avg_price,
+                    "current_price": current_price,
                     "currency": "KRW",
                     "market": "KRX",
                 })
+
             for country_code, (currency, market) in self._OVERSEAS_COUNTRIES.items():
-                overseas = await self._call(
-                    "/gbstock/inquiry/v1/balance",
-                    {"act_no": account_no, "qut_iqr_dit_cd": "9", "fc_sec_trd_nat_cd": country_code, "cur_cd": "KRW", "xns_dit_cd": "1"},
-                )
-                for item in overseas.get("Output_1", []) or []:
-                    records.append({
-                        "account_key": account_no,
-                        "account_name": account_name,
-                        "code": item.get("iem_cd", ""),
-                        "name": item.get("iem_nm") or item.get("oss_iem_eng_nm", ""),
-                        "quantity": as_float(item.get("cns_bse_bnc_qty")),
-                        "avg_price": as_float(item.get("fc_avg_phs_pr")),
-                        "current_price": as_float(item.get("fc_sec_end_pr")),
-                        "currency": item.get("cur_cd") or currency,
-                        "market": market,
-                    })
+                try:
+                    overseas = await self._call(
+                        "/gbstock/inquiry/v1/balance",
+                        {"act_no": account_no, "qut_iqr_dit_cd": "9", "fc_sec_trd_nat_cd": country_code, "cur_cd": "KRW", "xns_dit_cd": "1"},
+                    )
+                    ov_out0 = overseas.get("Output_0") or {}
+                    if currency == "USD":
+                        ov_usd = as_float(ov_out0.get("fc_dca") or ov_out0.get("fc_ny_stl_xcl_amt") or ov_out0.get("fc_aet_amt", 0))
+                        if ov_usd > 0:
+                            usd_cash = ov_usd
+                            self.account_cash[account_no]["USD"] = usd_cash
+
+                    for item in overseas.get("Output_1", []) or []:
+                        ov_qty = as_float(item.get("cns_bse_bnc_qty") or item.get("fc_cns_bse_bnc_qty") or item.get("rsdl_qty") or item.get("itg_bnc_qty", 0))
+                        if ov_qty <= 0:
+                            continue
+                        ov_code = str(item.get("iem_cd", "")).strip()
+                        ov_name = str(item.get("iem_nm") or item.get("oss_iem_eng_nm", "")).strip() or ov_code
+                        ov_avg = as_float(item.get("fc_avg_phs_pr", 0))
+                        ov_curr = as_float(item.get("fc_sec_end_pr", 0)) or ov_avg
+
+                        records.append({
+                            "account_key": account_no,
+                            "account_name": account_name,
+                            "code": ov_code,
+                            "name": ov_name,
+                            "quantity": ov_qty,
+                            "avg_price": ov_avg,
+                            "current_price": ov_curr,
+                            "currency": item.get("cur_cd") or currency,
+                            "market": market,
+                        })
+                except Exception as e:
+                    logger.debug("나무증권 해외잔고 조회 (%s) 제외/오류: %s", country_code, e)
+
         return [record for record in records if record["code"] and record["quantity"] > 0]
