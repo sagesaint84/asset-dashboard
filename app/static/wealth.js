@@ -8962,9 +8962,10 @@ function openLedgerRecurringModal() {
               ${statusBadge}
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <strong style="color:#c084fc;font-size:14px;">₩${number(r.amount, 0)}</strong>
-            <button class="account-action-button mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button">🗑️</button>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <strong style="color:#c084fc;font-size:14px;margin-right:2px;">₩${number(r.amount, 0)}</strong>
+            <button class="account-action-button" onclick="editRecurringItem('${r.id}')" title="수정" type="button" style="padding:3px 7px;font-size:12px;">✎</button>
+            <button class="account-action-button mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button" style="padding:3px 7px;font-size:12px;">🗑️</button>
           </div>
         </div>
       `;
@@ -8974,6 +8975,96 @@ function openLedgerRecurringModal() {
   dialog.showModal();
 }
 window.openLedgerRecurringModal = openLedgerRecurringModal;
+
+function editRecurringItem(recId) {
+  const recs = rawLedgerData?.recurring || [];
+  const rec = recs.find(r => r.id === recId);
+  if (!rec) return;
+
+  const editIdEl = document.getElementById("recEditId");
+  const nameEl = document.getElementById("recName");
+  const amountEl = document.getElementById("recAmount");
+  const dayEl = document.getElementById("recDay");
+  const catEl = document.getElementById("recCategory");
+  const ownerEl = document.getElementById("recOwner");
+  const payMethodEl = document.getElementById("recPayMethod");
+  const acctSel = document.getElementById("recAccountSelect");
+  const autoDeductEl = document.getElementById("recAutoDeduct");
+  const titleEl = document.getElementById("recurringFormTitle");
+  const addBtn = document.getElementById("addRecurringBtn");
+  const cancelBtn = document.getElementById("cancelRecurringEditBtn");
+
+  if (editIdEl) editIdEl.value = rec.id;
+  if (nameEl) nameEl.value = rec.name || "";
+  if (amountEl) amountEl.value = rec.amount || "";
+  if (dayEl) dayEl.value = rec.day_of_month || 1;
+  if (catEl) catEl.value = rec.category || "주거/통신";
+  if (ownerEl) ownerEl.value = rec.owner || "모두";
+  if (payMethodEl) payMethodEl.value = rec.pay_method || "자동이체";
+
+  toggleRecurringAccountSelect();
+  if (acctSel && rec.linked_account_id) {
+    acctSel.value = rec.linked_account_id;
+  }
+  if (autoDeductEl) {
+    autoDeductEl.checked = rec.auto_deduct ?? true;
+  }
+
+  if (titleEl) {
+    titleEl.textContent = "✎ 고정지출 항목 수정";
+    titleEl.style.color = "#38bdf8";
+  }
+  if (addBtn) {
+    addBtn.textContent = "고정지출 항목 저장";
+    addBtn.style.background = "linear-gradient(135deg, #0284c7, #0369a1)";
+  }
+  if (cancelBtn) {
+    cancelBtn.style.display = "inline-block";
+  }
+
+  nameEl?.focus();
+}
+window.editRecurringItem = editRecurringItem;
+
+function cancelRecurringEdit() {
+  const editIdEl = document.getElementById("recEditId");
+  const nameEl = document.getElementById("recName");
+  const amountEl = document.getElementById("recAmount");
+  const dayEl = document.getElementById("recDay");
+  const catEl = document.getElementById("recCategory");
+  const ownerEl = document.getElementById("recOwner");
+  const payMethodEl = document.getElementById("recPayMethod");
+  const acctSel = document.getElementById("recAccountSelect");
+  const autoDeductEl = document.getElementById("recAutoDeduct");
+  const titleEl = document.getElementById("recurringFormTitle");
+  const addBtn = document.getElementById("addRecurringBtn");
+  const cancelBtn = document.getElementById("cancelRecurringEditBtn");
+
+  if (editIdEl) editIdEl.value = "";
+  if (nameEl) nameEl.value = "";
+  if (amountEl) amountEl.value = "";
+  if (dayEl) dayEl.value = "1";
+  if (catEl) catEl.value = "주거/통신";
+  if (ownerEl) ownerEl.value = "모두";
+  if (payMethodEl) payMethodEl.value = "자동이체";
+
+  toggleRecurringAccountSelect();
+  if (acctSel) acctSel.value = "";
+  if (autoDeductEl) autoDeductEl.checked = true;
+
+  if (titleEl) {
+    titleEl.textContent = "➕ 새 고정지출 추가";
+    titleEl.style.color = "#c084fc";
+  }
+  if (addBtn) {
+    addBtn.textContent = "고정지출 항목 추가";
+    addBtn.style.background = "linear-gradient(135deg, #a855f7, #7c3aed)";
+  }
+  if (cancelBtn) {
+    cancelBtn.style.display = "none";
+  }
+}
+window.cancelRecurringEdit = cancelRecurringEdit;
 
 async function triggerRecurringProcess() {
   try {
@@ -8989,6 +9080,7 @@ async function triggerRecurringProcess() {
 window.triggerRecurringProcess = triggerRecurringProcess;
 
 async function saveNewRecurringItem() {
+  const editId = document.getElementById("recEditId")?.value.trim();
   const name = document.getElementById("recName")?.value.trim();
   const amount = Number(document.getElementById("recAmount")?.value) || 0;
   const day = Number(document.getElementById("recDay")?.value) || 1;
@@ -9016,30 +9108,41 @@ async function saveNewRecurringItem() {
     return;
   }
 
+  const payload = {
+    name,
+    amount,
+    day_of_month: day,
+    category,
+    owner,
+    pay_method: payMethod,
+    linked_account_id,
+    linked_account_name,
+    auto_deduct,
+  };
+
   try {
-    await api("/api/ledger/recurring", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        amount,
-        day_of_month: day,
-        category,
-        owner,
-        pay_method: payMethod,
-        linked_account_id,
-        linked_account_name,
-        auto_deduct,
-      })
-    });
-    toast(`[${name}] 고정지출 항목이 등록되었습니다.`);
-    document.getElementById("recName").value = "";
-    document.getElementById("recAmount").value = "";
+    if (editId) {
+      await api(`/api/ledger/recurring/${editId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast(`[${name}] 고정지출 항목이 수정되었습니다.`);
+    } else {
+      await api("/api/ledger/recurring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      toast(`[${name}] 고정지출 항목이 등록되었습니다.`);
+    }
+
+    cancelRecurringEdit();
     await loadLedger();
     await loadDashboard();
     openLedgerRecurringModal();
   } catch (err) {
-    alert(`고정지출 추가 오류: ${err.message}`);
+    alert(`고정지출 저장 오류: ${err.message}`);
   }
 }
 window.saveNewRecurringItem = saveNewRecurringItem;

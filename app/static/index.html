@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260903-v559" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260904-v5510" />
   </head>
   <body>
     <main class="shell">
@@ -1977,7 +1977,8 @@
       <div id="ledgerRecurringList" style="display:flex;flex-direction:column;gap:8px;margin:10px 0;max-height:260px;overflow-y:auto;"></div>
 
       <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:12px;margin-top:10px;">
-        <h4 style="margin:0 0 10px;font-size:13px;color:#c084fc;">➕ 새 고정지출 추가</h4>
+        <input type="hidden" id="recEditId" value="" />
+        <h4 id="recurringFormTitle" style="margin:0 0 10px;font-size:13px;color:#c084fc;">➕ 새 고정지출 추가</h4>
         <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin:0;gap:8px;">
           <label>항목 이름
             <input id="recName" placeholder="예: 아파트 관리비, 인터넷 요금" required />
@@ -2028,9 +2029,14 @@
             </label>
           </div>
         </div>
-        <button id="addRecurringBtn" class="button primary compact" type="button" onclick="saveNewRecurringItem()" style="margin-top:10px;width:100%;background:linear-gradient(135deg,#a855f7,#7c3aed);">
-          고정지출 항목 추가
-        </button>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button id="addRecurringBtn" class="button primary compact" type="button" onclick="saveNewRecurringItem()" style="flex:1;background:linear-gradient(135deg,#a855f7,#7c3aed);">
+            고정지출 항목 추가
+          </button>
+          <button id="cancelRecurringEditBtn" class="button secondary compact" type="button" onclick="cancelRecurringEdit()" style="display:none;padding:0 16px;">
+            취소
+          </button>
+        </div>
       </div>
 
       <div class="dialog-actions" style="margin-top:14px;">
@@ -2583,7 +2589,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260903-v559"></script>
+    <script src="/static/wealth.js?v=20260904-v5510"></script>
   </body>
 </html>
 
