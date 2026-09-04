@@ -995,6 +995,8 @@ async def create_account(request: Request) -> dict:
         "profit_krw": 0,
         "holding_count": 0,
     }
+    if "yearly_contributions" in body:
+        new_account["yearly_contributions"] = body.get("yearly_contributions") or []
     data.setdefault("accounts", []).append(new_account)
     write_portfolio(data, username=username)
     return {"message": f"계좌 '{broker} - {account_name}'이(가) 추가되었습니다.", **new_account}
@@ -1425,6 +1427,8 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
         account["isa_transfer_amount"] = max(0.0, float(payload.get("isa_transfer_amount") or 0.0))
     if "isa_transfer_year" in payload:
         account["isa_transfer_year"] = str(payload.get("isa_transfer_year") or "").strip()
+    if "yearly_contributions" in payload:
+        account["yearly_contributions"] = payload.get("yearly_contributions") or []
 
     for holding in data["holdings"]:
         if holding.get("account_id") == account_id:

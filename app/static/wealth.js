@@ -1457,6 +1457,15 @@ function isAccountTaxDeductible(account) {
   return true;
 }
 
+function isTaxAdvantagedAccount(account) {
+  if (!account) return false;
+  const aType = (account.account_type || "").toLowerCase();
+  const aName = (account.name || account.account_name || "").toLowerCase();
+  if (aType === "pension_savings" || aType === "irp" || aType === "isa") return true;
+  if (aName.includes("연금") || aName.includes("irp") || aName.includes("isa")) return true;
+  return false;
+}
+
 // ── 4. 계좌 목록 렌더링 ──────────────────────────────────────────────────────
 function renderAccounts(items) {
   const container = $("#accountList");
@@ -2418,6 +2427,7 @@ function renderInsuranceWithOwner(owner = '모두') {
   }
 
   // 상단 절세 요약 배너 업데이트
+  let totalCumulativeYuTaxSaved = 0;
   const yuTaxSaved = filtered.filter(i => (i.insurance_type === 'yellow_umbrella' || (i.product_name || '').includes('노란우산'))).reduce((sum, i) => {
     const monthly = Number(i.monthly_premium) || 0;
     const bracket = i.income_bracket || '40m_to_100m';
@@ -2425,10 +2435,26 @@ function renderInsuranceWithOwner(owner = '모두') {
     const limits = { under_40m: 5000000, "40m_to_100m": 3000000, over_100m: 2000000 };
     const limit = limits[bracket] || 3000000;
     const deduction = Math.min(monthly * 12, limit);
-    return sum + Math.floor(deduction * (rate / 100));
+    const saved = Math.floor(deduction * (rate / 100));
+
+    // 누적 절세액 합산
+    const yuList = Array.isArray(i.yearly_contributions) ? i.yearly_contributions : [];
+    if (yuList.length > 0) {
+      yuList.forEach(y => {
+        const isDed = y.is_deductible !== false && String(y.is_deductible) !== 'false';
+        if (isDed) {
+          totalCumulativeYuTaxSaved += Math.floor(Math.min(Number(y.deposit || 0), limit) * (rate / 100));
+        }
+      });
+    } else {
+      totalCumulativeYuTaxSaved += saved;
+    }
+
+    return sum + saved;
   }, 0);
 
   // 증권 계좌 연금/IRP 절세액 합산
+  let totalCumulativePensionTaxSaved = 0;
   const secAccounts = (dashboard?.accounts || []).filter(a => o === '모두' || (a.owner || '모두') === o);
   const pensionTaxSaved = secAccounts.reduce((sum, a) => {
     const aName = (a.name || '').toLowerCase();
@@ -2438,16 +2464,36 @@ function renderInsuranceWithOwner(owner = '모두') {
       const dep = Number(a.annual_deposit) || 0;
       const isaTr = Number(a.isa_transfer_amount) || 0;
       const rate = a.income_level === 'high' ? 0.132 : 0.165;
-      const baseTarget = isTaxDeductible ? Math.min(dep, aType === 'pension_savings' ? 6000000 : 9000000) : 0;
+      const baseLimit = aType === 'pension_savings' ? 6000000 : 9000000;
+      const baseTarget = isTaxDeductible ? Math.min(dep, baseLimit) : 0;
       const isaTarget = Math.min(isaTr * 0.10, 3000000);
-      return sum + Math.floor((baseTarget + isaTarget) * rate);
+      const refund = Math.floor((baseTarget + isaTarget) * rate);
+
+      const yList = Array.isArray(a.yearly_contributions) ? a.yearly_contributions : [];
+      if (yList.length > 0) {
+        yList.forEach(y => {
+          const isDed = isTaxDeductible && y.is_deductible !== false && String(y.is_deductible) !== 'false';
+          if (isDed) {
+            totalCumulativePensionTaxSaved += Math.floor(Math.min(Number(y.deposit || 0), baseLimit) * rate);
+          }
+        });
+      } else {
+        totalCumulativePensionTaxSaved += isTaxDeductible ? refund : 0;
+      }
+
+      return sum + refund;
     }
     return sum;
   }, 0);
 
   const grandTotalTax = yuTaxSaved + pensionTaxSaved;
+  const grandCumulativeTax = totalCumulativeYuTaxSaved + totalCumulativePensionTaxSaved;
   if ($("#grandTotalTaxBenefitVal")) {
-    $("#grandTotalTaxBenefitVal").textContent = `₩${number(grandTotalTax, 0)}`;
+    if (grandCumulativeTax > grandTotalTax) {
+      $("#grandTotalTaxBenefitVal").innerHTML = `₩${number(grandTotalTax, 0)} <span style="font-size:12px;color:#a78bfa;font-weight:600;">(누적 ₩${number(grandCumulativeTax, 0)})</span>`;
+    } else {
+      $("#grandTotalTaxBenefitVal").textContent = `₩${number(grandTotalTax, 0)}`;
+    }
   }
 
   // 증권 계좌 연금저축 & IRP 카드 생성
@@ -2474,6 +2520,40 @@ function renderInsuranceWithOwner(owner = '모두') {
     const typeLabel = aType === 'pension_savings' ? '연금저축' : '개인형 IRP';
     const badgeClass = isTaxDeductible ? 'pension' : 'non-deductible';
     const statusLabel = isTaxDeductible ? '세액공제 신청' : '세액공제 제외(비공제)';
+
+    const yearlyContributions = Array.isArray(a.yearly_contributions) ? a.yearly_contributions : [];
+    let cumulativeTaxSaved = 0;
+    let yearlyHistoryHtml = '';
+
+    if (yearlyContributions.length > 0) {
+      const yearlyRows = yearlyContributions.map(yc => {
+        const yYear = String(yc.year || '').trim();
+        const yDep = Number(yc.deposit || 0);
+        const yDeductible = isTaxDeductible && yc.is_deductible !== false && String(yc.is_deductible) !== 'false';
+        const yTarget = yDeductible ? Math.min(yDep, baseLimit) : 0;
+        const ySaved = yDeductible ? Math.floor(yTarget * (rate / 100)) : 0;
+        if (yDeductible) cumulativeTaxSaved += ySaved;
+
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:11.5px;margin-bottom:3px;">
+            <span><strong style="color:#e2e8f0;">${html(yYear)}년:</strong> 입금 ₩${number(yDep, 0)}</span>
+            <span>➔ ${yDeductible ? `<strong style="color:#4ade80;">절세 ₩${number(ySaved, 0)}</strong>` : '<span style="color:#34d399;font-weight:600;">비공제 (₩0)</span>'}</span>
+          </div>
+        `;
+      }).join('');
+
+      yearlyHistoryHtml = `
+        <div style="margin-top:10px;padding:8px 10px;background:rgba(0,0,0,0.3);border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.25)' : 'rgba(16,185,129,0.25)'};border-radius:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11.5px;">
+            <span style="font-weight:700;color:${isTaxDeductible ? '#38bdf8' : '#34d399'};">📅 연도별 절세 이력</span>
+            <span style="font-weight:700;color:#4ade80;font-size:12px;">누적 절세액: ₩${number(cumulativeTaxSaved, 0)}</span>
+          </div>
+          ${yearlyRows}
+        </div>
+      `;
+    } else {
+      cumulativeTaxSaved = isTaxDeductible ? refund : 0;
+    }
 
     return `
       <div class="saving-card" style="border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.35)' : 'rgba(16,185,129,0.35)'};background:linear-gradient(145deg, rgba(16,25,51,0.9), rgba(11,17,35,0.9));">
@@ -2517,6 +2597,8 @@ function renderInsuranceWithOwner(owner = '모두') {
             <span style="color:#4ade80;font-size:14px;font-weight:700;">${isTaxDeductible ? `+₩${number(refund, 0)} (${rate}%)` : '₩0 (원금 100% 비과세 인출)'}</span>
           </div>
         </div>
+
+        ${yearlyHistoryHtml}
       </div>
     `;
   }).join('');
@@ -2533,6 +2615,7 @@ function renderInsuranceWithOwner(owner = '모두') {
 
     const isYU = typeKey === 'yellow_umbrella' || (ins.product_name || '').includes('노란우산');
     let yuTaxBox = '';
+    let yuYearlyRowsHtml = '';
     if (isYU) {
       const monthly = Number(ins.monthly_premium) || 0;
       const bracket = ins.income_bracket || '40m_to_100m';
@@ -2541,6 +2624,39 @@ function renderInsuranceWithOwner(owner = '모두') {
       const limit = limits[bracket] || 3000000;
       const deduction = Math.min(monthly * 12, limit);
       const taxSaved = Math.floor(deduction * (rate / 100));
+
+      const yuYearlyList = Array.isArray(ins.yearly_contributions) ? ins.yearly_contributions : [];
+      let yuCumulativeSaved = 0;
+
+      if (yuYearlyList.length > 0) {
+        const rows = yuYearlyList.map(yc => {
+          const yYear = String(yc.year || '').trim();
+          const yDep = Number(yc.deposit || 0);
+          const yDeductible = yc.is_deductible !== false && String(yc.is_deductible) !== 'false';
+          const yTarget = yDeductible ? Math.min(yDep, limit) : 0;
+          const ySaved = yDeductible ? Math.floor(yTarget * (rate / 100)) : 0;
+          if (yDeductible) yuCumulativeSaved += ySaved;
+
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:11.5px;margin-bottom:3px;">
+              <span><strong style="color:#e2e8f0;">${html(yYear)}년:</strong> 입금 ₩${number(yDep, 0)}</span>
+              <span>➔ ${yDeductible ? `<strong style="color:#4ade80;">소득공제 절세 ₩${number(ySaved, 0)}</strong>` : '<span style="color:#34d399;font-weight:600;">비공제 (₩0)</span>'}</span>
+            </div>
+          `;
+        }).join('');
+
+        yuYearlyRowsHtml = `
+          <div style="margin-top:10px;padding:8px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(234,179,8,0.3);border-radius:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11.5px;">
+              <span style="font-weight:700;color:#facc15;">📅 연도별 소득공제 이력</span>
+              <span style="font-weight:700;color:#4ade80;font-size:12px;">누적 절세액: ₩${number(yuCumulativeSaved, 0)}</span>
+            </div>
+            ${rows}
+          </div>
+        `;
+      } else {
+        yuCumulativeSaved = taxSaved;
+      }
 
       yuTaxBox = `
         <div class="saving-interest-box" style="background:rgba(234,179,8,0.08);border-color:rgba(234,179,8,0.35);margin-top:8px;">
@@ -2553,6 +2669,7 @@ function renderInsuranceWithOwner(owner = '모두') {
             <span style="color:#4ade80;font-size:14px;font-weight:700;">+₩${number(taxSaved, 0)} (${rate}%)</span>
           </div>
         </div>
+        ${yuYearlyRowsHtml}
       `;
     }
 
@@ -2650,6 +2767,53 @@ function updatePensionPayoutFields() {
   }
 }
 
+let yuCurrentYearlyList = [];
+
+function renderYuYearlyFormRows(form = document.getElementById("insuranceAccountForm")) {
+  const container = form?.querySelector("#yuYearlyList");
+  if (!container) return;
+
+  const bracket = form.querySelector("#yuIncomeBracket")?.value || "40m_to_100m";
+  const rate = Number(form.querySelector("#yuMarginalRate")?.value) || 26.4;
+  const limits = { under_40m: 5000000, "40m_to_100m": 3000000, over_100m: 2000000 };
+  const maxLimit = limits[bracket] || 3000000;
+
+  let cumulativeSaved = 0;
+
+  if (!yuCurrentYearlyList.length) {
+    container.innerHTML = `<div style="font-size:11px;color:#94a3b8;padding:8px 4px;text-align:center;">등록된 연도별 납입 이력이 없습니다. [+ 연도 추가]를 눌러 과거 연도별 입금액을 기록해보세요.</div>`;
+  } else {
+    container.innerHTML = yuCurrentYearlyList.map((yc, idx) => {
+      const yr = yc.year || (2024 - idx);
+      const dep = Number(yc.deposit || 0);
+      const ded = yc.is_deductible !== false && String(yc.is_deductible) !== "false";
+      const target = ded ? Math.min(dep, maxLimit) : 0;
+      const saved = ded ? Math.floor(target * (rate / 100)) : 0;
+      if (ded) cumulativeSaved += saved;
+
+      return `
+        <div class="yu-yearly-row" data-index="${idx}" style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.25);border:1px solid rgba(234,179,8,0.25);padding:5px 8px;border-radius:6px;">
+          <input type="number" class="yu-yearly-year" value="${yr}" placeholder="연도" style="width:68px;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#f8fafc;" />
+          <span style="font-size:11px;color:#94a3b8;">년</span>
+          <input type="number" class="yu-yearly-deposit" value="${dep || ''}" placeholder="납입액" style="flex:1;min-width:70px;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#f8fafc;" min="0" step="any" />
+          <span style="font-size:11px;color:#94a3b8;">원</span>
+          <select class="yu-yearly-deductible" style="width:78px;font-size:11.5px;padding:3px 4px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:${ded ? '#facc15' : '#34d399'};font-weight:600;">
+            <option value="true" ${yc.is_deductible !== false && String(yc.is_deductible) !== "false" ? "selected" : ""}>공제</option>
+            <option value="false" ${yc.is_deductible === false || String(yc.is_deductible) === "false" ? "selected" : ""}>비공제</option>
+          </select>
+          <span class="yu-yearly-saved-badge" style="min-width:85px;text-align:right;font-size:11.5px;font-weight:700;color:${ded ? '#4ade80' : '#34d399'};">
+            ${ded ? `+₩${number(saved, 0)}` : '비공제(₩0)'}
+          </span>
+          <button type="button" class="yu-yearly-del-btn" data-index="${idx}" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0 4px;" title="삭제">✕</button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  const cumEl = form?.querySelector("#yuCumulativeSavedText");
+  if (cumEl) cumEl.textContent = `₩${number(cumulativeSaved, 0)}`;
+}
+
 function updateYellowUmbrellaFields() {
   const type = $("#insuranceTypeSelect")?.value;
   const taxGroup = $("#yellowUmbrellaTaxGroup");
@@ -2669,6 +2833,8 @@ function updateYellowUmbrellaFields() {
 
     if ($("#yuDeductionAmountText")) $("#yuDeductionAmountText").textContent = `₩${number(deduction, 0)} (한도 ₩${number(maxLimit, 0)})`;
     if ($("#yuTaxSavedText")) $("#yuTaxSavedText").textContent = `₩${number(taxSaved, 0)} (${rate}%)`;
+
+    renderYuYearlyFormRows($("#insuranceAccountForm"));
   }
 }
 
@@ -2707,13 +2873,19 @@ function openInsuranceAccountDialog(item = null) {
     form.querySelector("[name='start_date']").value = item.start_date || "";
     form.querySelector("[name='maturity_date']").value = item.maturity_date || "";
     form.querySelector("[name='memo']").value = item.memo || "";
+
+    yuCurrentYearlyList = Array.isArray(item.yearly_contributions)
+      ? JSON.parse(JSON.stringify(item.yearly_contributions))
+      : [];
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
     if ($("#payoutTypeLumpSum")) $("#payoutTypeLumpSum").checked = true;
     if ($("#pensionDurationSelect")) $("#pensionDurationSelect").value = "20";
+    yuCurrentYearlyList = [];
   }
   updateYellowUmbrellaFields();
   updatePensionPayoutFields();
+  renderYuYearlyFormRows(form);
   refreshDialogKoreanHints(dialog);
   dialog.showModal();
 }
@@ -4028,17 +4200,29 @@ async function loadStockChartData() {
   }
 }
 
-// ── 8. 자산기록 렌더링 (콤보 차트 vs 월별 자산 뷰) ───────────────────────────
+// ── 8. 주식기록 렌더링 (전체주식 콤보 차트 vs 절세계좌 뷰) ───────────────────────────
 function renderAssetRecords(records) {
   assetRecords = records || [];
   window.assetRecords = records || [];
+
+  if (currentRecordView === 'tax_accounts') {
+    renderTaxAccountHoldings(currentOwner);
+    return;
+  }
+
+  // 전체주식 콤보 차트 뷰 툴바 복원
+  if ($("#snapshotButton")) $("#snapshotButton").style.display = "";
+  if ($("#addRecordButton")) $("#addRecordButton").style.display = "";
+  if ($("#recordPeriodTabs")) $("#recordPeriodTabs").style.opacity = "1";
+  const sideSummarySmall = document.querySelector(".record-side-summary small");
+  if (sideSummarySmall) sideSummarySmall.textContent = "저장된 날짜별 자산 추이";
 
   const rawList = [...records].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const filtered = filterRecordsByPeriod(rawList, currentRecordPeriod);
   const wrap = $("#assetChart");
 
   if (!filtered.length) {
-    if (wrap) wrap.innerHTML = '<div class="empty">선택한 기간의 자산기록이 없습니다.</div>';
+    if (wrap) wrap.innerHTML = '<div class="empty">선택한 기간의 주식기록이 없습니다.</div>';
     $("#assetRecordList") && ($("#assetRecordList").innerHTML = "");
     $("#recordCount") && ($("#recordCount").textContent = "0개 기록");
     return;
@@ -4243,6 +4427,206 @@ function renderAssetRecords(records) {
   }
 }
 
+// ── 8-1. 절세계좌 보유종목 및 계좌별 자산 렌더링 ──────────────────────────────
+function renderTaxAccountHoldings(owner = currentOwner) {
+  const o = owner || currentOwner || '모두';
+  const curData = dashboard || rawDashboard || {};
+  const allAccounts = curData.accounts || [];
+  const allHoldings = curData.holdings || [];
+
+  // 1. IRP, 연금저축, ISA 계좌 필터링
+  const taxAccounts = allAccounts.filter(a => {
+    if (!isTaxAdvantagedAccount(a)) return false;
+    if (o !== '모두' && (a.owner || '모두') !== o) return false;
+    return true;
+  });
+
+  const taxAccountIds = new Set(taxAccounts.map(a => a.id));
+  const taxAccountMap = new Map(taxAccounts.map(a => [a.id, a]));
+
+  // 2. 해당 계좌들에 속한 보유종목 필터링
+  const taxHoldings = allHoldings.filter(h => {
+    const matchedById = h.account_id && taxAccountIds.has(h.account_id);
+    const matchedByName = taxAccounts.some(a => 
+      a.name === h.account_name && 
+      (a.broker === h.broker || !h.broker) && 
+      (a.owner || '모두') === (h.owner || '모두')
+    );
+    if (!matchedById && !matchedByName) return false;
+    if (o !== '모두' && (h.owner || '모두') !== o) return false;
+    return true;
+  });
+
+  // 종목 정렬: 평가금액 큰 순서
+  taxHoldings.sort((a, b) => {
+    const valA = Number(a.market_value_krw) || ((Number(a.quantity) || 0) * (Number(a.current_price) || 0));
+    const valB = Number(b.market_value_krw) || ((Number(b.quantity) || 0) * (Number(b.current_price) || 0));
+    return valB - valA;
+  });
+
+  const totalMarketVal = taxHoldings.reduce((sum, h) => {
+    const val = Number(h.market_value_krw) || ((Number(h.quantity) || 0) * (Number(h.current_price) || 0));
+    return sum + val;
+  }, 0);
+
+  const totalCostVal = taxHoldings.reduce((sum, h) => {
+    const val = Number(h.cost_value_krw) || ((Number(h.quantity) || 0) * (Number(h.avg_price) || 0));
+    return sum + val;
+  }, 0);
+
+  const totalProfit = totalMarketVal - totalCostVal;
+  const totalProfitRate = totalCostVal > 0 ? (totalProfit / totalCostVal) * 100 : 0;
+
+  // 우측 사이드 요약 업데이트
+  if ($("#recordCount")) $("#recordCount").textContent = `${taxHoldings.length}개 종목 (${taxAccounts.length}개 계좌)`;
+  if ($("#recordSummary")) $("#recordSummary").textContent = `₩${number(totalMarketVal, 0)}`;
+  const sideSummarySmall = document.querySelector(".record-side-summary small");
+  if (sideSummarySmall) sideSummarySmall.textContent = `절세계좌 평가 자산 합계 [${o}]`;
+
+  // 스냅샷/추가 버튼 숨김/표시
+  if ($("#snapshotButton")) $("#snapshotButton").style.display = "none";
+  if ($("#addRecordButton")) $("#addRecordButton").style.display = "none";
+  if ($("#recordPeriodTabs")) $("#recordPeriodTabs").style.opacity = "0.4";
+
+  const chartWrap = $("#assetChart");
+  if (!chartWrap) return;
+
+  if (!taxHoldings.length) {
+    chartWrap.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:300px;color:#94a3b8;text-align:center;">
+        <span style="font-size:32px;margin-bottom:8px;">🌿</span>
+        <strong style="font-size:15px;color:#cbd5e1;margin-bottom:4px;">${o === '모두' ? '절세계좌(IRP·연금저축·ISA)' : `[${o}] 절세계좌`}에 보유종목이 없습니다.</strong>
+        <p style="font-size:12px;margin:0;">계좌 관리에서 IRP, 연금저축, 중개형 ISA 계좌를 등록하고 종목을 추가해보세요.</p>
+      </div>
+    `;
+    if ($("#assetRecordList")) $("#assetRecordList").innerHTML = "";
+    return;
+  }
+
+  // 보유종목 카드 리스트 생성 (보유종목명과 수량을 최우선 헤드라인으로 배치)
+  const holdingsHtml = taxHoldings.map((h) => {
+    const acct = taxAccountMap.get(h.account_id) || taxAccounts.find(a => a.name === h.account_name) || {};
+    const acctName = acct.name || h.account_name || '절세계좌';
+    const acctBroker = acct.broker || h.broker || '';
+    const acctType = (acct.account_type || '').toLowerCase();
+    const isDeductible = isAccountTaxDeductible(acct);
+
+    const qty = Number(h.quantity || 0);
+    const curPrice = Number(h.current_price || 0);
+    const avgPrice = Number(h.avg_price || 0);
+    const marketVal = Number(h.market_value_krw) || (qty * curPrice);
+    const costVal = Number(h.cost_value_krw) || (qty * avgPrice);
+    const profitVal = Number(h.profit_krw) || (marketVal - costVal);
+    const profitRate = costVal > 0 ? (profitVal / costVal) * 100 : (Number(h.profit_rate) || 0);
+
+    let typeBadge = '';
+    if (acctType === 'isa' || (acctName || '').toLowerCase().includes('isa')) {
+      typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;font-size:11px;font-weight:700;">🔄 ISA 비과세</span>`;
+    } else if (acctType === 'irp' || (acctName || '').toLowerCase().includes('irp')) {
+      typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(167,139,250,0.18)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#c4b5fd' : '#34d399'};font-size:11px;font-weight:700;">🛡️ IRP ${isDeductible ? '공제' : '비공제'}</span>`;
+    } else {
+      typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(56,189,248,0.15)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#38bdf8' : '#34d399'};font-size:11px;font-weight:700;">💎 연금저축 ${isDeductible ? '공제' : '비공제'}</span>`;
+    }
+
+    return `
+      <div class="tax-holding-item" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:10px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.08);margin-bottom:8px;gap:14px;">
+        <!-- 보유종목명과 수량 (최우선 표시) -->
+        <div style="flex:1.4;min-width:0;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px;">
+            <strong style="font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-0.2px;">${html(h.name)}</strong>
+            <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:6px;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(99,102,241,0.25));border:1px solid rgba(167,139,250,0.5);color:#ddd6fe;font-size:14px;font-weight:800;letter-spacing:0.4px;">
+              ${number(qty, 0)}주
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#94a3b8;flex-wrap:wrap;">
+            <span style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-family:monospace;">${html(h.code || '')}</span>
+            <span>${html(h.sector || '기타')}</span>
+            <span style="color:#475569;">|</span>
+            <span style="color:#cbd5e1;font-weight:600;">${html(acctName)}</span>
+            <span style="color:#64748b;">(${html(acctBroker)})</span>
+            <span style="color:#94a3b8;">[${html(h.owner || acct.owner || '모두')}]</span>
+            ${typeBadge}
+          </div>
+        </div>
+
+        <!-- 단가 및 평가금액 / 손익 -->
+        <div style="text-align:right;min-width:145px;flex-shrink:0;">
+          <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:2px;">
+            ₩${number(marketVal, 0)}
+          </div>
+          <div style="font-size:11.5px;color:#94a3b8;margin-bottom:3px;">
+            현재 ₩${number(curPrice, 0)} <span style="font-size:10px;color:#64748b;">(매입 ₩${number(avgPrice, 0)})</span>
+          </div>
+          <div class="${signClass(profitVal)}" style="font-size:12px;font-weight:700;">
+            ${profitVal >= 0 ? '+' : ''}₩${number(profitVal, 0)} (${profitVal >= 0 ? '+' : ''}${number(profitRate, 2)}%)
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  chartWrap.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:12px;flex-wrap:wrap;gap:6px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">🌿 절세계좌 보유종목 (${taxHoldings.length}개 종목)</span>
+        <span style="font-size:11px;color:#94a3b8;">IRP · 연금저축 · 중개형 ISA</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;font-size:12px;">
+        <span style="color:#94a3b8;">총 평가: <strong style="color:#f8fafc;font-size:13.5px;">₩${number(totalMarketVal, 0)}</strong></span>
+        <span class="${signClass(totalProfit)}" style="font-weight:700;">
+          ${totalProfit >= 0 ? '+' : ''}₩${number(totalProfit, 0)} (${totalProfit >= 0 ? '+' : ''}${number(totalProfitRate, 2)}%)
+        </span>
+      </div>
+    </div>
+    <div class="tax-holdings-scroll-list" style="max-height:430px;overflow-y:auto;padding-right:4px;">
+      ${holdingsHtml}
+    </div>
+  `;
+
+  // 3. 우측 사이드 패널: 절세계좌별 요약 카드 목록
+  const recordListEl = $("#assetRecordList");
+  if (recordListEl) {
+    if (!taxAccounts.length) {
+      recordListEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px;">등록된 절세계좌가 없습니다.</div>';
+    } else {
+      recordListEl.innerHTML = taxAccounts.map(acct => {
+        const acctHoldings = taxHoldings.filter(h => h.account_id === acct.id || (h.account_name === acct.name && (h.owner || '모두') === (acct.owner || '모두')));
+        const acctMarketVal = acctHoldings.reduce((sum, h) => sum + (Number(h.market_value_krw) || ((Number(h.quantity) || 0) * (Number(h.current_price) || 0))), 0);
+        const acctCostVal = acctHoldings.reduce((sum, h) => sum + (Number(h.cost_value_krw) || ((Number(h.quantity) || 0) * (Number(h.avg_price) || 0))), 0);
+        const acctProfit = acctMarketVal - acctCostVal;
+        const acctType = (acct.account_type || '').toLowerCase();
+        const isDed = isAccountTaxDeductible(acct);
+
+        let typeBadge = '';
+        if (acctType === 'isa' || (acct.name || '').toLowerCase().includes('isa')) {
+          typeBadge = '<span style="color:#38bdf8;background:rgba(56,189,248,0.12);padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">ISA 비과세</span>';
+        } else if (acctType === 'irp' || (acct.name || '').toLowerCase().includes('irp')) {
+          typeBadge = `<span style="color:${isDed ? '#c4b5fd' : '#34d399'};background:${isDed ? 'rgba(167,139,250,0.15)' : 'rgba(16,185,129,0.15)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">IRP ${isDed ? '공제' : '비공제'}</span>`;
+        } else {
+          typeBadge = `<span style="color:${isDed ? '#38bdf8' : '#34d399'};background:${isDed ? 'rgba(56,189,248,0.12)' : 'rgba(16,185,129,0.12)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">연금저축 ${isDed ? '공제' : '비공제'}</span>`;
+        }
+
+        return `
+          <div class="record-row" style="display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:10px 12px;background:#0c1429;border:1px solid #22304f;border-radius:10px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong style="color:#f8fafc;font-size:12.5px;">${html(acct.name)}</strong>
+              ${typeBadge}
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;">
+              <span>${html(acct.broker)} [${html(acct.owner || '모두')}]</span>
+              <strong style="color:#f1f5f9;font-size:13px;">₩${number(acctMarketVal, 0)}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;border-top:1px dashed rgba(255,255,255,0.06);padding-top:4px;margin-top:2px;">
+              <span>보유 ${acctHoldings.length}개 종목</span>
+              <span class="${signClass(acctProfit)}" style="font-weight:700;">${acctProfit >= 0 ? '+' : ''}₩${number(acctProfit, 0)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
 // ── 9. 대시보드 렌더링 총괄 ──────────────────────────────────────────────────
 function render(data) {
   dashboard = data;
@@ -4371,6 +4755,54 @@ function openAccountCashDialog(account) {
   $("#accountCashDialog")?.showModal();
 }
 
+let accountCurrentYearlyList = [];
+
+function renderAccountYearlyFormRows(form = document.getElementById("accountEditForm")) {
+  const container = form?.querySelector("#accountYearlyList");
+  if (!container) return;
+
+  const accType = form.querySelector(".account-type-select")?.value || "pension_savings";
+  const isGlobalDeductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
+  const incomeLvl = form.querySelector(".pension-income-level")?.value || "low";
+  const rate = incomeLvl === "low" ? 16.5 : 13.2;
+  const baseLimit = accType === "pension_savings" ? 6000000 : 9000000;
+
+  let cumulativeSaved = 0;
+
+  if (!accountCurrentYearlyList.length) {
+    container.innerHTML = `<div style="font-size:11px;color:#94a3b8;padding:8px 4px;text-align:center;">등록된 연도별 납입 이력이 없습니다. [+ 연도 추가]를 눌러 과거 연도별 입금액을 기록해보세요.</div>`;
+  } else {
+    container.innerHTML = accountCurrentYearlyList.map((yc, idx) => {
+      const yr = yc.year || (2024 - idx);
+      const dep = Number(yc.deposit || 0);
+      const ded = isGlobalDeductible && yc.is_deductible !== false && String(yc.is_deductible) !== "false";
+      const target = ded ? Math.min(dep, baseLimit) : 0;
+      const saved = ded ? Math.floor(target * (rate / 100)) : 0;
+      if (ded) cumulativeSaved += saved;
+
+      return `
+        <div class="account-yearly-row" data-index="${idx}" style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.25);border:1px solid rgba(56,189,248,0.2);padding:5px 8px;border-radius:6px;">
+          <input type="number" class="account-yearly-year" value="${yr}" placeholder="연도" style="width:68px;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#f8fafc;" />
+          <span style="font-size:11px;color:#94a3b8;">년</span>
+          <input type="number" class="account-yearly-deposit" value="${dep || ''}" placeholder="납입액" style="flex:1;min-width:70px;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#f8fafc;" min="0" step="any" />
+          <span style="font-size:11px;color:#94a3b8;">원</span>
+          <select class="account-yearly-deductible" style="width:78px;font-size:11.5px;padding:3px 4px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:${ded ? '#38bdf8' : '#34d399'};font-weight:600;">
+            <option value="true" ${yc.is_deductible !== false && String(yc.is_deductible) !== "false" ? "selected" : ""}>공제</option>
+            <option value="false" ${yc.is_deductible === false || String(yc.is_deductible) === "false" ? "selected" : ""}>비공제</option>
+          </select>
+          <span class="account-yearly-saved-badge" style="min-width:85px;text-align:right;font-size:11.5px;font-weight:700;color:${ded ? '#4ade80' : '#34d399'};">
+            ${ded ? `+₩${number(saved, 0)}` : '비공제(₩0)'}
+          </span>
+          <button type="button" class="account-yearly-del-btn" data-index="${idx}" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0 4px;" title="삭제">✕</button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  const cumEl = form?.querySelector("#accountCumulativeSavedText");
+  if (cumEl) cumEl.textContent = `₩${number(cumulativeSaved, 0)}`;
+}
+
 function updateAccountTaxBenefitFields(form) {
   if (!form) return;
   const accType = form.querySelector(".account-type-select")?.value || "general";
@@ -4403,6 +4835,8 @@ function updateAccountTaxBenefitFields(form) {
       if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
       if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
     }
+
+    renderAccountYearlyFormRows(form);
   }
 }
 
@@ -4433,7 +4867,12 @@ function openAccountEditDialog(account) {
   const isaYear = form.querySelector(".pension-isa-year");
   if (isaYear) isaYear.value = account.isa_transfer_year || "2026";
 
+  accountCurrentYearlyList = Array.isArray(account.yearly_contributions)
+    ? JSON.parse(JSON.stringify(account.yearly_contributions))
+    : [];
+
   updateAccountTaxBenefitFields(form);
+  renderAccountYearlyFormRows(form);
   refreshDialogKoreanHints($("#accountEditDialog"));
   $("#accountEditDialog")?.showModal();
 }
@@ -5581,6 +6020,16 @@ async function saveEditAccount() {
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
   const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
+  const yearly_contributions = [];
+  form.querySelectorAll("#accountYearlyList .account-yearly-row").forEach(row => {
+    const yr = (row.querySelector(".account-yearly-year")?.value || "").trim();
+    const dep = Number(row.querySelector(".account-yearly-deposit")?.value) || 0;
+    const ded = row.querySelector(".account-yearly-deductible")?.value === "true";
+    if (yr) {
+      yearly_contributions.push({ year: yr, deposit: dep, is_deductible: ded });
+    }
+  });
+
   if (!broker || !name) {
     alert("증권사와 계좌 이름을 모두 입력해 주세요.");
     return;
@@ -5603,6 +6052,7 @@ async function saveEditAccount() {
         localAcct.annual_deposit = annual_deposit;
         localAcct.isa_transfer_amount = isa_transfer_amount;
         localAcct.isa_transfer_year = isa_transfer_year;
+        localAcct.yearly_contributions = yearly_contributions;
       }
     }
     // 2. 화면 즉시 재렌더링
@@ -5624,7 +6074,8 @@ async function saveEditAccount() {
         income_level,
         annual_deposit,
         isa_transfer_amount,
-        isa_transfer_year
+        isa_transfer_year,
+        yearly_contributions
       })
     });
 
@@ -8132,6 +8583,16 @@ function initSavingsListeners() {
       const pYears = Number(fd.get("payout_duration_years")) || 20;
       const convertedTotal = Math.round(mPayout * 12 * pYears);
 
+      const yu_yearly_contributions = [];
+      document.querySelectorAll("#yuYearlyList .yu-yearly-row").forEach(row => {
+        const yr = (row.querySelector(".yu-yearly-year")?.value || "").trim();
+        const dep = Number(row.querySelector(".yu-yearly-deposit")?.value) || 0;
+        const ded = row.querySelector(".yu-yearly-deductible")?.value === "true";
+        if (yr) {
+          yu_yearly_contributions.push({ year: yr, deposit: dep, is_deductible: ded });
+        }
+      });
+
       const payload = {
         id: fd.get("id") || undefined,
         insurance_type: fd.get("insurance_type") || "protection",
@@ -8151,6 +8612,7 @@ function initSavingsListeners() {
         start_date: fd.get("start_date") || "",
         maturity_date: fd.get("maturity_date") || "",
         memo: fd.get("memo") || "",
+        yearly_contributions: yu_yearly_contributions,
       };
 
       try {
@@ -8164,6 +8626,70 @@ function initSavingsListeners() {
         await loadDashboard();
       } catch (err) {
         toast(err.message || "보험/연금 상품 저장 실패", true);
+      }
+    });
+
+    // 연금/IRP 연도별 이력 관리 이벤트
+    document.getElementById("addAccountYearlyBtn")?.addEventListener("click", () => {
+      const years = accountCurrentYearlyList.map(y => Number(y.year) || 2024);
+      const nextYr = years.length > 0 ? Math.min(...years) - 1 : 2024;
+      accountCurrentYearlyList.push({ year: nextYr, deposit: 6000000, is_deductible: true });
+      renderAccountYearlyFormRows();
+    });
+
+    const handleAccountYearlyRowChange = (e) => {
+      const row = e.target.closest(".account-yearly-row");
+      if (!row) return;
+      const idx = Number(row.dataset.index);
+      if (accountCurrentYearlyList[idx]) {
+        accountCurrentYearlyList[idx].year = row.querySelector(".account-yearly-year")?.value || "";
+        accountCurrentYearlyList[idx].deposit = Number(row.querySelector(".account-yearly-deposit")?.value) || 0;
+        accountCurrentYearlyList[idx].is_deductible = row.querySelector(".account-yearly-deductible")?.value === "true";
+        renderAccountYearlyFormRows();
+      }
+    };
+    document.getElementById("accountYearlyList")?.addEventListener("input", handleAccountYearlyRowChange);
+    document.getElementById("accountYearlyList")?.addEventListener("change", handleAccountYearlyRowChange);
+
+    document.getElementById("accountYearlyList")?.addEventListener("click", (e) => {
+      const delBtn = e.target.closest(".account-yearly-del-btn");
+      if (!delBtn) return;
+      const idx = Number(delBtn.dataset.index);
+      if (!isNaN(idx)) {
+        accountCurrentYearlyList.splice(idx, 1);
+        renderAccountYearlyFormRows();
+      }
+    });
+
+    // 노란우산공제 연도별 이력 관리 이벤트
+    document.getElementById("addYuYearlyBtn")?.addEventListener("click", () => {
+      const years = yuCurrentYearlyList.map(y => Number(y.year) || 2024);
+      const nextYr = years.length > 0 ? Math.min(...years) - 1 : 2024;
+      yuCurrentYearlyList.push({ year: nextYr, deposit: 2400000, is_deductible: true });
+      renderYuYearlyFormRows();
+    });
+
+    const handleYuYearlyRowChange = (e) => {
+      const row = e.target.closest(".yu-yearly-row");
+      if (!row) return;
+      const idx = Number(row.dataset.index);
+      if (yuCurrentYearlyList[idx]) {
+        yuCurrentYearlyList[idx].year = row.querySelector(".yu-yearly-year")?.value || "";
+        yuCurrentYearlyList[idx].deposit = Number(row.querySelector(".yu-yearly-deposit")?.value) || 0;
+        yuCurrentYearlyList[idx].is_deductible = row.querySelector(".yu-yearly-deductible")?.value === "true";
+        renderYuYearlyFormRows();
+      }
+    };
+    document.getElementById("yuYearlyList")?.addEventListener("input", handleYuYearlyRowChange);
+    document.getElementById("yuYearlyList")?.addEventListener("change", handleYuYearlyRowChange);
+
+    document.getElementById("yuYearlyList")?.addEventListener("click", (e) => {
+      const delBtn = e.target.closest(".yu-yearly-del-btn");
+      if (!delBtn) return;
+      const idx = Number(delBtn.dataset.index);
+      if (!isNaN(idx)) {
+        yuCurrentYearlyList.splice(idx, 1);
+        renderYuYearlyFormRows();
       }
     });
   }

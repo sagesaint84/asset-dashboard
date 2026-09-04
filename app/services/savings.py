@@ -447,6 +447,11 @@ def save_insurance_account(payload: dict[str, Any], username: str | None = None)
         "updated_at": datetime.now().astimezone().isoformat(),
     }
 
+    if "yearly_contributions" in payload:
+        record["yearly_contributions"] = payload.get("yearly_contributions") or []
+    elif existing_index is not None and "yearly_contributions" in insurances[existing_index]:
+        record["yearly_contributions"] = insurances[existing_index]["yearly_contributions"]
+
     if existing_index is not None:
         insurances[existing_index] = record
     else:

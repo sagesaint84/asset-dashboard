@@ -331,15 +331,15 @@
         <div class="panel-head records-head" style="flex-wrap:wrap;gap:0.5rem;align-items:center;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <div>
-              <p class="eyebrow">ASSET RECORDS</p>
-              <h2>기록 <button type="button" class="section-collapse-btn" data-section="records" title="접기/펼치기" aria-label="기록 접기/펼치기">▼</button></h2>
+              <p class="eyebrow">STOCK RECORDS</p>
+              <h2>주식기록 <button type="button" class="section-collapse-btn" data-section="records" title="접기/펼치기" aria-label="주식기록 접기/펼치기">▼</button></h2>
             </div>
             <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
             <div class="family-tabs" id="recordsFamilyTabs" style="margin-left:4px;"></div>
           </div>
           <div class="heatmap-period-tabs" id="recordViewTabs" style="margin-right:6px;">
-            <button type="button" class="heatmap-tab active" data-view="combo">📈 콤보 차트</button>
-            <button type="button" class="heatmap-tab" data-view="bar">📊 막대 차트</button>
+            <button type="button" class="heatmap-tab active" data-view="combo">📈 전체주식</button>
+            <button type="button" class="heatmap-tab" data-view="tax_accounts">🌿 절세계좌</button>
           </div>
           <div class="heatmap-period-tabs compact-record-tabs" id="recordPeriodTabs">
             <button type="button" class="heatmap-tab" data-period="1D">일간</button>
@@ -1076,12 +1076,25 @@
           </div>
           <div class="pension-preview-box" style="background:rgba(0,0,0,0.25);border-radius:6px;padding:8px 12px;font-size:11.5px;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;">
             <div>
-              <span>총 세액공제 대상: </span>
+              <span>올해 세액공제 대상: </span>
               <strong class="pension-deduction-target-text" style="color:#38bdf8;">₩0</strong>
             </div>
             <div>
-              <span>예상 세액 환급액: </span>
+              <span>올해 예상 세액 환급: </span>
               <strong class="pension-tax-refund-text" style="color:#4ade80;font-size:13px;">₩0</strong>
+            </div>
+          </div>
+
+          <!-- 연도별 납입 & 절세 이력 관리 (IRP / 연금저축) -->
+          <div class="pension-yearly-history-section" style="margin-top:10px;border-top:1px dashed rgba(56,189,248,0.3);padding-top:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:12px;font-weight:700;color:#38bdf8;">📅 연도별 납입 및 절세 이력 (과거~현재)</span>
+              <button type="button" class="button secondary compact" id="addAccountYearlyBtn" style="font-size:11px;padding:2px 8px;">+ 연도 추가</button>
+            </div>
+            <div id="accountYearlyList" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding-right:2px;"></div>
+            <div style="margin-top:8px;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11.5px;display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#94a3b8;">※ 비공제 선택 시 해당 연도 절세액은 ₩0으로 누적에서 제외됩니다.</span>
+              <span style="color:#e2e8f0;font-weight:600;">누적 절세액: <strong id="accountCumulativeSavedText" style="color:#4ade80;font-size:13px;">₩0</strong></span>
             </div>
           </div>
         </div>
@@ -1500,6 +1513,19 @@
               <div>
                 <span>예상 세금 절감(환급)액: </span>
                 <strong id="yuTaxSavedText" style="color:#4ade80;font-size:13px;">₩792,000</strong>
+              </div>
+            </div>
+
+            <!-- 노란우산공제 연도별 납입 & 절세 이력 관리 -->
+            <div class="yu-yearly-history-section" style="margin-top:10px;border-top:1px dashed rgba(234,179,8,0.3);padding-top:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="font-size:12px;font-weight:700;color:#facc15;">📅 연도별 납입 및 소득공제 이력 (과거~현재)</span>
+                <button type="button" class="button secondary compact" id="addYuYearlyBtn" style="font-size:11px;padding:2px 8px;">+ 연도 추가</button>
+              </div>
+              <div id="yuYearlyList" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding-right:2px;"></div>
+              <div style="margin-top:8px;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:11.5px;display:flex;justify-content:space-between;align-items:center;">
+                <span style="color:#94a3b8;">※ 비공제 선택 시 해당 연도 소득공제 및 절세액 ₩0 제외</span>
+                <span style="color:#e2e8f0;font-weight:600;">누적 절세액: <strong id="yuCumulativeSavedText" style="color:#4ade80;font-size:13px;">₩0</strong></span>
               </div>
             </div>
           </div>
@@ -2684,7 +2710,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260904-v5515"></script>
+    <script src="/static/wealth.js?v=20260905-v5516"></script>
   </body>
 </html>
 
