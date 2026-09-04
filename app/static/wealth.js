@@ -5162,7 +5162,8 @@ function openAccountEditDialog(account) {
   if (dedSel) dedSel.value = isTaxDeductible ? "true" : "false";
 
   const incomeLvl = form.querySelector(".pension-income-level");
-  if (incomeLvl) incomeLvl.value = account.income_level || "low";
+  const acctIncomeLvl = account.income_level || "low";
+  if (incomeLvl) incomeLvl.value = acctIncomeLvl;
   const annualDep = form.querySelector(".pension-annual-deposit");
   if (annualDep) annualDep.value = (account.annual_deposit !== undefined && account.annual_deposit !== null && account.annual_deposit !== "") ? account.annual_deposit : "";
   const isaTr = form.querySelector(".pension-isa-transfer");
@@ -5177,6 +5178,13 @@ function openAccountEditDialog(account) {
   // Sort descending by year
   accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
 
+  // If account has an income_level, ensure items in accountCurrentYearlyList inherit it
+  if (account.income_level) {
+    accountCurrentYearlyList.forEach(item => {
+      item.income_level = acctIncomeLvl;
+    });
+  }
+
   // Set top input year & values
   const yrInput = form.querySelector(".pension-entry-year");
   if (yrInput) {
@@ -5189,8 +5197,8 @@ function openAccountEditDialog(account) {
       if (dedSel && topItem.is_deductible !== undefined) {
         dedSel.value = (topItem.is_deductible !== false && String(topItem.is_deductible) !== "false") ? "true" : "false";
       }
-      if (incomeLvl && topItem.income_level) {
-        incomeLvl.value = topItem.income_level;
+      if (incomeLvl) {
+        incomeLvl.value = acctIncomeLvl;
       }
     } else {
       yrInput.value = "2026";
@@ -6382,7 +6390,7 @@ async function saveEditAccount() {
           year: String(item.year).trim(),
           deposit: Number(item.deposit || 0),
           is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
-          income_level: item.income_level || income_level
+          income_level: income_level
         });
       }
     });
@@ -9148,7 +9156,18 @@ function initSavingsListeners() {
     const f = document.getElementById(id);
     if (f) {
       f.addEventListener("input", () => updateAccountTaxBenefitFields(f));
-      f.addEventListener("change", () => updateAccountTaxBenefitFields(f));
+      f.addEventListener("change", (e) => {
+        if (e.target && e.target.matches(".pension-income-level")) {
+          const newInc = e.target.value || "low";
+          if (id === "accountEditForm" && accountCurrentYearlyList && accountCurrentYearlyList.length > 0) {
+            accountCurrentYearlyList.forEach(item => {
+              item.income_level = newInc;
+            });
+            renderAccountYearlyFormRows(f);
+          }
+        }
+        updateAccountTaxBenefitFields(f);
+      });
     }
   });
 

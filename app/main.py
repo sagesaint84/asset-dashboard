@@ -1428,7 +1428,12 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
     if "isa_transfer_year" in payload:
         account["isa_transfer_year"] = str(payload.get("isa_transfer_year") or "").strip()
     if "yearly_contributions" in payload:
-        account["yearly_contributions"] = payload.get("yearly_contributions") or []
+        ycs = payload.get("yearly_contributions") or []
+        inc = account.get("income_level") or "low"
+        for yc in ycs:
+            if isinstance(yc, dict) and not yc.get("income_level"):
+                yc["income_level"] = inc
+        account["yearly_contributions"] = ycs
 
     for holding in data["holdings"]:
         if holding.get("account_id") == account_id:
