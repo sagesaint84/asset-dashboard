@@ -246,9 +246,9 @@ function computeFilteredClassifications(holdings, accounts, fxRates, owner = '�
     totalValue += totalAllCash;
   }
 
-  // 4. 보험 (해약환급금 / 예상 수령액)
+  // 4. 보험 (해약환급금 / 예상 수령액 / 20년 환산 총자산)
   const curInsurances = filterByOwner(src.insurance_accounts || rawInsuranceAccounts || []);
-  const insuranceTotal = curInsurances.reduce((acc, ins) => acc + (Number(ins.expected_refund_amount) || Number(ins.accumulated_paid_amount) || 0), 0);
+  const insuranceTotal = curInsurances.reduce((acc, ins) => acc + (Number(ins.expected_amount) || Number(ins.converted_total_asset) || Number(ins.total_paid_amount) || Number(ins.expected_refund_amount) || Number(ins.accumulated_paid_amount) || 0), 0);
   if (insuranceTotal > 0) {
     groups['보험'] = {
       name: '보험',
@@ -920,7 +920,7 @@ function renderSummary(data) {
   const totalPositiveBankVal = posBanks.reduce((acc, b) => acc + (Number(b.balance) || 0), 0);
   const totalSavingVal = curSavings.reduce((acc, sv) => acc + (Number(sv.current_value) || Number(sv.current_paid_amount) || Number(sv.balance) || 0), 0);
   const totalAllCash = Number(s.total_cash_krw || 0) + totalPositiveBankVal + totalSavingVal;
-  const insuranceTotal = curInsurances.reduce((acc, ins) => acc + (Number(ins.expected_refund_amount) || Number(ins.accumulated_paid_amount) || 0), 0);
+  const insuranceTotal = curInsurances.reduce((acc, ins) => acc + (Number(ins.expected_amount) || Number(ins.converted_total_asset) || Number(ins.total_paid_amount) || Number(ins.expected_refund_amount) || Number(ins.accumulated_paid_amount) || 0), 0);
 
   const totalMinusBankDebt = negBanks.reduce((acc, b) => acc + Math.abs(Number(b.balance) || 0), 0);
   const totalPureDebt = curLoans.reduce((acc, l) => acc + (Number(l.current_balance) || 0), 0);
@@ -7222,7 +7222,6 @@ function initAppTheme() {
 // ── 섹션 접기 / 펼치기 관리 (Accordion / Collapse) ───────────────────────────
 const SECTION_MAP = {
   summary: '#summaryPanel',
-  allocation: '#summaryPanel',
   records: '#recordsPanel',
   heatmap: '#assetHeatmapPanel',
   dividend: '#dividendPanel',
@@ -7235,7 +7234,14 @@ const SECTION_MAP = {
 
 function getCollapsedSections() {
   try {
-    return JSON.parse(localStorage.getItem('collapsed_sections') || '[]');
+    const raw = JSON.parse(localStorage.getItem('collapsed_sections') || '[]');
+    if (!Array.isArray(raw)) return [];
+    const validKeys = Object.keys(SECTION_MAP);
+    const cleaned = raw.filter(k => validKeys.includes(k));
+    if (cleaned.length !== raw.length) {
+      saveCollapsedSections(cleaned);
+    }
+    return cleaned;
   } catch (e) {
     return [];
   }
@@ -7248,18 +7254,21 @@ function saveCollapsedSections(list) {
 }
 
 function toggleSection(sectionKey) {
-  if (!sectionKey) return;
+  if (!sectionKey || !SECTION_MAP[sectionKey]) return;
   let list = getCollapsedSections();
-  const isNowCollapsed = list.includes(sectionKey);
+  const selector = SECTION_MAP[sectionKey];
+  const panel = selector ? document.querySelector(selector) : null;
+  const isCurrentlyCollapsed = panel ? panel.classList.contains('is-collapsed') : list.includes(sectionKey);
+  const nextCollapsed = !isCurrentlyCollapsed;
 
-  if (isNowCollapsed) {
-    list = list.filter(k => k !== sectionKey);
+  if (nextCollapsed) {
+    if (!list.includes(sectionKey)) list.push(sectionKey);
   } else {
-    list.push(sectionKey);
+    list = list.filter(k => k !== sectionKey);
   }
   saveCollapsedSections(list);
 
-  applySectionCollapsedState(sectionKey, !isNowCollapsed);
+  applySectionCollapsedState(sectionKey, nextCollapsed);
 }
 
 function applySectionCollapsedState(sectionKey, isCollapsed) {
@@ -7293,8 +7302,8 @@ function applySectionCollapsedState(sectionKey, isCollapsed) {
 
 function initCollapsedSections() {
   const list = getCollapsedSections();
-  list.forEach(key => {
-    applySectionCollapsedState(key, true);
+  Object.keys(SECTION_MAP).forEach(key => {
+    applySectionCollapsedState(key, list.includes(key));
   });
 }
 

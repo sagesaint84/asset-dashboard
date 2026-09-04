@@ -1,3 +1,15 @@
+v5.5.14
+
+(fix) 🛡️ 포트폴리오 섹션 새로고침 시 펼침/접힘 상태 동기화 및 안전자산 내 보험·연금·공제 평가액 정상 합산 반영
+- **포트폴리오 아코디언 새로고침 상태 동기화 버그 해결**:
+  - 기존 레거시 `allocation` 키가 `SECTION_MAP`에 `#summaryPanel`로 중복 매핑되어 있어, 로컬 스토리지에 남아있을 경우 새로고침 시 버튼은 펼침(▼) 상태인데 패널 본문만 접힘(is-collapsed) 상태로 렌더링되던 문제 원천 수정
+  - `SECTION_MAP`에서 미사용 레거시 키 제거 및 `getCollapsedSections()`에서 비정상/구버전 키 자동 정리(Purge)
+  - `toggleSection` 및 `initCollapsedSections`가 실제 DOM 상태와 일관되게 동기화되도록 상태 판별 강화
+- **안전자산 카드 내 보험·연금·공제 평가액 합산 수정**:
+  - `renderSummary` 및 `computeFilteredClassifications`에서 보험 평가액을 조회할 때 누락 필드(`expected_refund_amount`, `accumulated_paid_amount`) 대신 실데이터 필드(`expected_amount`, `converted_total_asset`, `total_paid_amount`)를 우선 참조하도록 수정
+  - 노란우산공제(₩33,019,622)와 국민연금(₩52,983,240)의 총합 ₩86,002,862가 [안전자산]의 '보험' 항목 및 총 안전자산, 순자산에 정확히 합산·표시됨
+(perf) 서비스 워커 캐시 버전(wealth-cache-v114) 및 정적 자산 쿼리(v5514) 갱신
+
 v5.5.13
 
 (feat) 🎨 포트폴리오 자산 탭 [투자자산] 명칭 변경, 전 요약 지표 맞춤형 배경/테두리 색상 적용 및 실현손익 세부내역 2줄 분리 표기
