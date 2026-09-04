@@ -3264,6 +3264,32 @@ dialog.dialog .dialog-actions {
   }
 }
 
+/* 절세계좌 필터 카드 */
+.tax-card {
+  cursor: pointer !important;
+  border: 1px solid #22304f !important;
+  background: #0c1429 !important;
+  border-radius: 10px;
+  padding: 11px 13px !important;
+  transition: all 0.2s ease-in-out !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  margin-bottom: 8px;
+  user-select: none;
+}
+.tax-card:hover {
+  border-color: rgba(167, 139, 250, 0.5) !important;
+  background: #111a36 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.tax-card.active-tax-card {
+  border: 1.5px solid #a78bfa !important;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.22), rgba(99, 102, 241, 0.16)) !important;
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.25) !important;
+}
+
 
 
 

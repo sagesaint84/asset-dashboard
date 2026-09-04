@@ -1,7 +1,8 @@
 let allAssetRecords = [];
 let assetRecords = [];
 let currentRecordPeriod = 'ALL'; // '1M' | '3M' | '6M' | '1Y' | 'ALL'
-let currentRecordView = 'combo'; // 'combo' | 'monthly'
+let currentRecordView = 'combo'; // 'combo' | 'tax_accounts'
+let currentTaxAccountFilter = 'all'; // 'all' | 'isa' | 'irp' | 'pension_savings' | acc_<id>
 let currentAllocTab = 'asset_class'; // 'asset_class' | 'sector'
 let currentStockChartCode = '';
 let currentStockChartName = '';
@@ -4428,6 +4429,43 @@ function renderAssetRecords(records) {
 }
 
 // ── 8-1. 절세계좌 보유종목 및 계좌별 자산 렌더링 ──────────────────────────────
+function getTaxCategory(item) {
+  if (!item) return 'pension_savings';
+  const aType = (item.account_type || '').toLowerCase();
+  const aName = (item.name || item.account_name || '').toLowerCase();
+  if (aType === 'isa' || aName.includes('isa')) return 'isa';
+  if (aType === 'irp' || aName.includes('irp')) return 'irp';
+  return 'pension_savings';
+}
+
+function calcAccountCumulativeTaxSaved(a) {
+  if (!a) return 0;
+  if (!isAccountTaxDeductible(a)) return 0;
+  const aType = getTaxCategory(a);
+  if (aType !== 'pension_savings' && aType !== 'irp') return 0;
+
+  const rate = a.income_level === 'high' ? 0.132 : 0.165;
+  const baseLimit = aType === 'pension_savings' ? 6000000 : 9000000;
+  const yList = Array.isArray(a.yearly_contributions) ? a.yearly_contributions : [];
+
+  if (yList.length > 0) {
+    let sum = 0;
+    yList.forEach(y => {
+      const isDed = y.is_deductible !== false && String(y.is_deductible) !== 'false';
+      if (isDed) {
+        sum += Math.floor(Math.min(Number(y.deposit || 0), baseLimit) * rate);
+      }
+    });
+    return sum;
+  } else {
+    const dep = Number(a.annual_deposit) || 0;
+    const isaTr = Number(a.isa_transfer_amount) || 0;
+    const baseTarget = Math.min(dep, baseLimit);
+    const isaTarget = Math.min(isaTr * 0.10, 3000000);
+    return Math.floor((baseTarget + isaTarget) * rate);
+  }
+}
+
 function renderTaxAccountHoldings(owner = currentOwner) {
   const o = owner || currentOwner || '모두';
   const curData = dashboard || rawDashboard || {};
@@ -4444,44 +4482,118 @@ function renderTaxAccountHoldings(owner = currentOwner) {
   const taxAccountIds = new Set(taxAccounts.map(a => a.id));
   const taxAccountMap = new Map(taxAccounts.map(a => [a.id, a]));
 
-  // 2. 해당 계좌들에 속한 보유종목 필터링
-  const taxHoldings = allHoldings.filter(h => {
-    const matchedById = h.account_id && taxAccountIds.has(h.account_id);
-    const matchedByName = taxAccounts.some(a => 
-      a.name === h.account_name && 
-      (a.broker === h.broker || !h.broker) && 
-      (a.owner || '모두') === (h.owner || '모두')
-    );
-    if (!matchedById && !matchedByName) return false;
-    if (o !== '모두' && (h.owner || '모두') !== o) return false;
-    return true;
+  // 2. 해당 계좌들에 속한 보유종목 필터링 및 메타데이터 연결
+  const taxHoldings = [];
+  allHoldings.forEach(h => {
+    let matchedAccount = null;
+    if (h.account_id && taxAccountIds.has(h.account_id)) {
+      matchedAccount = taxAccountMap.get(h.account_id);
+    } else {
+      matchedAccount = taxAccounts.find(a => 
+        a.name === h.account_name && 
+        (a.broker === h.broker || !h.broker) && 
+        (a.owner || '모두') === (h.owner || '모두')
+      );
+    }
+    if (!matchedAccount) return;
+    if (o !== '모두' && (h.owner || matchedAccount.owner || '모두') !== o) return;
+
+    h._matchedAccountId = matchedAccount.id;
+    h._matchedAccount = matchedAccount;
+    h._taxCategory = getTaxCategory(matchedAccount);
+    taxHoldings.push(h);
   });
 
-  // 종목 정렬: 평가금액 큰 순서
-  taxHoldings.sort((a, b) => {
+  // 카테고리별 분리
+  const isaAccounts = taxAccounts.filter(a => getTaxCategory(a) === 'isa');
+  const irpAccounts = taxAccounts.filter(a => getTaxCategory(a) === 'irp');
+  const pensionAccounts = taxAccounts.filter(a => getTaxCategory(a) === 'pension_savings');
+
+  const isaHoldings = taxHoldings.filter(h => h._taxCategory === 'isa');
+  const irpHoldings = taxHoldings.filter(h => h._taxCategory === 'irp');
+  const pensionHoldings = taxHoldings.filter(h => h._taxCategory === 'pension_savings');
+
+  // 통계 계산 헬퍼
+  const calcHoldingStats = (list) => {
+    const market = list.reduce((sum, h) => sum + (Number(h.market_value_krw) || ((Number(h.quantity) || 0) * (Number(h.current_price) || 0))), 0);
+    const cost = list.reduce((sum, h) => sum + (Number(h.cost_value_krw) || ((Number(h.quantity) || 0) * (Number(h.avg_price) || 0))), 0);
+    const profit = market - cost;
+    const profitRate = cost > 0 ? (profit / cost) * 100 : 0;
+    return { market, cost, profit, profitRate };
+  };
+
+  // 전체 통계
+  const allStats = calcHoldingStats(taxHoldings);
+  const allCumulativeTaxSaved = taxAccounts.reduce((sum, a) => sum + calcAccountCumulativeTaxSaved(a), 0);
+
+  // 카테고리별 통계
+  const isaStats = calcHoldingStats(isaHoldings);
+  const irpStats = calcHoldingStats(irpHoldings);
+  const irpCumulativeTaxSaved = irpAccounts.reduce((sum, a) => sum + calcAccountCumulativeTaxSaved(a), 0);
+
+  const pensionStats = calcHoldingStats(pensionHoldings);
+  const pensionCumulativeTaxSaved = pensionAccounts.reduce((sum, a) => sum + calcAccountCumulativeTaxSaved(a), 0);
+
+  // 현재 필터 유효성 검사 (계좌 ID가 현재 가족 구성원 계좌에 없는 경우 'all'로 리셋)
+  if (currentTaxAccountFilter.startsWith('acc_')) {
+    const accId = currentTaxAccountFilter.replace('acc_', '');
+    if (!taxAccountIds.has(accId)) {
+      currentTaxAccountFilter = 'all';
+    }
+  }
+
+  // 선택된 필터에 따른 표시 대상 보유종목 결정
+  let filteredHoldings = [];
+  let filterTitle = '🌿 절세계좌 전체 보유종목';
+  let filterSubtitle = 'IRP · 연금저축 · 중개형 ISA 전체 합산';
+  let filterBadgeName = '전체';
+
+  if (currentTaxAccountFilter === 'isa') {
+    filteredHoldings = isaHoldings;
+    filterTitle = '🔄 중개형 ISA 보유종목';
+    filterSubtitle = `중개형 ISA 계좌 (${isaAccounts.length}개 계좌)`;
+    filterBadgeName = 'ISA';
+  } else if (currentTaxAccountFilter === 'irp') {
+    filteredHoldings = irpHoldings;
+    filterTitle = '🛡️ 개인형 IRP 보유종목';
+    filterSubtitle = `개인형 IRP 계좌 (${irpAccounts.length}개 계좌)`;
+    filterBadgeName = 'IRP';
+  } else if (currentTaxAccountFilter === 'pension_savings') {
+    filteredHoldings = pensionHoldings;
+    filterTitle = '💎 연금저축 보유종목';
+    filterSubtitle = `연금저축 계좌 (${pensionAccounts.length}개 계좌)`;
+    filterBadgeName = '연금저축';
+  } else if (currentTaxAccountFilter.startsWith('acc_')) {
+    const accId = currentTaxAccountFilter.replace('acc_', '');
+    const targetAcc = taxAccountMap.get(accId);
+    filteredHoldings = taxHoldings.filter(h => h._matchedAccountId === accId);
+    if (targetAcc) {
+      filterTitle = `📁 ${targetAcc.name} 보유종목`;
+      filterSubtitle = `${targetAcc.broker || ''} [${targetAcc.owner || '모두'}]`;
+      filterBadgeName = targetAcc.name;
+    }
+  } else {
+    currentTaxAccountFilter = 'all';
+    filteredHoldings = taxHoldings;
+    filterTitle = '🌿 절세계좌 전체 보유종목';
+    filterSubtitle = 'IRP · 연금저축 · 중개형 ISA 전체 합산';
+    filterBadgeName = '전체';
+  }
+
+  // 표시 종목 정렬: 평가금액 큰 순서
+  filteredHoldings.sort((a, b) => {
     const valA = Number(a.market_value_krw) || ((Number(a.quantity) || 0) * (Number(a.current_price) || 0));
     const valB = Number(b.market_value_krw) || ((Number(b.quantity) || 0) * (Number(b.current_price) || 0));
     return valB - valA;
   });
 
-  const totalMarketVal = taxHoldings.reduce((sum, h) => {
-    const val = Number(h.market_value_krw) || ((Number(h.quantity) || 0) * (Number(h.current_price) || 0));
-    return sum + val;
-  }, 0);
+  const filteredStats = calcHoldingStats(filteredHoldings);
 
-  const totalCostVal = taxHoldings.reduce((sum, h) => {
-    const val = Number(h.cost_value_krw) || ((Number(h.quantity) || 0) * (Number(h.avg_price) || 0));
-    return sum + val;
-  }, 0);
-
-  const totalProfit = totalMarketVal - totalCostVal;
-  const totalProfitRate = totalCostVal > 0 ? (totalProfit / totalCostVal) * 100 : 0;
-
-  // 우측 사이드 요약 업데이트
-  if ($("#recordCount")) $("#recordCount").textContent = `${taxHoldings.length}개 종목 (${taxAccounts.length}개 계좌)`;
-  if ($("#recordSummary")) $("#recordSummary").textContent = `₩${number(totalMarketVal, 0)}`;
+  // 우측 상단 사이드 요약 업데이트
+  if ($("#recordCount")) $("#recordCount").textContent = `${filteredHoldings.length}개 종목 (${filterBadgeName})`;
+  if ($("#recordSummary")) $("#recordSummary").textContent = `₩${number(filteredStats.market, 0)}`;
   const sideSummarySmall = document.querySelector(".record-side-summary small");
-  if (sideSummarySmall) sideSummarySmall.textContent = `절세계좌 평가 자산 합계 [${o}]`;
+  if (sideSummarySmall) sideSummarySmall.textContent = `선택된 절세계좌 자산 [${o}]`;
 
   // 스냅샷/추가 버튼 숨김/표시
   if ($("#snapshotButton")) $("#snapshotButton").style.display = "none";
@@ -4503,78 +4615,90 @@ function renderTaxAccountHoldings(owner = currentOwner) {
     return;
   }
 
-  // 보유종목 카드 리스트 생성 (보유종목명과 수량을 최우선 헤드라인으로 배치)
-  const holdingsHtml = taxHoldings.map((h) => {
-    const acct = taxAccountMap.get(h.account_id) || taxAccounts.find(a => a.name === h.account_name) || {};
-    const acctName = acct.name || h.account_name || '절세계좌';
-    const acctBroker = acct.broker || h.broker || '';
-    const acctType = (acct.account_type || '').toLowerCase();
-    const isDeductible = isAccountTaxDeductible(acct);
-
-    const qty = Number(h.quantity || 0);
-    const curPrice = Number(h.current_price || 0);
-    const avgPrice = Number(h.avg_price || 0);
-    const marketVal = Number(h.market_value_krw) || (qty * curPrice);
-    const costVal = Number(h.cost_value_krw) || (qty * avgPrice);
-    const profitVal = Number(h.profit_krw) || (marketVal - costVal);
-    const profitRate = costVal > 0 ? (profitVal / costVal) * 100 : (Number(h.profit_rate) || 0);
-
-    let typeBadge = '';
-    if (acctType === 'isa' || (acctName || '').toLowerCase().includes('isa')) {
-      typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;font-size:11px;font-weight:700;">🔄 ISA 비과세</span>`;
-    } else if (acctType === 'irp' || (acctName || '').toLowerCase().includes('irp')) {
-      typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(167,139,250,0.18)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#c4b5fd' : '#34d399'};font-size:11px;font-weight:700;">🛡️ IRP ${isDeductible ? '공제' : '비공제'}</span>`;
-    } else {
-      typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(56,189,248,0.15)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#38bdf8' : '#34d399'};font-size:11px;font-weight:700;">💎 연금저축 ${isDeductible ? '공제' : '비공제'}</span>`;
-    }
-
-    return `
-      <div class="tax-holding-item" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:10px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.08);margin-bottom:8px;gap:14px;">
-        <!-- 보유종목명과 수량 (최우선 표시) -->
-        <div style="flex:1.4;min-width:0;">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px;">
-            <strong style="font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-0.2px;">${html(h.name)}</strong>
-            <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:6px;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(99,102,241,0.25));border:1px solid rgba(167,139,250,0.5);color:#ddd6fe;font-size:14px;font-weight:800;letter-spacing:0.4px;">
-              ${number(qty, 0)}주
-            </span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#94a3b8;flex-wrap:wrap;">
-            <span style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-family:monospace;">${html(h.code || '')}</span>
-            <span>${html(h.sector || '기타')}</span>
-            <span style="color:#475569;">|</span>
-            <span style="color:#cbd5e1;font-weight:600;">${html(acctName)}</span>
-            <span style="color:#64748b;">(${html(acctBroker)})</span>
-            <span style="color:#94a3b8;">[${html(h.owner || acct.owner || '모두')}]</span>
-            ${typeBadge}
-          </div>
-        </div>
-
-        <!-- 단가 및 평가금액 / 손익 -->
-        <div style="text-align:right;min-width:145px;flex-shrink:0;">
-          <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:2px;">
-            ₩${number(marketVal, 0)}
-          </div>
-          <div style="font-size:11.5px;color:#94a3b8;margin-bottom:3px;">
-            현재 ₩${number(curPrice, 0)} <span style="font-size:10px;color:#64748b;">(매입 ₩${number(avgPrice, 0)})</span>
-          </div>
-          <div class="${signClass(profitVal)}" style="font-size:12px;font-weight:700;">
-            ${profitVal >= 0 ? '+' : ''}₩${number(profitVal, 0)} (${profitVal >= 0 ? '+' : ''}${number(profitRate, 2)}%)
-          </div>
-        </div>
+  // 좌측 종목 리스트 렌더링
+  let holdingsHtml = '';
+  if (!filteredHoldings.length) {
+    holdingsHtml = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:260px;color:#94a3b8;text-align:center;">
+        <span style="font-size:32px;margin-bottom:8px;">🔍</span>
+        <strong style="font-size:15px;color:#cbd5e1;margin-bottom:6px;">${filterTitle}에 등록된 보유종목이 없습니다.</strong>
+        <p style="font-size:12px;margin:0 0 12px;color:#64748b;">우측 카드에서 다른 절세계좌를 선택하시거나 전체보기를 눌러주세요.</p>
+        <button type="button" class="button secondary compact" style="cursor:pointer;" onclick="currentTaxAccountFilter='all';renderTaxAccountHoldings(currentOwner);">🌿 절세계좌 전체 보기</button>
       </div>
     `;
-  }).join('');
+  } else {
+    holdingsHtml = filteredHoldings.map((h) => {
+      const acct = h._matchedAccount || taxAccountMap.get(h.account_id) || {};
+      const acctName = acct.name || h.account_name || '절세계좌';
+      const acctBroker = acct.broker || h.broker || '';
+      const cat = h._taxCategory || getTaxCategory(acct);
+      const isDeductible = isAccountTaxDeductible(acct);
+
+      const qty = Number(h.quantity || 0);
+      const curPrice = Number(h.current_price || 0);
+      const avgPrice = Number(h.avg_price || 0);
+      const marketVal = Number(h.market_value_krw) || (qty * curPrice);
+      const costVal = Number(h.cost_value_krw) || (qty * avgPrice);
+      const profitVal = Number(h.profit_krw) || (marketVal - costVal);
+      const profitRate = costVal > 0 ? (profitVal / costVal) * 100 : (Number(h.profit_rate) || 0);
+
+      let typeBadge = '';
+      if (cat === 'isa') {
+        typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;font-size:11px;font-weight:700;">🔄 ISA 비과세</span>`;
+      } else if (cat === 'irp') {
+        typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(167,139,250,0.18)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#c4b5fd' : '#34d399'};font-size:11px;font-weight:700;">🛡️ IRP ${isDeductible ? '공제' : '비공제'}</span>`;
+      } else {
+        typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(56,189,248,0.15)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#38bdf8' : '#34d399'};font-size:11px;font-weight:700;">💎 연금저축 ${isDeductible ? '공제' : '비공제'}</span>`;
+      }
+
+      return `
+        <div class="tax-holding-item" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:10px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.08);margin-bottom:8px;gap:14px;">
+          <!-- 보유종목명과 수량 (최우선 표시) -->
+          <div style="flex:1.4;min-width:0;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px;">
+              <strong style="font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-0.2px;">${html(h.name)}</strong>
+              <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:6px;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(99,102,241,0.25));border:1px solid rgba(167,139,250,0.5);color:#ddd6fe;font-size:14px;font-weight:800;letter-spacing:0.4px;">
+                ${number(qty, 0)}주
+              </span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#94a3b8;flex-wrap:wrap;">
+              <span style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-family:monospace;">${html(h.code || '')}</span>
+              <span>${html(h.sector || '기타')}</span>
+              <span style="color:#475569;">|</span>
+              <span style="color:#cbd5e1;font-weight:600;">${html(acctName)}</span>
+              <span style="color:#64748b;">(${html(acctBroker)})</span>
+              <span style="color:#94a3b8;">[${html(h.owner || acct.owner || '모두')}]</span>
+              ${typeBadge}
+            </div>
+          </div>
+
+          <!-- 단가 및 평가금액 / 손익 -->
+          <div style="text-align:right;min-width:145px;flex-shrink:0;">
+            <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:2px;">
+              ₩${number(marketVal, 0)}
+            </div>
+            <div style="font-size:11.5px;color:#94a3b8;margin-bottom:3px;">
+              현재 ₩${number(curPrice, 0)} <span style="font-size:10px;color:#64748b;">(매입 ₩${number(avgPrice, 0)})</span>
+            </div>
+            <div class="${signClass(profitVal)}" style="font-size:12px;font-weight:700;">
+              ${profitVal >= 0 ? '+' : ''}₩${number(profitVal, 0)} (${profitVal >= 0 ? '+' : ''}${number(profitRate, 2)}%)
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
 
   chartWrap.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:12px;flex-wrap:wrap;gap:6px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">🌿 절세계좌 보유종목 (${taxHoldings.length}개 종목)</span>
-        <span style="font-size:11px;color:#94a3b8;">IRP · 연금저축 · 중개형 ISA</span>
+        <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">${filterTitle} (${filteredHoldings.length}개 종목)</span>
+        <span style="font-size:11px;color:#94a3b8;">${filterSubtitle}</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;font-size:12px;">
-        <span style="color:#94a3b8;">총 평가: <strong style="color:#f8fafc;font-size:13.5px;">₩${number(totalMarketVal, 0)}</strong></span>
-        <span class="${signClass(totalProfit)}" style="font-weight:700;">
-          ${totalProfit >= 0 ? '+' : ''}₩${number(totalProfit, 0)} (${totalProfit >= 0 ? '+' : ''}${number(totalProfitRate, 2)}%)
+        <span style="color:#94a3b8;">평가: <strong style="color:#f8fafc;font-size:13.5px;">₩${number(filteredStats.market, 0)}</strong></span>
+        <span class="${signClass(filteredStats.profit)}" style="font-weight:700;">
+          ${filteredStats.profit >= 0 ? '+' : ''}₩${number(filteredStats.profit, 0)} (${filteredStats.profit >= 0 ? '+' : ''}${number(filteredStats.profitRate, 2)}%)
         </span>
       </div>
     </div>
@@ -4583,48 +4707,200 @@ function renderTaxAccountHoldings(owner = currentOwner) {
     </div>
   `;
 
-  // 3. 우측 사이드 패널: 절세계좌별 요약 카드 목록
+  // 3. 우측 사이드 패널: 절세계좌 카드 목록 렌더링
   const recordListEl = $("#assetRecordList");
-  if (recordListEl) {
-    if (!taxAccounts.length) {
-      recordListEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px;">등록된 절세계좌가 없습니다.</div>';
-    } else {
-      recordListEl.innerHTML = taxAccounts.map(acct => {
-        const acctHoldings = taxHoldings.filter(h => h.account_id === acct.id || (h.account_name === acct.name && (h.owner || '모두') === (acct.owner || '모두')));
-        const acctMarketVal = acctHoldings.reduce((sum, h) => sum + (Number(h.market_value_krw) || ((Number(h.quantity) || 0) * (Number(h.current_price) || 0))), 0);
-        const acctCostVal = acctHoldings.reduce((sum, h) => sum + (Number(h.cost_value_krw) || ((Number(h.quantity) || 0) * (Number(h.avg_price) || 0))), 0);
-        const acctProfit = acctMarketVal - acctCostVal;
-        const acctType = (acct.account_type || '').toLowerCase();
-        const isDed = isAccountTaxDeductible(acct);
+  if (!recordListEl) return;
 
-        let typeBadge = '';
-        if (acctType === 'isa' || (acct.name || '').toLowerCase().includes('isa')) {
-          typeBadge = '<span style="color:#38bdf8;background:rgba(56,189,248,0.12);padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">ISA 비과세</span>';
-        } else if (acctType === 'irp' || (acct.name || '').toLowerCase().includes('irp')) {
-          typeBadge = `<span style="color:${isDed ? '#c4b5fd' : '#34d399'};background:${isDed ? 'rgba(167,139,250,0.15)' : 'rgba(16,185,129,0.15)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">IRP ${isDed ? '공제' : '비공제'}</span>`;
-        } else {
-          typeBadge = `<span style="color:${isDed ? '#38bdf8' : '#34d399'};background:${isDed ? 'rgba(56,189,248,0.12)' : 'rgba(16,185,129,0.12)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">연금저축 ${isDed ? '공제' : '비공제'}</span>`;
-        }
-
-        return `
-          <div class="record-row" style="display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:10px 12px;background:#0c1429;border:1px solid #22304f;border-radius:10px;margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <strong style="color:#f8fafc;font-size:12.5px;">${html(acct.name)}</strong>
-              ${typeBadge}
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;">
-              <span>${html(acct.broker)} [${html(acct.owner || '모두')}]</span>
-              <strong style="color:#f1f5f9;font-size:13px;">₩${number(acctMarketVal, 0)}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;border-top:1px dashed rgba(255,255,255,0.06);padding-top:4px;margin-top:2px;">
-              <span>보유 ${acctHoldings.length}개 종목</span>
-              <span class="${signClass(acctProfit)}" style="font-weight:700;">${acctProfit >= 0 ? '+' : ''}₩${number(acctProfit, 0)}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
+  if (!taxAccounts.length) {
+    recordListEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px;">등록된 절세계좌가 없습니다.</div>';
+    return;
   }
+
+  // 3-1. 상단 [전체] 카드 (절세계좌 총액, 수익금액/수익률, 누적 절세액)
+  const isAllActive = currentTaxAccountFilter === 'all';
+  const allCardHtml = `
+    <div class="tax-card record-row ${isAllActive ? 'active-tax-card' : ''}" data-tax-filter="all">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-size:16px;">🌿</span>
+          <strong style="color:#f8fafc;font-size:13.5px;font-weight:700;">절세계좌 전체</strong>
+          ${isAllActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#8b5cf6;color:#fff;font-weight:800;">선택됨</span>' : ''}
+        </div>
+        <span style="font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.06);padding:2px 7px;border-radius:4px;">
+          ${taxHoldings.length}개 종목 · ${taxAccounts.length}개 계좌
+        </span>
+      </div>
+
+      <!-- 절세계좌 총액 -->
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+        <span style="font-size:11.5px;color:#94a3b8;">절세계좌 총액</span>
+        <strong style="font-size:16px;color:#f8fafc;font-weight:800;letter-spacing:-0.3px;">
+          ₩${number(allStats.market, 0)}
+        </strong>
+      </div>
+
+      <!-- 수익금액 및 수익률 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:11.5px;color:#94a3b8;">수익금액 / 수익률</span>
+        <strong class="${signClass(allStats.profit)}" style="font-size:12.5px;font-weight:700;">
+          ${allStats.profit >= 0 ? '+' : ''}₩${number(allStats.profit, 0)} (${allStats.profit >= 0 ? '+' : ''}${number(allStats.profitRate, 2)}%)
+        </strong>
+      </div>
+
+      <!-- 절세금액 누적 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 9px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.25);border-radius:6px;font-size:11.5px;">
+        <span style="color:#c4b5fd;font-weight:600;">💎 절세금액 누적</span>
+        <strong style="color:#a78bfa;font-weight:800;font-size:13px;">
+          ₩${number(allCumulativeTaxSaved, 0)}
+        </strong>
+      </div>
+    </div>
+  `;
+
+  // 3-2. 카테고리 카드: ISA, IRP, 연금저축
+  const isIsaActive = currentTaxAccountFilter === 'isa';
+  const isaCardHtml = `
+    <div class="tax-card record-row ${isIsaActive ? 'active-tax-card' : ''}" data-tax-filter="isa">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:15px;">🔄</span>
+          <strong style="color:#f8fafc;font-size:13px;font-weight:700;">중개형 ISA</strong>
+          ${isIsaActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#38bdf8;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
+        </div>
+        <span style="font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.12);padding:2px 6px;border-radius:4px;font-weight:600;">
+          ${isaHoldings.length}개 종목 (${isaAccounts.length}개 계좌)
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11.5px;color:#94a3b8;">평가금액</span>
+        <strong style="font-size:14.5px;color:#f8fafc;font-weight:700;">₩${number(isaStats.market, 0)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:11.5px;color:#94a3b8;">수익 / 수익률</span>
+        <span class="${signClass(isaStats.profit)}" style="font-size:12px;font-weight:700;">
+          ${isaStats.profit >= 0 ? '+' : ''}₩${number(isaStats.profit, 0)} (${isaStats.profit >= 0 ? '+' : ''}${number(isaStats.profitRate, 2)}%)
+        </span>
+      </div>
+      <div style="font-size:11px;color:#7dd3fc;background:rgba(56,189,248,0.08);padding:4px 8px;border-radius:5px;display:flex;justify-content:space-between;">
+        <span>절세 혜택</span>
+        <span>비과세 200~400만 + 9.9% 분리과세</span>
+      </div>
+    </div>
+  `;
+
+  const isIrpActive = currentTaxAccountFilter === 'irp';
+  const irpCardHtml = `
+    <div class="tax-card record-row ${isIrpActive ? 'active-tax-card' : ''}" data-tax-filter="irp">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:15px;">🛡️</span>
+          <strong style="color:#f8fafc;font-size:13px;font-weight:700;">개인형 IRP</strong>
+          ${isIrpActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#a78bfa;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
+        </div>
+        <span style="font-size:11px;color:#c4b5fd;background:rgba(167,139,250,0.15);padding:2px 6px;border-radius:4px;font-weight:600;">
+          ${irpHoldings.length}개 종목 (${irpAccounts.length}개 계좌)
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11.5px;color:#94a3b8;">평가금액</span>
+        <strong style="font-size:14.5px;color:#f8fafc;font-weight:700;">₩${number(irpStats.market, 0)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:11.5px;color:#94a3b8;">수익 / 수익률</span>
+        <span class="${signClass(irpStats.profit)}" style="font-size:12px;font-weight:700;">
+          ${irpStats.profit >= 0 ? '+' : ''}₩${number(irpStats.profit, 0)} (${irpStats.profit >= 0 ? '+' : ''}${number(irpStats.profitRate, 2)}%)
+        </span>
+      </div>
+      <div style="font-size:11px;color:#ddd6fe;background:rgba(167,139,250,0.08);padding:4px 8px;border-radius:5px;display:flex;justify-content:space-between;">
+        <span>누적 절세액</span>
+        <strong style="color:#c4b5fd;">₩${number(irpCumulativeTaxSaved, 0)}</strong>
+      </div>
+    </div>
+  `;
+
+  const isPensionActive = currentTaxAccountFilter === 'pension_savings';
+  const pensionCardHtml = `
+    <div class="tax-card record-row ${isPensionActive ? 'active-tax-card' : ''}" data-tax-filter="pension_savings">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:15px;">💎</span>
+          <strong style="color:#f8fafc;font-size:13px;font-weight:700;">연금저축</strong>
+          ${isPensionActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#34d399;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
+        </div>
+        <span style="font-size:11px;color:#34d399;background:rgba(52,211,153,0.15);padding:2px 6px;border-radius:4px;font-weight:600;">
+          ${pensionHoldings.length}개 종목 (${pensionAccounts.length}개 계좌)
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11.5px;color:#94a3b8;">평가금액</span>
+        <strong style="font-size:14.5px;color:#f8fafc;font-weight:700;">₩${number(pensionStats.market, 0)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:11.5px;color:#94a3b8;">수익 / 수익률</span>
+        <span class="${signClass(pensionStats.profit)}" style="font-size:12px;font-weight:700;">
+          ${pensionStats.profit >= 0 ? '+' : ''}₩${number(pensionStats.profit, 0)} (${pensionStats.profit >= 0 ? '+' : ''}${number(pensionStats.profitRate, 2)}%)
+        </span>
+      </div>
+      <div style="font-size:11px;color:#a7f3d0;background:rgba(16,185,129,0.08);padding:4px 8px;border-radius:5px;display:flex;justify-content:space-between;">
+        <span>누적 절세액</span>
+        <strong style="color:#34d399;">₩${number(pensionCumulativeTaxSaved, 0)}</strong>
+      </div>
+    </div>
+  `;
+
+  // 3-3. 개별 계좌 상세 카드 목록
+  const accountCardsHtml = taxAccounts.map(acct => {
+    const acctHoldings = taxHoldings.filter(h => h._matchedAccountId === acct.id);
+    const acctStats = calcHoldingStats(acctHoldings);
+    const cat = getTaxCategory(acct);
+    const isDed = isAccountTaxDeductible(acct);
+    const isAcctActive = currentTaxAccountFilter === `acc_${acct.id}`;
+
+    let typeBadge = '';
+    if (cat === 'isa') {
+      typeBadge = '<span style="color:#38bdf8;background:rgba(56,189,248,0.12);padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">ISA 비과세</span>';
+    } else if (cat === 'irp') {
+      typeBadge = `<span style="color:${isDed ? '#c4b5fd' : '#34d399'};background:${isDed ? 'rgba(167,139,250,0.15)' : 'rgba(16,185,129,0.15)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">IRP ${isDed ? '공제' : '비공제'}</span>`;
+    } else {
+      typeBadge = `<span style="color:${isDed ? '#38bdf8' : '#34d399'};background:${isDed ? 'rgba(56,189,248,0.12)' : 'rgba(16,185,129,0.12)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">연금저축 ${isDed ? '공제' : '비공제'}</span>`;
+    }
+
+    return `
+      <div class="tax-card record-row ${isAcctActive ? 'active-tax-card' : ''}" data-tax-filter="acc_${acct.id}" style="padding:9px 12px !important;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <strong style="color:#f8fafc;font-size:12.5px;">${html(acct.name)}</strong>
+            ${isAcctActive ? '<span style="font-size:9.5px;padding:1px 5px;border-radius:3px;background:#a78bfa;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
+          </div>
+          ${typeBadge}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:2px;">
+          <span>${html(acct.broker)} [${html(acct.owner || '모두')}]</span>
+          <strong style="color:#f1f5f9;font-size:13px;">₩${number(acctStats.market, 0)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;border-top:1px dashed rgba(255,255,255,0.06);padding-top:4px;margin-top:2px;">
+          <span>보유 ${acctHoldings.length}개 종목</span>
+          <span class="${signClass(acctStats.profit)}" style="font-weight:700;">${acctStats.profit >= 0 ? '+' : ''}₩${number(acctStats.profit, 0)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  recordListEl.innerHTML = `
+    ${allCardHtml}
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${isaCardHtml}
+      ${irpCardHtml}
+      ${pensionCardHtml}
+    </div>
+    <div style="font-size:11px;color:#94a3b8;font-weight:700;margin:12px 0 6px 2px;letter-spacing:0.3px;display:flex;justify-content:space-between;align-items:center;">
+      <span>계좌별 상세 (${taxAccounts.length}개)</span>
+      <span style="font-size:10px;color:#64748b;">클릭하여 단일 계좌 조회</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      ${accountCardsHtml}
+    </div>
+  `;
 }
 
 // ── 9. 대시보드 렌더링 총괄 ──────────────────────────────────────────────────
@@ -5840,8 +6116,19 @@ $("#accountList")?.addEventListener("click", async (e) => {
   }
 });
 
-// 10. 자산기록 리스트 수정/삭제
+// 10. 자산기록 리스트 수정/삭제 및 절세계좌 필터 클릭
 $("#assetRecordList")?.addEventListener("click", async (e) => {
+  if (currentRecordView === 'tax_accounts') {
+    const taxCard = e.target.closest("[data-tax-filter]");
+    if (taxCard) {
+      const filter = taxCard.dataset.taxFilter;
+      if (filter) {
+        currentTaxAccountFilter = filter;
+        renderTaxAccountHoldings(currentOwner);
+      }
+      return;
+    }
+  }
   const editButton = e.target.closest("[data-record-edit]");
   const deleteButton = e.target.closest("[data-record-delete]");
   if (editButton) {
