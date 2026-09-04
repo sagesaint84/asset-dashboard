@@ -5140,10 +5140,13 @@ function updateAccountTaxBenefitFields(form) {
   }
 }
 
+let currentEditingAccountId = null;
+
 function openAccountEditDialog(account) {
   const form = $("#accountEditForm");
   if (!form || !account) return;
   form.reset();
+  currentEditingAccountId = account.id;
   form.dataset.accountId = account.id;
   form.broker.value = account.broker || "";
   form.name.value = account.name || "";
@@ -5178,9 +5181,16 @@ function openAccountEditDialog(account) {
   const yrInput = form.querySelector(".pension-entry-year");
   if (yrInput) {
     if (accountCurrentYearlyList.length > 0) {
-      yrInput.value = accountCurrentYearlyList[0].year || "2026";
-      if (annualDep && (!annualDep.value || annualDep.value === "0")) {
-        annualDep.value = accountCurrentYearlyList[0].deposit || "";
+      const topItem = accountCurrentYearlyList[0];
+      yrInput.value = topItem.year || "2026";
+      if (annualDep) {
+        annualDep.value = (topItem.deposit !== undefined && topItem.deposit !== null) ? topItem.deposit : (account.annual_deposit || "");
+      }
+      if (dedSel && topItem.is_deductible !== undefined) {
+        dedSel.value = (topItem.is_deductible !== false && String(topItem.is_deductible) !== "false") ? "true" : "false";
+      }
+      if (incomeLvl && topItem.income_level) {
+        incomeLvl.value = topItem.income_level;
       }
     } else {
       yrInput.value = "2026";
@@ -5548,6 +5558,15 @@ document.addEventListener('click', async (e) => {
     e.preventDefault();
     if (typeof saveNewAccount === 'function') {
       saveNewAccount();
+    }
+    return;
+  }
+
+  // 💾 계좌 수정 저장 버튼
+  if (e.target.closest('#accountEditSaveBtn')) {
+    e.preventDefault();
+    if (typeof saveEditAccount === 'function') {
+      saveEditAccount();
     }
     return;
   }
@@ -6331,71 +6350,75 @@ $("#accountCashForm")?.addEventListener("submit", async (e) => {
 async function saveEditAccount() {
   const form = document.getElementById("accountEditForm");
   if (!form) return;
-  const accountId = form.dataset.accountId;
-  if (!accountId) {
-    alert("계좌 식별자(ID)를 찾을 수 없습니다. 다시 시도해 주세요.");
-    return;
-  }
-  const broker = (form.querySelector("[name='broker']")?.value || "").trim();
-  const name = (form.querySelector("[name='name']")?.value || "").trim();
-  const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
-
-  const account_type = form.querySelector(".account-type-select")?.value || "general";
-  const isDeductible = form.querySelector(".pension-tax-deductible")?.value === "true";
-  const income_level = form.querySelector(".pension-income-level")?.value || "low";
-  const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
-  const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
-  const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
-
-  const yearly_contributions = [];
-  accountCurrentYearlyList.forEach(item => {
-    if (item && item.year) {
-      yearly_contributions.push({
-        year: String(item.year).trim(),
-        deposit: Number(item.deposit || 0),
-        is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
-        income_level: item.income_level || income_level
-      });
-    }
-  });
-
-  // 상단 입력창에 입력된 연도/금액이 이력에 없으면 자동 포함
-  const topYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
-  if (topYr && (account_type === "pension_savings" || account_type === "irp")) {
-    const existing = yearly_contributions.find(y => y.year === topYr);
-    if (!existing && annual_deposit > 0) {
-      yearly_contributions.push({
-        year: topYr,
-        deposit: annual_deposit,
-        is_deductible: isDeductible,
-        income_level: income_level
-      });
-    }
-  }
-
-  // 연도 내림차순 정렬
-  yearly_contributions.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
-
-  // 최신 연도 입금액을 annual_deposit에 동기화
-  if (yearly_contributions.length > 0) {
-    const curYearStr = String(new Date().getFullYear());
-    const matchedCur = yearly_contributions.find(y => y.year === curYearStr);
-    if (matchedCur) {
-      annual_deposit = matchedCur.deposit;
-    } else {
-      annual_deposit = yearly_contributions[0].deposit;
-    }
-  }
-
-  if (!broker || !name) {
-    alert("증권사와 계좌 이름을 모두 입력해 주세요.");
-    return;
-  }
-
   const saveBtn = document.getElementById("accountEditSaveBtn");
   if (saveBtn) busy(saveBtn, true);
 
   try {
+    const accountId = form.dataset.accountId || form.getAttribute("data-account-id") || currentEditingAccountId;
+    if (!accountId) {
+      alert("계좌 식별자(ID)를 찾을 수 없습니다. 다시 시도해 주세요.");
+      return;
+    }
+    const broker = (form.querySelector("[name='broker']")?.value || "").trim();
+    const name = (form.querySelector("[name='name']")?.value || "").trim();
+    const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
+
+    if (!broker || !name) {
+      alert("증권사와 계좌 이름을 모두 입력해 주세요.");
+      return;
+    }
+
+    const account_type = form.querySelector(".account-type-select")?.value || "general";
+    let isDeductible = form.querySelector(".pension-tax-deductible")?.value === "true";
+    let income_level = form.querySelector(".pension-income-level")?.value || "low";
+    let annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
+    const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
+    const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
+
+    const yearly_contributions = [];
+    accountCurrentYearlyList.forEach(item => {
+      if (item && item.year) {
+        yearly_contributions.push({
+          year: String(item.year).trim(),
+          deposit: Number(item.deposit || 0),
+          is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
+          income_level: item.income_level || income_level
+        });
+      }
+    });
+
+    // 상단 입력창에 입력된 연도/금액이 이력에 있으면 갱신, 없으면 추가
+    const topYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
+    if (topYr && (account_type === "pension_savings" || account_type === "irp")) {
+      const existing = yearly_contributions.find(y => y.year === topYr);
+      if (existing) {
+        existing.deposit = annual_deposit;
+        existing.is_deductible = isDeductible;
+        existing.income_level = income_level;
+      } else if (annual_deposit > 0) {
+        yearly_contributions.push({
+          year: topYr,
+          deposit: annual_deposit,
+          is_deductible: isDeductible,
+          income_level: income_level
+        });
+      }
+    }
+
+    // 연도 내림차순 정렬
+    yearly_contributions.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+
+    // 최신 연도 입금액을 annual_deposit에 동기화
+    if (yearly_contributions.length > 0) {
+      const curYearStr = String(new Date().getFullYear());
+      const matchedCur = yearly_contributions.find(y => y.year === curYearStr);
+      if (matchedCur) {
+        annual_deposit = matchedCur.deposit;
+      } else {
+        annual_deposit = yearly_contributions[0].deposit;
+      }
+    }
+
     // 1. 메모리 데이터 즉시 갱신 (Optimistic Update)
     if (rawDashboard && Array.isArray(rawDashboard.accounts)) {
       const localAcct = rawDashboard.accounts.find(a => a.id === accountId);
@@ -6440,8 +6463,8 @@ async function saveEditAccount() {
     await loadDashboard();
   } catch (err) {
     console.error("계좌 수정 오류:", err);
-    alert(`계좌 정보 저장 중 오류가 발생했습니다: ${err.message}`);
-    toast(err.message, true);
+    alert(`계좌 정보 저장 중 오류가 발생했습니다: ${err.message || err}`);
+    toast(err.message || String(err), true);
     await loadDashboard();
   } finally {
     if (saveBtn) busy(saveBtn, false);
@@ -6502,6 +6525,15 @@ async function saveNewAccount() {
 window.saveEditAccount = saveEditAccount;
 window.saveNewAccount = saveNewAccount;
 window.openAccountEditDialog = openAccountEditDialog;
+
+document.getElementById("accountEditSaveBtn")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  saveEditAccount();
+});
+document.getElementById("accountAddSaveBtn")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  saveNewAccount();
+});
 
 $("#accountEditForm")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.target.closest("textarea")) {
