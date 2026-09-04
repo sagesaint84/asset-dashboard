@@ -156,7 +156,7 @@ function computeFilteredClassifications(holdings, accounts, fxRates, owner = '�
   const filterByOwner = (arr) => owner === '모두' ? (arr || []) : (arr || []).filter(x => (x.owner || '모두') === owner);
 
   // 1. 부동산 순에퀴티 (자가 & 임대 투자자산) 및 임차보증금 (안전자산)
-  const allREs = filterByOwner(src.real_estates || rawRealEstates || []);
+  const allREs = src.real_estates || rawRealEstates || [];
   let totalREInvestEquity = 0;
   let totalTenantDepositVal = 0;
   let reInvestCount = 0;
@@ -169,9 +169,19 @@ function computeFilteredClassifications(holdings, accounts, fxRates, owner = '�
 
     let share = 1.0;
     if (owner !== '모두') {
-      const matched = ownerships.find(x => x.owner === owner);
-      if (!matched || matched.ratio <= 0) return;
-      share = (matched.ratio || 100) / 100;
+      let matched = ownerships.find(x => x.owner === owner);
+      if (!matched && r.owner && r.owner.includes(owner)) {
+        const m = r.owner.match(new RegExp(`${owner}\\s*([0-9.]+)%`));
+        if (m) {
+          share = parseFloat(m[1]) / 100;
+        } else {
+          share = 0.5;
+        }
+      } else if (matched && matched.ratio > 0) {
+        share = (matched.ratio || 100) / 100;
+      } else {
+        return;
+      }
     }
 
     const pType = r.property_type || 'own';
@@ -910,7 +920,7 @@ function renderSummary(data) {
   const curBanks = filterByOwner(data.bank_accounts || rawBankAccounts || []);
   const curSavings = filterByOwner(data.savings_accounts || rawSavingsAccounts || []);
   const curInsurances = filterByOwner(data.insurance_accounts || rawInsuranceAccounts || []);
-  const allREs = filterByOwner(data.real_estates || rawRealEstates || []);
+  const allREs = data.real_estates || rawRealEstates || [];
 
   const posBanks = curBanks.filter(b => (Number(b.balance) || 0) >= 0);
   const negBanks = curBanks.filter(b => (Number(b.balance) || 0) < 0);
@@ -940,9 +950,19 @@ function renderSummary(data) {
 
     let share = 1.0;
     if (o !== '모두') {
-      const matched = ownerships.find(x => x.owner === o);
-      if (!matched || matched.ratio <= 0) return;
-      share = (matched.ratio || 100) / 100;
+      let matched = ownerships.find(x => x.owner === o);
+      if (!matched && r.owner && r.owner.includes(o)) {
+        const m = r.owner.match(new RegExp(`${o}\\s*([0-9.]+)%`));
+        if (m) {
+          share = parseFloat(m[1]) / 100;
+        } else {
+          share = 0.5;
+        }
+      } else if (matched && matched.ratio > 0) {
+        share = (matched.ratio || 100) / 100;
+      } else {
+        return;
+      }
     }
 
     const pType = r.property_type || 'own';
@@ -1022,6 +1042,45 @@ function renderSummary(data) {
   const combinedYearRealizedKrw = yearRealizedKrw + yearActualDivKrw;
   const combinedMonthRealizedKrw = monthRealizedKrw + monthActualDivKrw;
 
+  // 원화 및 달러 주식 세부 계산 (소유자별 보유종목 직접 정밀 집계)
+  const allHoldings = data.holdings || rawDashboard?.holdings || [];
+  const ownedAcctIds = new Set((data.accounts || []).map(a => a.id));
+  const curHoldings = o === '모두' 
+    ? allHoldings 
+    : allHoldings.filter(h => (h.owner && h.owner === o) || ownedAcctIds.has(h.account_id) || (h.owner || '모두') === o);
+
+  const usdKrwRate = (data.fx_rates || rawDashboard?.fx_rates || {})['USD'] || 1385;
+  let krwStockVal = 0, krwStockCost = 0;
+  let usdStockValUsd = 0, usdStockValKrw = 0, usdStockCostUsd = 0, usdStockCostKrw = 0;
+  let krwHoldingCount = 0, usdHoldingCount = 0;
+
+  curHoldings.forEach(h => {
+    const curr = (h.currency || 'KRW').toUpperCase();
+    const mValKrw = Number(h.market_value_krw || 0);
+    const cValKrw = Number(h.cost_value_krw || 0);
+    const mValNative = Number(h.market_value != null ? h.market_value : (mValKrw / usdKrwRate));
+    const cValNative = Number(h.cost_value != null ? h.cost_value : (cValKrw / usdKrwRate));
+
+    if (curr === 'KRW') {
+      krwStockVal += mValKrw;
+      krwStockCost += cValKrw;
+      krwHoldingCount += 1;
+    } else {
+      usdStockValUsd += mValNative;
+      usdStockValKrw += mValKrw || (mValNative * usdKrwRate);
+      usdStockCostUsd += cValNative;
+      usdStockCostKrw += cValKrw || (cValNative * usdKrwRate);
+      usdHoldingCount += 1;
+    }
+  });
+
+  const krwStockProfit = krwStockVal - krwStockCost;
+  const krwStockReturnRate = krwStockCost > 0 ? (krwStockProfit / krwStockCost) * 100 : 0;
+
+  const usdStockProfitUsd = usdStockValUsd - usdStockCostUsd;
+  const usdStockProfitKrw = usdStockValKrw - usdStockCostKrw;
+  const usdStockReturnRate = usdStockCostUsd > 0 ? (usdStockProfitUsd / usdStockCostUsd) * 100 : 0;
+
   const isStockTab = (currentAllocTab === 'sector');
 
   // =========================================================================
@@ -1040,9 +1099,35 @@ function renderSummary(data) {
     if ($("#totalValue")) $("#totalValue").textContent = money(totalStockVal);
     if ($("#subAssetBreakdown")) $("#subAssetBreakdown").style.display = "none";
 
-    // 3. 총 수익 (주식 평가손익) & 일간 수익
+    // 2-1. 원화 주식 카드 표시
+    if ($("#krwStockRow")) $("#krwStockRow").style.display = "flex";
+    if ($("#summaryKrwStockVal")) $("#summaryKrwStockVal").textContent = money(krwStockVal);
+    if ($("#summaryKrwStockProfit")) {
+      const kSign = krwStockProfit >= 0 ? "+" : "";
+      const krSign = krwStockReturnRate >= 0 ? "+" : "";
+      $("#summaryKrwStockProfit").textContent = `${kSign}${money(krwStockProfit)} (${krSign}${number(krwStockReturnRate, 2)}%)`;
+      $("#summaryKrwStockProfit").style.color = krwStockProfit >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    if ($("#summaryKrwStockCount")) {
+      $("#summaryKrwStockCount").textContent = `${krwHoldingCount}개 종목`;
+    }
+
+    // 2-2. 달러 주식 카드 표시
+    if ($("#usdStockRow")) $("#usdStockRow").style.display = "flex";
+    if ($("#summaryUsdStockValKrw")) $("#summaryUsdStockValKrw").textContent = money(usdStockValKrw);
+    if ($("#summaryUsdStockValUsd")) {
+      $("#summaryUsdStockValUsd").textContent = `$${number(usdStockValUsd, 2)} (${usdHoldingCount}개 종목)`;
+    }
+    if ($("#summaryUsdStockProfit")) {
+      const uSign = usdStockProfitKrw >= 0 ? "+" : "";
+      const urSign = usdStockReturnRate >= 0 ? "+" : "";
+      $("#summaryUsdStockProfit").textContent = `${uSign}${money(usdStockProfitKrw)} (${urSign}${number(usdStockReturnRate, 2)}%)`;
+      $("#summaryUsdStockProfit").style.color = usdStockProfitKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+
+    // 3. 주식 기대수익 (주식 평가손익) & 일간 수익
     if ($("#expectedProfitRow")) $("#expectedProfitRow").style.display = "flex";
-    if ($("#profitLabelText")) $("#profitLabelText").textContent = "총 수익";
+    if ($("#profitLabelText")) $("#profitLabelText").textContent = "주식 기대수익";
     if ($("#totalProfit")) {
       $("#totalProfit").textContent = money(s.profit_krw);
       $("#totalProfit").style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
@@ -1102,6 +1187,10 @@ function renderSummary(data) {
         ? `총부채 ₩${number(totalAllDebt, 0)}` 
         : `부채 ₩0`;
     }
+
+    // 원화/달러 주식 행 숨김 (자산 탭 전용 뷰에서는 투자자산 카드 내 주식으로 통합 표시)
+    if ($("#krwStockRow")) $("#krwStockRow").style.display = "none";
+    if ($("#usdStockRow")) $("#usdStockRow").style.display = "none";
 
     // 2. 투자자산 (부동산 + 주식)
     if ($("#totalInvestRow")) $("#totalInvestRow").style.display = "flex";
@@ -2655,9 +2744,19 @@ function renderRealEstateWithOwner(owner = '모두') {
 
     let share = 1.0;
     if (o !== '모두') {
-      const matched = ownerships.find(x => x.owner === o);
-      if (!matched || matched.ratio <= 0) return;
-      share = (matched.ratio || 100) / 100;
+      let matched = ownerships.find(x => x.owner === o);
+      if (!matched && r.owner && r.owner.includes(o)) {
+        const m = r.owner.match(new RegExp(`${o}\\s*([0-9.]+)%`));
+        if (m) {
+          share = parseFloat(m[1]) / 100;
+        } else {
+          share = 0.5;
+        }
+      } else if (matched && matched.ratio > 0) {
+        share = (matched.ratio || 100) / 100;
+      } else {
+        return;
+      }
     }
     const clone = Object.assign({}, r, { _shareRatio: share });
     filtered.push(clone);
