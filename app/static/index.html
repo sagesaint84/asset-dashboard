@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260904-v5510" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260904-v5511" />
   </head>
   <body>
     <main class="shell">
@@ -166,10 +166,10 @@
               <button type="button" class="family-tab active" data-owner="모두">모두</button>
             </div>
           </div>
-          <!-- 투자자산 분류 탭 (자산별 / 섹터별) -->
+          <!-- 투자자산 분류 탭 (자산 / 주식) -->
           <div class="heatmap-period-tabs" id="allocTabs" style="margin-left:auto;">
-            <button type="button" class="heatmap-tab active" data-tab="asset_class">자산별</button>
-            <button type="button" class="heatmap-tab" data-tab="sector">섹터별</button>
+            <button type="button" class="heatmap-tab active" data-tab="asset_class">자산</button>
+            <button type="button" class="heatmap-tab" data-tab="sector">주식</button>
           </div>
           <span id="accountCaption" class="muted" style="font-size:11px;margin-left:6px;"></span>
         </div>
@@ -178,7 +178,7 @@
           <!-- 좌측 열: 핵심 요약 지표 리스트 -->
           <div class="overview-summary-col">
             <div class="summary-item-list">
-              <!-- 1. 순자산 -->
+              <!-- 1. 순자산 (자산 탭 전용) -->
               <div class="summary-row featured" id="netWorthRow" style="background:rgba(56,189,248,0.06);border-left:3px solid #38bdf8;">
                 <div class="summary-row-label">
                   <span class="card-icon mini" style="background:rgba(56,189,248,0.2);color:#38bdf8;">💎</span>
@@ -190,11 +190,11 @@
                 </div>
               </div>
 
-              <!-- 2. 총 투자자산 (부동산 자가/임대 100% + 주식) -->
-              <div class="summary-row featured">
+              <!-- 2. 총 투자자산 / 총 주식자산 -->
+              <div class="summary-row featured" id="totalInvestRow">
                 <div class="summary-row-label">
                   <span class="card-icon mini">◈</span>
-                  <strong style="color:#ffffff;font-size:14.5px;">총 투자자산</strong>
+                  <strong id="totalInvestLabelText" style="color:#ffffff;font-size:14.5px;">총 투자자산</strong>
                 </div>
                 <div class="summary-row-val">
                   <strong id="totalValue" class="value-highlight" style="color:#ffffff;font-size:19px;font-weight:800;">₩0</strong>
@@ -205,11 +205,11 @@
                 </div>
               </div>
 
-              <!-- 3. 총 수익 & 일간 수익 -->
-              <div class="summary-row">
+              <!-- 3. 기대수익 / 총 수익 & 일간 수익 -->
+              <div class="summary-row" id="expectedProfitRow">
                 <div class="summary-row-label">
                   <span class="card-icon mini">↗</span>
-                  <strong style="color:#e2e8f0;">총 수익</strong>
+                  <strong id="profitLabelText" style="color:#e2e8f0;">기대수익</strong>
                 </div>
                 <div class="summary-row-val">
                   <div class="val-line" style="display:flex;align-items:baseline;justify-content:flex-end;gap:6px;">
@@ -223,16 +223,17 @@
                 </div>
               </div>
 
-              <!-- 4. 총 실현손익 -->
-              <div class="summary-row">
+              <!-- 4. 실현손익 (자산: 통합 실현손익 / 주식: 주식 실현손익) -->
+              <div class="summary-row" id="realizedPnlRow">
                 <div class="summary-row-label">
                   <span class="card-icon mini">📈</span>
-                  <strong style="color:#e2e8f0;">총 실현손익</strong>
+                  <strong id="pnlLabelText" style="color:#e2e8f0;">실현손익</strong>
                 </div>
                 <div class="summary-row-val">
                   <div class="val-line">
                     <strong id="summaryRealizedPnl" class="gain up" style="color:#f43f5e;font-weight:700;font-size:16px;">+₩0</strong>
                   </div>
+                  <div id="pnlSubBreakdown" style="font-size:11px;color:#94a3b8;margin-top:2px;display:none;text-align:right;"></div>
                   <div style="margin-top:5px;font-size:12px;line-height:1.6;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
                     <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;">
                       <span id="pnlYearLabel" style="color:#94a3b8;font-size:11.5px;min-width:30px;text-align:right;">26년</span>
@@ -246,11 +247,11 @@
                 </div>
               </div>
 
-              <!-- 5. 총 배당금 및 이자 -->
-              <div class="summary-row">
+              <!-- 5. 총 배당금 및 이자 (주식 탭 전용 행) -->
+              <div class="summary-row" id="dividendRow" style="display:none;">
                 <div class="summary-row-label">
                   <span class="card-icon mini">💰</span>
-                  <strong style="color:#e2e8f0;">총 배당금 및 이자</strong>
+                  <strong id="divLabelText" style="color:#e2e8f0;">배당금</strong>
                 </div>
                 <div class="summary-row-val">
                   <div class="val-line">
@@ -269,7 +270,7 @@
                 </div>
               </div>
 
-              <!-- 6. 안전자산 (예수금·예금, 임차보증금, 보험) -->
+              <!-- 6. 안전자산 (자산 탭 전용) -->
               <div class="summary-row featured" id="safeAssetRow" style="background:rgba(52,211,153,0.06);border-left:3px solid #34d399;">
                 <div class="summary-row-label">
                   <span class="card-icon mini" style="background:rgba(52,211,153,0.2);color:#34d399;">🛡️</span>
@@ -1714,6 +1715,62 @@
       </form>
     </dialog>
 
+    <!-- 부동산 매각 및 실현손익 기록 다이얼로그 -->
+    <dialog id="realEstateSellDialog" class="dialog" style="max-width:540px;width:95vw;">
+      <div class="dialog-head">
+        <h2>🏢 부동산 매각 및 실현손익 기록</h2>
+        <button value="cancel" class="close" aria-label="닫기">×</button>
+      </div>
+      <form id="realEstateSellForm" onsubmit="return false;">
+        <input type="hidden" id="reSellTargetId" />
+        <div class="form-grid">
+          <label style="grid-column: 1 / -1;">부동산 이름
+            <input id="reSellName" readonly style="background:rgba(255,255,255,0.05);color:#94a3b8;" />
+          </label>
+          <label>소유자
+            <input id="reSellOwner" readonly style="background:rgba(255,255,255,0.05);color:#94a3b8;" />
+          </label>
+          <label>매도일자
+            <input id="reSellDate" type="date" required />
+          </label>
+          <label>취득가 (매수가, KRW)
+            <input id="reSellPurchasePrice" type="number" step="any" readonly style="background:rgba(255,255,255,0.05);color:#94a3b8;" />
+          </label>
+          <label>양도가 (매도가, KRW)
+            <input id="reSellPrice" type="number" step="any" placeholder="예: 1450000000" required data-korean-currency oninput="calcRealEstateSellProfit()" />
+          </label>
+          <label style="grid-column: 1 / -1;">필요경비 (중개수수료, 세금, 취득세 등 공제액)
+            <input id="reSellExpenses" type="number" step="any" value="0" placeholder="0" data-korean-currency oninput="calcRealEstateSellProfit()" />
+          </label>
+
+          <!-- 실현손익 프리뷰 박스 -->
+          <div style="grid-column: 1 / -1; background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; margin-top: 4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:12.5px; color:#cbd5e1; font-weight:600;">예상 실현손익 (양도차익):</span>
+              <strong id="reSellPnlPreview" style="font-size:16px; color:#38bdf8;">+₩0</strong>
+            </div>
+            <div id="reSellCalcFormula" style="font-size:11px; color:#94a3b8; margin-top:4px;">
+              매도가 ₩0 - 매수가 ₩0 - 필요경비 ₩0
+            </div>
+          </div>
+
+          <label style="grid-column: 1 / -1; display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:#cbd5e1; cursor:pointer;">
+            <input type="checkbox" id="reSellRemoveFromAssets" checked />
+            <span>매각 완료 후 보유 자산 목록에서 <strong>해당 부동산 제외(정리)</strong></span>
+          </label>
+
+          <label style="grid-column: 1 / -1;">메모 / 비고
+            <input id="reSellMemo" placeholder="예: 매각 완료 및 잔금 수령" />
+          </label>
+        </div>
+
+        <div class="dialog-actions" style="margin-top:16px;">
+          <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
+          <button class="button primary" type="button" onclick="submitRealEstateSell()" style="background:linear-gradient(135deg,#f59e0b,#d97706);">실현손익에 기록</button>
+        </div>
+      </form>
+    </dialog>
+
 
     <div id="heatmapTooltip" class="heatmap-tooltip" style="display:none;"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -2235,6 +2292,14 @@
       <form id="pnlRecordForm" onsubmit="return false;">
         <div class="form-grid">
           <label style="grid-column: 1 / -1;">
+            자산 구분
+            <select name="asset_type" id="pnlAssetTypeSelect" onchange="togglePnlAssetTypeFields()">
+              <option value="stock" selected>📈 국내/해외 주식</option>
+              <option value="ipo">📦 공모주</option>
+              <option value="real_estate">🏠 부동산 매매 (양도차익)</option>
+            </select>
+          </label>
+          <label style="grid-column: 1 / -1;" id="pnlAccountSelectWrap">
             등록된 계좌 선택 (선택 시 증권사·계좌명·소유자 자동 채움)
             <select id="pnlAccountSelect">
               <option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>
@@ -2250,21 +2315,21 @@
               <option value="모두">모두</option>
             </select>
           </label>
-          <label>
+          <label id="pnlBrokerWrap">
             증권사
             <input name="broker" placeholder="예: 토스증권, 키움증권" />
           </label>
-          <label>
+          <label id="pnlAccountNameWrap">
             계좌명
             <input name="account_name" list="pnlAccountDatalist" placeholder="예: 종합계좌" autocomplete="off" />
             <datalist id="pnlAccountDatalist"></datalist>
           </label>
-          <label>
+          <label id="pnlCodeWrap">
             종목코드
             <input name="code" list="holdingCodeList" placeholder="예: 005930 (종목명 입력 시 자동 완성)" autocomplete="off" />
           </label>
-          <label>
-            종목명
+          <label id="pnlNameWrap">
+            <span id="pnlNameLabelText">종목명</span>
             <input name="name" list="holdingNameList" placeholder="예: 삼성전자, 현대차, NVDA" autocomplete="off" required />
           </label>
           <label>
@@ -2589,7 +2654,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260904-v5510"></script>
+    <script src="/static/wealth.js?v=20260904-v5511"></script>
   </body>
 </html>
 

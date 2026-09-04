@@ -916,9 +916,10 @@ function renderSummary(data) {
   const totalMinusBankDebt = negBanks.reduce((acc, b) => acc + Math.abs(Number(b.balance) || 0), 0);
   const totalPureDebt = curLoans.reduce((acc, l) => acc + (Number(l.current_balance) || 0), 0);
 
-  // 부동산 순에퀴티 & 전세보증금 부채
-  // 부동산: 투자자산(자가·임대 순에퀴티) vs 안전자산(임차보증금) 분리
+  // 부동산 순에퀴티 & 전세보증금 부채 & 평가손익(예상 수익)
   let totalREVal = 0;
+  let totalREPurchaseVal = 0;
+  let totalREProfit = 0;
   let totalTenantDepositVal = 0;
   let totalLandlordDepositDebt = 0;
   let totalREInvestEquity = 0;
@@ -938,10 +939,17 @@ function renderSummary(data) {
     const pType = r.property_type || 'own';
     if (pType !== 'lease') {
       const pVal = (Number(r.current_price) || 0) * share;
+      const purchVal = (Number(r.purchase_price) || 0) * share;
       const depDebt = pType === 'rental' ? ((Number(r.deposit_amount) || 0) * share) : 0;
       totalREVal += pVal;
       totalLandlordDepositDebt += depDebt;
       totalREInvestEquity += pVal; // 부동산 시세 100% 반영
+      if (purchVal > 0) {
+        totalREPurchaseVal += purchVal;
+        totalREProfit += (pVal - purchVal);
+      } else if (pVal > 0) {
+        totalREPurchaseVal += pVal;
+      }
     } else {
       const depVal = ((Number(r.deposit_amount) || 0) * share);
       totalTenantDepositVal += depVal;
@@ -953,45 +961,7 @@ function renderSummary(data) {
   const totalSafeAssets = totalAllCash + totalTenantDepositVal + insuranceTotal;
   const netWorth = (totalInvestAssets + totalSafeAssets) - totalAllDebt;
 
-  // 1. 순자산 (흰색) & 총부채 (푸른색)
-  if ($("#summaryNetWorth")) $("#summaryNetWorth").textContent = money(netWorth);
-  if ($("#summaryTotalDebtCaption")) {
-    $("#summaryTotalDebtCaption").textContent = totalAllDebt > 0 
-      ? `총부채 ₩${number(totalAllDebt, 0)}` 
-      : `부채 ₩0`;
-  }
-
-  // 2. 총 투자자산 (부동산 자가/임대 100% + 주식)
-  if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestAssets);
-  if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `부동산 ${money(totalREInvestEquity)}`;
-  if ($("#subStockVal")) $("#subStockVal").textContent = `주식 ${money(totalStockVal)}`;
-
-  // 3. 총 수익 (수익시 붉은색, 손실시 파란색) & 일간 수익 서브라인
-  if ($("#totalProfit")) {
-    $("#totalProfit").textContent = money(s.profit_krw);
-    $("#totalProfit").style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
-  }
-  const profitRateEl = $("#profitRate");
-  if (profitRateEl) {
-    profitRateEl.textContent = `(${s.return_rate >= 0 ? "+" : ""}${number(s.return_rate)}%)`;
-    profitRateEl.style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
-  }
-
-  const day = data.day_change || {};
-  if ($("#dayProfitVal")) {
-    if (day.change_krw != null) {
-      const sign = day.change_krw >= 0 ? "+" : "";
-      const rateSign = (day.change_rate || 0) >= 0 ? "+" : "";
-      $("#dayProfitVal").textContent = `일간 수익 ${sign}${money(day.change_krw)} (${rateSign}${number(day.change_rate)}%)`;
-      $("#dayProfitVal").style.color = day.change_krw >= 0 ? "#f43f5e" : "#38bdf8";
-    } else {
-      $("#dayProfitVal").textContent = `일간 수익 —`;
-      $("#dayProfitVal").style.color = "#94a3b8";
-    }
-  }
-  if ($("#dayCaption")) $("#dayCaption").textContent = day.date ? `${day.date} 대비` : "전일 대비";
-
-  // 4. 총 실현손익 (연도별/월별 실시간 집계 & +붉은색 -푸른색, 세로 줄맞춤)
+  // 4. 총 실현손익 (연도별/월별 실시간 집계)
   const curRealized = data.realized_pnl_summary || rawDashboard?.realized_pnl_summary || {};
   const pnlRecords = filterByOwner(data.realized_pnl_records || rawDashboard?.realized_pnl_records || pnlData?.records || []);
 
@@ -1018,22 +988,7 @@ function renderSummary(data) {
     }
   }
 
-  if ($("#summaryRealizedPnl")) {
-    $("#summaryRealizedPnl").textContent = `${totalRealizedKrw >= 0 ? "+" : ""}${money(totalRealizedKrw)}`;
-    $("#summaryRealizedPnl").style.color = totalRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
-  }
-  if ($("#pnlYearLabel")) $("#pnlYearLabel").textContent = `${currYear2Digit}년`;
-  if ($("#summaryRealizedPnlYear")) {
-    $("#summaryRealizedPnlYear").textContent = `${yearRealizedKrw >= 0 ? '+' : ''}${money(yearRealizedKrw)}`;
-    $("#summaryRealizedPnlYear").style.color = yearRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
-  }
-  if ($("#pnlMonthLabel")) $("#pnlMonthLabel").textContent = `${currMonthStr}월`;
-  if ($("#summaryRealizedPnlMonth")) {
-    $("#summaryRealizedPnlMonth").textContent = `${monthRealizedKrw >= 0 ? '+' : ''}${money(monthRealizedKrw)}`;
-    $("#summaryRealizedPnlMonth").style.color = monthRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
-  }
-
-  // 5. 총 배당금 및 이자 (연도별/월별 실시간 집계, 세로 줄맞춤)
+  // 5. 총 배당금 및 이자 (연도별/월별 실시간 집계)
   const curDiv = data.dividend_summary || rawDashboard?.dividend_summary || {};
   const divRecords = filterByOwner(data.actual_dividend_records || rawDashboard?.actual_dividend_records || actualDividendData?.records || []);
 
@@ -1053,23 +1008,165 @@ function renderSummary(data) {
     }
   }
 
-  if ($("#summaryActualDividend")) {
-    $("#summaryActualDividend").textContent = money(totalActualDivKrw);
-  }
-  if ($("#divYearLabel")) $("#divYearLabel").textContent = `${currYear2Digit}년`;
-  if ($("#summaryActualDivYear")) {
-    $("#summaryActualDivYear").textContent = `${yearActualDivKrw >= 0 ? '+' : ''}${money(yearActualDivKrw)}`;
-  }
-  if ($("#divMonthLabel")) $("#divMonthLabel").textContent = `${currMonthStr}월`;
-  if ($("#summaryActualDivMonth")) {
-    $("#summaryActualDivMonth").textContent = `${monthActualDivKrw >= 0 ? '+' : ''}${money(monthActualDivKrw)}`;
+  // 통합 실현손익 (매매차익 + 배당금 및 이자)
+  const combinedRealizedKrw = totalRealizedKrw + totalActualDivKrw;
+  const combinedYearRealizedKrw = yearRealizedKrw + yearActualDivKrw;
+  const combinedMonthRealizedKrw = monthRealizedKrw + monthActualDivKrw;
+
+  const isStockTab = (currentAllocTab === 'sector');
+
+  // =========================================================================
+  // [자산] 탭 vs [주식] 탭 조건부 좌측 요약 렌더링
+  // =========================================================================
+  if (isStockTab) {
+    // -----------------------------------------------------------------------
+    // MODE B: [주식] 탭 선택 시 (주식 전용 뷰)
+    // -----------------------------------------------------------------------
+    // 1. 순자산 행 숨김
+    if ($("#netWorthRow")) $("#netWorthRow").style.display = "none";
+
+    // 2. 총 주식자산
+    if ($("#totalInvestRow")) $("#totalInvestRow").style.display = "flex";
+    if ($("#totalInvestLabelText")) $("#totalInvestLabelText").textContent = "총 주식자산";
+    if ($("#totalValue")) $("#totalValue").textContent = money(totalStockVal);
+    if ($("#subAssetBreakdown")) $("#subAssetBreakdown").style.display = "none";
+
+    // 3. 총 수익 (주식 평가손익) & 일간 수익
+    if ($("#expectedProfitRow")) $("#expectedProfitRow").style.display = "flex";
+    if ($("#profitLabelText")) $("#profitLabelText").textContent = "총 수익";
+    if ($("#totalProfit")) {
+      $("#totalProfit").textContent = money(s.profit_krw);
+      $("#totalProfit").style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    const profitRateEl = $("#profitRate");
+    if (profitRateEl) {
+      profitRateEl.textContent = `(${s.return_rate >= 0 ? "+" : ""}${number(s.return_rate)}%)`;
+      profitRateEl.style.color = (s.profit_krw || 0) >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+
+    // 4. 주식 실현손익
+    if ($("#realizedPnlRow")) $("#realizedPnlRow").style.display = "flex";
+    if ($("#pnlLabelText")) $("#pnlLabelText").textContent = "주식 실현손익";
+    if ($("#summaryRealizedPnl")) {
+      $("#summaryRealizedPnl").textContent = `${totalRealizedKrw >= 0 ? "+" : ""}${money(totalRealizedKrw)}`;
+      $("#summaryRealizedPnl").style.color = totalRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    if ($("#pnlSubBreakdown")) $("#pnlSubBreakdown").style.display = "none";
+    if ($("#pnlYearLabel")) $("#pnlYearLabel").textContent = `${currYear2Digit}년`;
+    if ($("#summaryRealizedPnlYear")) {
+      $("#summaryRealizedPnlYear").textContent = `${yearRealizedKrw >= 0 ? '+' : ''}${money(yearRealizedKrw)}`;
+      $("#summaryRealizedPnlYear").style.color = yearRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    if ($("#pnlMonthLabel")) $("#pnlMonthLabel").textContent = `${currMonthStr}월`;
+    if ($("#summaryRealizedPnlMonth")) {
+      $("#summaryRealizedPnlMonth").textContent = `${monthRealizedKrw >= 0 ? '+' : ''}${money(monthRealizedKrw)}`;
+      $("#summaryRealizedPnlMonth").style.color = monthRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+
+    // 5. 배당금 (주식 탭에서 별도 표시)
+    if ($("#dividendRow")) $("#dividendRow").style.display = "flex";
+    if ($("#divLabelText")) $("#divLabelText").textContent = "배당금";
+    if ($("#summaryActualDividend")) {
+      $("#summaryActualDividend").textContent = money(totalActualDivKrw);
+    }
+    if ($("#divYearLabel")) $("#divYearLabel").textContent = `${currYear2Digit}년`;
+    if ($("#summaryActualDivYear")) {
+      $("#summaryActualDivYear").textContent = `${yearActualDivKrw >= 0 ? '+' : ''}${money(yearActualDivKrw)}`;
+    }
+    if ($("#divMonthLabel")) $("#divMonthLabel").textContent = `${currMonthStr}월`;
+    if ($("#summaryActualDivMonth")) {
+      $("#summaryActualDivMonth").textContent = `${monthActualDivKrw >= 0 ? '+' : ''}${money(monthActualDivKrw)}`;
+    }
+
+    // 6. 안전자산 행 숨김
+    if ($("#safeAssetRow")) $("#safeAssetRow").style.display = "none";
+
+  } else {
+    // -----------------------------------------------------------------------
+    // MODE A: [자산] 탭 선택 시 (자산 종합 뷰)
+    // -----------------------------------------------------------------------
+    // 1. 순자산 (흰색) & 총부채 (푸른색)
+    if ($("#netWorthRow")) $("#netWorthRow").style.display = "flex";
+    if ($("#summaryNetWorth")) $("#summaryNetWorth").textContent = money(netWorth);
+    if ($("#summaryTotalDebtCaption")) {
+      $("#summaryTotalDebtCaption").textContent = totalAllDebt > 0 
+        ? `총부채 ₩${number(totalAllDebt, 0)}` 
+        : `부채 ₩0`;
+    }
+
+    // 2. 총 투자자산 (부동산 + 주식)
+    if ($("#totalInvestRow")) $("#totalInvestRow").style.display = "flex";
+    if ($("#totalInvestLabelText")) $("#totalInvestLabelText").textContent = "총 투자자산";
+    if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestAssets);
+    if ($("#subAssetBreakdown")) $("#subAssetBreakdown").style.display = "flex";
+    if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `부동산 ${money(totalREInvestEquity)}`;
+    if ($("#subStockVal")) $("#subStockVal").textContent = `주식 ${money(totalStockVal)}`;
+
+    // 3. 기대수익 (주식 평가손익 + 부동산 예상 수익 통합 반영!) & 일간 수익
+    const totalExpectedProfit = (Number(s.profit_krw) || 0) + totalREProfit;
+    const stockPurchaseCost = Math.max(0, totalStockVal - (Number(s.profit_krw) || 0));
+    const totalCombinedCost = stockPurchaseCost + totalREPurchaseVal;
+    const combinedReturnRate = totalCombinedCost > 0 ? ((totalExpectedProfit / totalCombinedCost) * 100) : 0;
+
+    if ($("#expectedProfitRow")) $("#expectedProfitRow").style.display = "flex";
+    if ($("#profitLabelText")) $("#profitLabelText").textContent = "기대수익";
+    if ($("#totalProfit")) {
+      $("#totalProfit").textContent = money(totalExpectedProfit);
+      $("#totalProfit").style.color = totalExpectedProfit >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    const profitRateEl = $("#profitRate");
+    if (profitRateEl) {
+      profitRateEl.textContent = `(${combinedReturnRate >= 0 ? "+" : ""}${number(combinedReturnRate)}%)`;
+      profitRateEl.style.color = totalExpectedProfit >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+
+    // 4. 실현손익 (총 실현손익과 배당 및 이자를 포함하여 통합 합산 표시!)
+    if ($("#realizedPnlRow")) $("#realizedPnlRow").style.display = "flex";
+    if ($("#pnlLabelText")) $("#pnlLabelText").textContent = "실현손익";
+    if ($("#summaryRealizedPnl")) {
+      $("#summaryRealizedPnl").textContent = `${combinedRealizedKrw >= 0 ? "+" : ""}${money(combinedRealizedKrw)}`;
+      $("#summaryRealizedPnl").style.color = combinedRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    if ($("#pnlSubBreakdown")) {
+      $("#pnlSubBreakdown").style.display = "block";
+      $("#pnlSubBreakdown").textContent = `매매차익 ₩${number(totalRealizedKrw, 0)} · 배당/이자 ₩${number(totalActualDivKrw, 0)}`;
+    }
+    if ($("#pnlYearLabel")) $("#pnlYearLabel").textContent = `${currYear2Digit}년`;
+    if ($("#summaryRealizedPnlYear")) {
+      $("#summaryRealizedPnlYear").textContent = `${combinedYearRealizedKrw >= 0 ? '+' : ''}${money(combinedYearRealizedKrw)}`;
+      $("#summaryRealizedPnlYear").style.color = combinedYearRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+    if ($("#pnlMonthLabel")) $("#pnlMonthLabel").textContent = `${currMonthStr}월`;
+    if ($("#summaryRealizedPnlMonth")) {
+      $("#summaryRealizedPnlMonth").textContent = `${combinedMonthRealizedKrw >= 0 ? '+' : ''}${money(combinedMonthRealizedKrw)}`;
+      $("#summaryRealizedPnlMonth").style.color = combinedMonthRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
+    }
+
+    // 5. 배당금 행 숨김 (실현손익에 통합 표기됨)
+    if ($("#dividendRow")) $("#dividendRow").style.display = "none";
+
+    // 6. 안전자산 (예수금·예금, 임차보증금, 보험)
+    if ($("#safeAssetRow")) $("#safeAssetRow").style.display = "flex";
+    if ($("#summarySafeAssetVal")) $("#summarySafeAssetVal").textContent = money(totalSafeAssets);
+    if ($("#subSafeCashVal")) $("#subSafeCashVal").textContent = `예수금 및 예금 ${money(totalAllCash)}`;
+    if ($("#subSafeLeaseVal")) $("#subSafeLeaseVal").textContent = `임차보증금 ${money(totalTenantDepositVal)}`;
+    if ($("#subSafeInsuranceVal")) $("#subSafeInsuranceVal").textContent = `보험 ${money(insuranceTotal)}`;
   }
 
-  // 6. 안전자산 (예수금·예금, 임차보증금, 보험)
-  if ($("#summarySafeAssetVal")) $("#summarySafeAssetVal").textContent = money(totalSafeAssets);
-  if ($("#subSafeCashVal")) $("#subSafeCashVal").textContent = `예수금 및 예금 ${money(totalAllCash)}`;
-  if ($("#subSafeLeaseVal")) $("#subSafeLeaseVal").textContent = `임차보증금 ${money(totalTenantDepositVal)}`;
-  if ($("#subSafeInsuranceVal")) $("#subSafeInsuranceVal").textContent = `보험 ${money(insuranceTotal)}`;
+  // 일간 수익 서브라인 (자산/주식 공통)
+  const day = data.day_change || {};
+  if ($("#dayProfitVal")) {
+    if (day.change_krw != null) {
+      const sign = day.change_krw >= 0 ? "+" : "";
+      const rateSign = (day.change_rate || 0) >= 0 ? "+" : "";
+      $("#dayProfitVal").textContent = `일간 수익 ${sign}${money(day.change_krw)} (${rateSign}${number(day.change_rate)}%)`;
+      $("#dayProfitVal").style.color = day.change_krw >= 0 ? "#f43f5e" : "#38bdf8";
+    } else {
+      $("#dayProfitVal").textContent = `일간 수익 —`;
+      $("#dayProfitVal").style.color = "#94a3b8";
+    }
+  }
+  if ($("#dayCaption")) $("#dayCaption").textContent = day.date ? `${day.date} 대비` : "전일 대비";
 
   const krwStock = krw.stock_value_krw || (Number(krw.market_value_krw || 0) - Number(krw.cash || 0));
   $("#krwValue") && ($("#krwValue").textContent = money(krw.market_value_krw || 0));
@@ -2704,6 +2801,7 @@ function renderRealEstateWithOwner(owner = '모두') {
           <div class="account-row-actions saving-card-actions">
             ${pType !== 'lease' ? `<button class="account-action-button" data-re-refresh-kb-id="${re.id}" title="KB부동산 공식 시세로 즉시 갱신" type="button" style="color:#facc15;font-size:12px;">🔄</button>` : ''}
             <a href="${naverLandUrl}" target="_blank" rel="noopener" class="account-action-button" title="네이버 부동산 '${cleanSearchKeyword}' 시세 확인" style="text-decoration:none;display:inline-flex;align-items:center;font-size:12px;">🔍</a>
+            ${pType !== 'lease' ? `<button class="account-action-button" data-re-sell-id="${re.id}" title="부동산 매각 및 실현손익 기록" type="button" style="color:#f59e0b;font-size:12px;">🏢</button>` : ''}
             <button class="account-action-button" data-re-edit-id="${re.id}" title="수정" type="button">✎</button>
             <button class="mini-delete-button" data-re-del-id="${re.id}" title="삭제" type="button">🗑️</button>
           </div>
@@ -2781,6 +2879,14 @@ function renderRealEstateWithOwner(owner = '모두') {
             <div class="saving-detail-row" style="grid-column:1/-1;">
               <span class="saving-detail-label">메모</span>
               <span class="saving-detail-val" style="color:#94a3b8;font-size:11px;">${html(re.memo)}</span>
+            </div>
+          ` : ''}
+
+          ${pType !== 'lease' ? `
+            <div style="grid-column:1/-1;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.08);display:flex;justify-content:flex-end;">
+              <button class="button secondary compact" data-re-sell-id="${re.id}" type="button" style="font-size:11px;padding:4px 10px;color:#f59e0b;border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.08);font-weight:600;">
+                🏢 매각/실현손익 기록
+              </button>
             </div>
           ` : ''}
         </div>
@@ -3046,6 +3152,95 @@ async function fetchKbMarketPrice() {
     }
   }
 }
+
+// ── 부동산 매각 및 실현손익 기록 다이얼로그 제어 ─────────────────────────
+function openRealEstateSellDialog(reItem) {
+  if (!reItem) return;
+  const dlg = document.getElementById("realEstateSellDialog");
+  if (!dlg) return;
+
+  const targetIdEl = document.getElementById("reSellTargetId");
+  const nameEl = document.getElementById("reSellName");
+  const ownerEl = document.getElementById("reSellOwner");
+  const dateEl = document.getElementById("reSellDate");
+  const purchEl = document.getElementById("reSellPurchasePrice");
+  const priceEl = document.getElementById("reSellPrice");
+  const expEl = document.getElementById("reSellExpenses");
+  const memoEl = document.getElementById("reSellMemo");
+  const removeEl = document.getElementById("reSellRemoveFromAssets");
+
+  if (targetIdEl) targetIdEl.value = reItem.id || "";
+  if (nameEl) nameEl.value = reItem.name || "부동산";
+  if (ownerEl) ownerEl.value = reItem.owner || "모두";
+  if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+  if (purchEl) purchEl.value = reItem.purchase_price || 0;
+  if (priceEl) priceEl.value = reItem.current_price || reItem.purchase_price || "";
+  if (expEl) expEl.value = 0;
+  if (memoEl) memoEl.value = "";
+  if (removeEl) removeEl.checked = true;
+
+  calcRealEstateSellProfit();
+  dlg.showModal();
+}
+window.openRealEstateSellDialog = openRealEstateSellDialog;
+
+function calcRealEstateSellProfit() {
+  const purch = Number(document.getElementById("reSellPurchasePrice")?.value || 0);
+  const sell = Number(document.getElementById("reSellPrice")?.value || 0);
+  const exp = Number(document.getElementById("reSellExpenses")?.value || 0);
+  const pnl = sell - purch - exp;
+
+  const pnlEl = document.getElementById("reSellPnlPreview");
+  const formulaEl = document.getElementById("reSellCalcFormula");
+
+  if (pnlEl) {
+    const sign = pnl >= 0 ? "+" : "";
+    pnlEl.textContent = `${sign}₩${number(pnl, 0)}`;
+    pnlEl.style.color = pnl >= 0 ? "#38bdf8" : "#f43f5e";
+  }
+  if (formulaEl) {
+    formulaEl.textContent = `양도가 ₩${number(sell, 0)} - 취득가 ₩${number(purch, 0)} - 필요경비 ₩${number(exp, 0)}`;
+  }
+}
+window.calcRealEstateSellProfit = calcRealEstateSellProfit;
+
+async function submitRealEstateSell() {
+  const reId = document.getElementById("reSellTargetId")?.value;
+  if (!reId) return;
+
+  const sellPrice = Number(document.getElementById("reSellPrice")?.value || 0);
+  const sellDate = document.getElementById("reSellDate")?.value;
+  const expenses = Number(document.getElementById("reSellExpenses")?.value || 0);
+  const memo = document.getElementById("reSellMemo")?.value || "";
+  const removeFromAssets = document.getElementById("reSellRemoveFromAssets")?.checked ?? true;
+
+  if (sellPrice <= 0) {
+    alert("매도가액(양도가)을 올바르게 입력해 주세요.");
+    return;
+  }
+
+  try {
+    const res = await api(`/api/real-estates/${reId}/sell`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sell_price: sellPrice,
+        sell_date: sellDate,
+        expenses: expenses,
+        remove_from_assets: removeFromAssets,
+        memo: memo,
+      }),
+    });
+
+    toast(res.message || "부동산 매각 실현손익이 기록되었습니다.");
+    document.getElementById("realEstateSellDialog")?.close();
+    await loadDashboard();
+    await loadRealizedPnl(currentOwner);
+  } catch (err) {
+    alert(`부동산 매각 처리 오류: ${err.message}`);
+  }
+}
+window.submitRealEstateSell = submitRealEstateSell;
 
 
 // ── 5. 자산 히트맵 (정통 Squarify 면적 트리맵 + 와이드 카드형 뷰) ─────────────
@@ -4394,6 +4589,15 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 부동산 매각 및 실현손익 기록
+  const reSellBtn = e.target.closest('[data-re-sell-id]');
+  if (reSellBtn) {
+    const rid = reSellBtn.dataset.reSellId;
+    const reItem = rawRealEstates.find(r => r.id === rid);
+    if (reItem) openRealEstateSellDialog(reItem);
+    return;
+  }
+
   // 부동산 수정
   const reEditBtn = e.target.closest('[data-re-edit-id]');
   if (reEditBtn) {
@@ -4599,6 +4803,7 @@ document.addEventListener('click', async (e) => {
     allocTab.classList.add('active');
     currentAllocTab = allocTab.dataset.tab || 'asset_class';
     renderClassifications(dashboard?.classifications || []);
+    renderWithOwner(currentOwner);
     return;
   }
 
@@ -4944,6 +5149,7 @@ document.getElementById('allocTabs')?.addEventListener('click', (e) => {
   tab.classList.add('active');
   currentAllocTab = tab.dataset.tab || 'asset_class';
   renderClassifications(dashboard?.classifications || []);
+  renderWithOwner(currentOwner);
 });
 
 // 4. 자산기록 [콤보 차트] / [월별 자산] 뷰 모드 탭
@@ -6646,6 +6852,29 @@ function renderPnlMonthlyDetail(month = null) {
   `;
 }
 
+function togglePnlAssetTypeFields() {
+  const form = document.getElementById("pnlRecordForm");
+  if (!form) return;
+  const assetType = document.getElementById("pnlAssetTypeSelect")?.value || "stock";
+  const isRE = (assetType === "real_estate");
+
+  const brokerWrap = document.getElementById("pnlBrokerWrap");
+  const acctNameWrap = document.getElementById("pnlAccountNameWrap");
+  const codeWrap = document.getElementById("pnlCodeWrap");
+  const acctSelWrap = document.getElementById("pnlAccountSelectWrap");
+  const nameLabel = document.getElementById("pnlNameLabelText");
+  const currSelect = document.getElementById("pnlFormCurrency");
+
+  if (brokerWrap) brokerWrap.style.display = isRE ? "none" : "block";
+  if (acctNameWrap) acctNameWrap.style.display = isRE ? "none" : "block";
+  if (codeWrap) codeWrap.style.display = isRE ? "none" : "block";
+  if (acctSelWrap) acctSelWrap.style.display = isRE ? "none" : "block";
+
+  if (nameLabel) nameLabel.textContent = isRE ? "부동산 명칭 (단지명/평형)" : "종목명";
+  if (isRE && currSelect) currSelect.value = "KRW";
+}
+window.togglePnlAssetTypeFields = togglePnlAssetTypeFields;
+
 async function openPnlRecordDialog(record = null) {
   const dlg = document.getElementById("pnlRecordDialog");
   const form = document.getElementById("pnlRecordForm");
@@ -6654,6 +6883,16 @@ async function openPnlRecordDialog(record = null) {
   form.reset();
   form.dataset.recordId = record ? record.id : "";
   $("#pnlDialogTitle") && ($("#pnlDialogTitle").textContent = record ? "매도 실현손익 수정" : "매도 실현손익 추가");
+
+  const assetTypeEl = document.getElementById("pnlAssetTypeSelect");
+  if (assetTypeEl) {
+    if (record) {
+      assetTypeEl.value = record.asset_type || (record.is_ipo ? "ipo" : "stock");
+    } else {
+      assetTypeEl.value = (currentPnlTradeType === "ipo") ? "ipo" : "stock";
+    }
+  }
+  togglePnlAssetTypeFields();
 
   // ACCOUNTS 섹션의 등록된 계좌 목록 드롭다운 및 데이터리스트 채우기
   const accounts = dashboard?.accounts || [];
@@ -6775,30 +7014,42 @@ async function saveRealizedPnlRecord() {
   if (!pnlKrwVal && pnlVal) {
     pnlKrwVal = currVal === "USD" ? Math.round(pnlVal * fxVal) : Math.round(pnlVal);
   }
-  const isIpoVal = form.querySelector("[name='is_ipo']")?.value === "true";
+  const assetTypeVal = form.querySelector("[name='asset_type']")?.value || "stock";
+  const isRealEstate = (assetTypeVal === "real_estate");
+  const isIpoVal = (assetTypeVal === "ipo") || (form.querySelector("[name='is_ipo']")?.value === "true");
   const memoVal = (form.querySelector("[name='memo']")?.value || "").trim();
 
   if (!dateVal) {
     toast("매도일을 선택해 주세요.", true);
     return;
   }
-  if (!nameVal && !codeVal) {
-    toast("종목명 또는 종목코드를 입력해 주세요.", true);
-    return;
-  }
-  if (!codeVal && nameVal) {
-    try {
-      const searchRes = await api(`/api/stock-search?q=${encodeURIComponent(nameVal)}`);
-      if (searchRes && searchRes.code) {
-        codeVal = searchRes.code;
-        if (form.querySelector("[name='code']")) form.querySelector("[name='code']").value = codeVal;
-        if (searchRes.currency && form.querySelector("[name='currency']")) {
-          form.querySelector("[name='currency']").value = searchRes.currency;
-          currVal = searchRes.currency;
+  if (isRealEstate) {
+    if (!nameVal) {
+      toast("부동산 명칭을 입력해 주세요.", true);
+      return;
+    }
+    codeVal = "REAL_ESTATE";
+    currVal = "KRW";
+  } else {
+    if (!nameVal && !codeVal) {
+      toast("종목명 또는 종목코드를 입력해 주세요.", true);
+      return;
+    }
+    if (!codeVal && nameVal) {
+      try {
+        const searchRes = await api(`/api/stock-search?q=${encodeURIComponent(nameVal)}`);
+        if (searchRes && searchRes.code) {
+          codeVal = searchRes.code;
+          if (form.querySelector("[name='code']")) form.querySelector("[name='code']").value = codeVal;
+          if (searchRes.currency && form.querySelector("[name='currency']")) {
+            form.querySelector("[name='currency']").value = searchRes.currency;
+            currVal = searchRes.currency;
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
   }
+
   if (pnlInputStr === '' || pnlInputStr == null) {
     toast("실현손익을 입력해 주세요.", true);
     return;
@@ -6807,13 +7058,15 @@ async function saveRealizedPnlRecord() {
   const payload = {
     date: dateVal,
     owner: ownerVal,
-    broker: brokerVal,
-    account_name: accountNameVal,
+    broker: isRealEstate ? "부동산" : brokerVal,
+    account_name: isRealEstate ? "부동산 자산" : accountNameVal,
     code: codeVal,
     name: nameVal || codeVal,
+    asset_type: assetTypeVal,
     currency: currVal,
     pnl: pnlVal,
     fx_rate: fxVal,
+    fx_pnl_krw: 0,
     pnl_krw: pnlKrwVal,
     is_ipo: isIpoVal,
     memo: memoVal,

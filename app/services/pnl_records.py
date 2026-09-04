@@ -80,16 +80,27 @@ def create_pnl_record(payload: dict[str, Any], username: str | None = None) -> d
         pnl_krw = round(pnl * fx_rate + fx_pnl_krw, 0) if currency == "USD" else round(pnl, 0)
 
     is_ipo = bool(payload.get("is_ipo", False))
-
+    asset_type = str(payload.get("asset_type") or "").strip().lower()
     raw_code = str(payload.get("code", "")).strip()
     raw_name = str(payload.get("name", "")).strip()
-    code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
+
+    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or "부동산" in raw_name:
+        asset_type = "real_estate"
+        code = raw_code or "REAL_ESTATE"
+        name = raw_name or "부동산 매매"
+        currency = "KRW"
+        fx_rate = 1.0
+        pnl_krw = pnl
+    else:
+        asset_type = asset_type or "stock"
+        code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
 
     record = {
         "id": str(uuid.uuid4()),
         "date": date_val,
         "code": code,
         "name": name,
+        "asset_type": asset_type,
         "currency": currency,
         "pnl": pnl,
         "fx_rate": fx_rate,
@@ -129,7 +140,20 @@ def update_pnl_record(record_id: str, payload: dict[str, Any], username: str | N
 
     raw_code = str(payload.get("code", target.get("code", ""))).strip()
     raw_name = str(payload.get("name", target.get("name", ""))).strip()
-    code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
+    asset_type = str(payload.get("asset_type", target.get("asset_type", ""))).strip().lower()
+
+    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or "부동산" in raw_name:
+        asset_type = "real_estate"
+        code = raw_code or "REAL_ESTATE"
+        name = raw_name or "부동산 매매"
+        currency = "KRW"
+        fx_rate = 1.0
+        pnl_krw = pnl
+    else:
+        asset_type = asset_type or "stock"
+        code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
+
+    target["asset_type"] = asset_type
 
     target["date"] = str(payload.get("date", target.get("date")))
     target["code"] = code

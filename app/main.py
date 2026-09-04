@@ -1132,6 +1132,58 @@ async def remove_real_estate(request: Request, re_id: str) -> dict:
     return {"message": "부동산 자산이 삭제되었습니다."}
 
 
+@app.post("/api/real-estates/{re_id}/sell")
+async def sell_real_estate_and_record_pnl(request: Request, re_id: str) -> dict:
+    """부동산 매각을 처리하고 실현손익(양도차익)을 기록합니다."""
+    username = get_current_username(request)
+    body = await request.json()
+    from app.services.portfolio import read_portfolio
+    from app.services.pnl_records import create_pnl_record
+    from app.services.real_estate import delete_real_estate
+
+    pf = read_portfolio(username)
+    re_list = pf.get("real_estates", [])
+    target = next((r for r in re_list if r.get("id") == re_id), None)
+    if not target:
+        raise HTTPException(404, "해당 부동산 항목을 찾을 수 없습니다.")
+
+    sell_price = float(body.get("sell_price") or 0.0)
+    expenses = float(body.get("expenses") or 0.0)
+    sell_date = str(body.get("sell_date") or datetime.now().strftime("%Y-%m-%d")).strip()
+    purchase_price = float(target.get("purchase_price") or 0.0)
+    pnl_krw = round(sell_price - purchase_price - expenses)
+
+    re_name = target.get("name") or "부동산"
+    pnl_title = f"[부동산] {re_name}"
+    owner = target.get("owner") or "모두"
+    memo = str(body.get("memo") or f"매도가 ₩{sell_price:,.0f}, 매수가 ₩{purchase_price:,.0f}, 필요경비 ₩{expenses:,.0f}").strip()
+
+    pnl_payload = {
+        "date": sell_date,
+        "code": "REAL_ESTATE",
+        "name": pnl_title,
+        "asset_type": "real_estate",
+        "currency": "KRW",
+        "pnl": pnl_krw,
+        "pnl_krw": pnl_krw,
+        "owner": owner,
+        "memo": memo,
+    }
+    pnl_rec = create_pnl_record(pnl_payload, username=username)
+
+    removed = False
+    if body.get("remove_from_assets", True):
+        delete_real_estate(re_id, username=username)
+        removed = True
+
+    return {
+        "message": f"[{re_name}] 매각 실현손익(₩{pnl_krw:,.0f})이 성공적으로 기록되었습니다.",
+        "pnl_krw": pnl_krw,
+        "pnl_record": pnl_rec,
+        "removed_from_assets": removed,
+    }
+
+
 @app.get("/api/real-estates/kb-price")
 async def get_kb_price_api(
     request: Request,
