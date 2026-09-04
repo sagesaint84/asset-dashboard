@@ -387,19 +387,28 @@ function computeFilteredDayChange(holdings, rawDayChange, owner = '모두', curr
 }
 
 function renderWithOwner(data, owner) {
-  const src = rawDashboard || data;
+  let targetOwner = owner;
+  let targetData = data;
+  if (typeof data === 'string' && owner === undefined) {
+    targetOwner = data;
+    targetData = rawDashboard || dashboard;
+  }
+  const effectiveOwner = targetOwner || currentOwner || '모두';
+  const src = rawDashboard || targetData || dashboard;
+  if (!src) return;
+
   const filteredData = Object.assign({}, src);
 
-  if (owner !== '모두') {
-    filteredData.accounts = (src.accounts || []).filter(a => (a.owner || '모두') === owner);
+  if (effectiveOwner !== '모두') {
+    filteredData.accounts = (src.accounts || []).filter(a => (a.owner || '모두') === effectiveOwner);
     const ownedIds = new Set(filteredData.accounts.map(a => a.id));
-    filteredData.holdings = (src.holdings || []).filter(h => ownedIds.has(h.account_id));
+    filteredData.holdings = (src.holdings || []).filter(h => ownedIds.has(h.account_id) || (h.owner && h.owner === effectiveOwner));
 
     filteredData.summary               = computeFilteredSummary(filteredData.accounts, filteredData.holdings, src.fx_rates);
-    filteredData.classifications       = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates, owner, src);
+    filteredData.classifications       = computeFilteredClassifications(filteredData.holdings, filteredData.accounts, src.fx_rates, effectiveOwner, src);
     filteredData.sector_classifications= computeFilteredSectors(filteredData.holdings, filteredData.accounts, src.fx_rates);
     filteredData.currency_summary      = computeFilteredCurrencySummary(filteredData.holdings, filteredData.accounts, src.fx_rates);
-    filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change, owner, filteredData.summary?.total_value_krw);
+    filteredData.day_change            = computeFilteredDayChange(filteredData.holdings, src.day_change, effectiveOwner, filteredData.summary?.total_value_krw);
   } else {
     filteredData.accounts              = src.accounts               || [];
     filteredData.holdings              = src.holdings               || [];
@@ -411,7 +420,7 @@ function renderWithOwner(data, owner) {
   }
 
   render(filteredData);
-  loadAssetRecords(owner);
+  loadAssetRecords(effectiveOwner);
   loadLedger();
 }
 
@@ -1295,7 +1304,7 @@ function renderClassifications(items) {
   list.style.flexDirection = 'column';
 
   if (currentAllocTab === 'sector') {
-    const sectors = dashboard?.sector_classifications || [];
+    const sectors = dashboard?.sector_classifications || rawDashboard?.sector_classifications || [];
     renderAllocationDonut(sectors, '섹터별 투자자산 데이터가 없습니다.');
     list.innerHTML = sectors.length ? sectors.map((item) => `
       <div class="classification-row clickable-sector-row" data-sector-filter="${html(item.name)}" style="cursor:pointer;" title="🔍 클릭하여 '${html(item.name)}' 보유종목 보기">
@@ -1311,7 +1320,7 @@ function renderClassifications(items) {
       </div>
     `).join("") : '<div class="empty">섹터별 투자자산 데이터가 없습니다.</div>';
   } else {
-    const classes = dashboard?.classifications || items || [];
+    const classes = dashboard?.classifications || rawDashboard?.classifications || items || [];
     renderAllocationDonut(classes, '자산군별 투자자산 데이터가 없습니다.');
     list.innerHTML = classes.length ? classes.map((item) => {
       let subLabel = `${number(item.holding_count, 0)}종목 · ${number(item.weight, 1)}%`;
@@ -3709,6 +3718,7 @@ function bindHeatmapInteractions(container) {
 
 // ── 6. 보유종목 테이블 (정렬 + 섹터 뱃지 + 인터랙티브 차트 모달) ─────────────
 function renderHoldings(data) {
+  data = data || dashboard || rawDashboard || {};
   const query = $("#searchInput")?.value.trim().toLowerCase() || "";
   const rows = (data.holdings || []).filter((item) => {
     const assetClass = typeof classifyHolding === 'function' ? classifyHolding(item) : '';
@@ -4796,14 +4806,17 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 투자자산 분류 탭 (자산군별 vs 섹터별)
+  // 투자자산 분류 탭 (자산군별 vs 섹터별 / 자산 vs 주식)
   const allocTab = e.target.closest('#allocTabs .heatmap-tab');
   if (allocTab) {
     document.querySelectorAll('#allocTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
     allocTab.classList.add('active');
     currentAllocTab = allocTab.dataset.tab || 'asset_class';
-    renderClassifications(dashboard?.classifications || []);
-    renderWithOwner(currentOwner);
+    const curData = dashboard || rawDashboard;
+    if (curData) {
+      renderSummary(curData);
+      renderClassifications(curData.classifications || []);
+    }
     return;
   }
 
@@ -5141,15 +5154,18 @@ $("#snapshotButton")?.addEventListener("click", (e) => action(e.currentTarget, a
   await loadAssetRecords(currentOwner);
 }));
 
-// 3. 투자자산 분류 [자산군별] / [섹터별] 탭 전환
+// 3. 투자자산 분류 [자산군별] / [섹터별] (자산 / 주식) 탭 전환
 document.getElementById('allocTabs')?.addEventListener('click', (e) => {
   const tab = e.target.closest('.heatmap-tab');
   if (!tab) return;
   document.querySelectorAll('#allocTabs .heatmap-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   currentAllocTab = tab.dataset.tab || 'asset_class';
-  renderClassifications(dashboard?.classifications || []);
-  renderWithOwner(currentOwner);
+  const curData = dashboard || rawDashboard;
+  if (curData) {
+    renderSummary(curData);
+    renderClassifications(curData.classifications || []);
+  }
 });
 
 // 4. 자산기록 [콤보 차트] / [월별 자산] 뷰 모드 탭

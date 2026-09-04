@@ -6,6 +6,7 @@ __pycache__/
 *.pyd
 
 # 임시 및 스크래치 파일
+scratch/
 scratch_*.py
 ~$*
 *.tmp
