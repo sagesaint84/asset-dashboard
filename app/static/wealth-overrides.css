@@ -3290,6 +3290,33 @@ dialog.dialog .dialog-actions {
   box-shadow: 0 0 14px rgba(167, 139, 250, 0.25) !important;
 }
 
+/* ── 주식기록 [절세계좌] 탭 전용 레이아웃: 좌측 계좌내역, 우측 보유종목 및 전체변화 카드 제외 ── */
+.records-panel.is-tax-view .records-grid {
+  grid-template-columns: minmax(320px, 0.88fr) minmax(0, 1.42fr);
+}
+
+.records-panel.is-tax-view .record-side {
+  order: 1;
+}
+
+.records-panel.is-tax-view .record-chart-wrap {
+  order: 2;
+}
+
+.records-panel.is-tax-view .record-side-summary {
+  display: none !important;
+}
+
+.records-panel.is-tax-view .record-list {
+  max-height: 520px;
+}
+
+@media (max-width: 1100px) {
+  .records-panel.is-tax-view .records-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 
 
 

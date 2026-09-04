@@ -4207,11 +4207,17 @@ function renderAssetRecords(records) {
   window.assetRecords = records || [];
 
   if (currentRecordView === 'tax_accounts') {
+    $("#recordsPanel")?.classList.add("is-tax-view");
+    const sideSummaryEl = document.querySelector(".record-side-summary");
+    if (sideSummaryEl) sideSummaryEl.style.display = "none";
     renderTaxAccountHoldings(currentOwner);
     return;
   }
 
-  // 전체주식 콤보 차트 뷰 툴바 복원
+  // 전체주식 콤보 차트 뷰 툴바 및 레이아웃 복원
+  $("#recordsPanel")?.classList.remove("is-tax-view");
+  const sideSummaryEl = document.querySelector(".record-side-summary");
+  if (sideSummaryEl) sideSummaryEl.style.display = "";
   if ($("#snapshotButton")) $("#snapshotButton").style.display = "";
   if ($("#addRecordButton")) $("#addRecordButton").style.display = "";
   if ($("#recordPeriodTabs")) $("#recordPeriodTabs").style.opacity = "1";
@@ -4467,6 +4473,9 @@ function calcAccountCumulativeTaxSaved(a) {
 }
 
 function renderTaxAccountHoldings(owner = currentOwner) {
+  $("#recordsPanel")?.classList.add("is-tax-view");
+  const sideSummaryEl = document.querySelector(".record-side-summary");
+  if (sideSummaryEl) sideSummaryEl.style.display = "none";
   const o = owner || currentOwner || '모두';
   const curData = dashboard || rawDashboard || {};
   const allAccounts = curData.accounts || [];
@@ -4589,11 +4598,9 @@ function renderTaxAccountHoldings(owner = currentOwner) {
 
   const filteredStats = calcHoldingStats(filteredHoldings);
 
-  // 우측 상단 사이드 요약 업데이트
+  // 상단 사이드 요약 업데이트 (전체변화 카드는 절세계좌 탭에서 제외)
   if ($("#recordCount")) $("#recordCount").textContent = `${filteredHoldings.length}개 종목 (${filterBadgeName})`;
-  if ($("#recordSummary")) $("#recordSummary").textContent = `₩${number(filteredStats.market, 0)}`;
-  const sideSummarySmall = document.querySelector(".record-side-summary small");
-  if (sideSummarySmall) sideSummarySmall.textContent = `선택된 절세계좌 자산 [${o}]`;
+  if (sideSummaryEl) sideSummaryEl.style.display = "none";
 
   // 스냅샷/추가 버튼 숨김/표시
   if ($("#snapshotButton")) $("#snapshotButton").style.display = "none";
@@ -4702,12 +4709,12 @@ function renderTaxAccountHoldings(owner = currentOwner) {
         </span>
       </div>
     </div>
-    <div class="tax-holdings-scroll-list" style="max-height:430px;overflow-y:auto;padding-right:4px;">
+    <div class="tax-holdings-scroll-list" style="max-height:460px;overflow-y:auto;padding-right:4px;">
       ${holdingsHtml}
     </div>
   `;
 
-  // 3. 우측 사이드 패널: 절세계좌 카드 목록 렌더링
+  // 3. 좌측 사이드 패널: 절세계좌 카드 목록 렌더링
   const recordListEl = $("#assetRecordList");
   if (!recordListEl) return;
 
