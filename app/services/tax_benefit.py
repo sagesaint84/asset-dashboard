@@ -129,15 +129,19 @@ def calculate_pension_irp_benefit(
         for yc in yearly_contributions:
             y_year = str(yc.get("year") or "").strip()
             y_dep = float(yc.get("deposit") or 0.0)
-            y_deductible = (not is_non_deductible) and (yc.get("is_deductible") not in (False, "false", "0", 0))
+            y_deductible = yc.get("is_deductible") not in (False, "false", "0", 0)
+            y_income_level = str(yc.get("income_level") or income_level or "low").strip()
+            y_rate = 16.5 if y_income_level == "low" else 13.2
             y_limit = base_limit if y_deductible else 0.0
             y_ded_target = min(y_dep, y_limit) if y_deductible else 0.0
-            y_tax_saved = math.floor(y_ded_target * (rate / 100.0)) if y_deductible else 0.0
+            y_tax_saved = math.floor(y_ded_target * (y_rate / 100.0)) if y_deductible else 0.0
 
             yearly_results.append({
                 "year": y_year,
                 "deposit": round(y_dep),
                 "is_deductible": bool(y_deductible),
+                "income_level": y_income_level,
+                "rate": y_rate,
                 "deduction_target": round(y_ded_target),
                 "tax_saved": round(y_tax_saved),
             })

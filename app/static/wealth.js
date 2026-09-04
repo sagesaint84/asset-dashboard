@@ -1512,11 +1512,12 @@ function renderAccounts(items) {
       if (aType === "pension_savings" || aType === "irp") {
         const dep = Number(account.annual_deposit) || 0;
         const isaTr = Number(account.isa_transfer_amount) || 0;
+        const cumSaved = calcAccountCumulativeTaxSaved(account);
         if (!isTaxDeductible) {
           taxBenefitBox = `
             <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:3px 8px;font-size:11.5px;color:#34d399;font-weight:600;">
               <span>🌿 비공제 계좌</span>
-              <span style="color:#cbd5e1;font-weight:normal;">(납입 ₩${number(dep, 0)} · 원금 비과세 인출 대상)</span>
+              <span style="color:#cbd5e1;font-weight:normal;">(납입 ₩${number(dep, 0)} · 원금 비과세 인출 대상${cumSaved > 0 ? ` · 누적 절세 <strong style="color:#4ade80;">+₩${number(cumSaved, 0)}</strong>` : ''})</span>
             </div>
           `;
         } else {
@@ -1525,10 +1526,11 @@ function renderAccounts(items) {
           const baseTarget = Math.min(dep, baseLimit);
           const isaTarget = Math.min(isaTr * 0.10, 3000000);
           const refund = Math.floor((baseTarget + isaTarget) * (rate / 100));
+          const cumText = cumSaved > 0 ? ` · 누적 절세 <strong style="color:#4ade80;font-weight:700;">+₩${number(cumSaved, 0)}</strong>` : '';
           taxBenefitBox = `
             <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.35);border-radius:6px;padding:3px 8px;font-size:11.5px;color:#38bdf8;font-weight:600;">
               <span>💎 세액공제 신청</span>
-              <span style="color:#cbd5e1;font-weight:normal;">(납입 ₩${number(dep, 0)} → 예상 환급 <strong style="color:#4ade80;font-weight:700;">+₩${number(refund, 0)}</strong> / ${rate}%)</span>
+              <span style="color:#cbd5e1;font-weight:normal;">(납입 ₩${number(dep, 0)} → 예상 환급 <strong style="color:#4ade80;font-weight:700;">+₩${number(refund, 0)}</strong> / ${rate}%${cumText})</span>
             </div>
           `;
         }
@@ -4446,11 +4448,10 @@ function getTaxCategory(item) {
 
 function calcAccountCumulativeTaxSaved(a) {
   if (!a) return 0;
-  if (!isAccountTaxDeductible(a)) return 0;
   const aType = getTaxCategory(a);
   if (aType !== 'pension_savings' && aType !== 'irp') return 0;
 
-  const rate = a.income_level === 'high' ? 0.132 : 0.165;
+  const defaultRate = a.income_level === 'high' ? 0.132 : 0.165;
   const baseLimit = aType === 'pension_savings' ? 6000000 : 9000000;
   const yList = Array.isArray(a.yearly_contributions) ? a.yearly_contributions : [];
 
@@ -4459,16 +4460,18 @@ function calcAccountCumulativeTaxSaved(a) {
     yList.forEach(y => {
       const isDed = y.is_deductible !== false && String(y.is_deductible) !== 'false';
       if (isDed) {
-        sum += Math.floor(Math.min(Number(y.deposit || 0), baseLimit) * rate);
+        const itemRate = y.income_level === 'high' ? 0.132 : (y.income_level === 'low' ? 0.165 : defaultRate);
+        sum += Math.floor(Math.min(Number(y.deposit || 0), baseLimit) * itemRate);
       }
     });
     return sum;
   } else {
+    if (!isAccountTaxDeductible(a)) return 0;
     const dep = Number(a.annual_deposit) || 0;
     const isaTr = Number(a.isa_transfer_amount) || 0;
     const baseTarget = Math.min(dep, baseLimit);
     const isaTarget = Math.min(isaTr * 0.10, 3000000);
-    return Math.floor((baseTarget + isaTarget) * rate);
+    return Math.floor((baseTarget + isaTarget) * defaultRate);
   }
 }
 
@@ -5045,45 +5048,61 @@ function renderAccountYearlyFormRows(form = document.getElementById("accountEdit
   if (!container) return;
 
   const accType = form.querySelector(".account-type-select")?.value || "pension_savings";
-  const isGlobalDeductible = form.querySelector(".pension-tax-deductible")?.value !== "false";
-  const incomeLvl = form.querySelector(".pension-income-level")?.value || "low";
-  const rate = incomeLvl === "low" ? 16.5 : 13.2;
+  const defaultIncomeLvl = form.querySelector(".pension-income-level")?.value || "low";
   const baseLimit = accType === "pension_savings" ? 6000000 : 9000000;
 
   let cumulativeSaved = 0;
+  let cumulativeDeposit = 0;
 
-  if (!accountCurrentYearlyList.length) {
-    container.innerHTML = `<div style="font-size:11px;color:#94a3b8;padding:8px 4px;text-align:center;">등록된 연도별 납입 이력이 없습니다. [+ 연도 추가]를 눌러 과거 연도별 입금액을 기록해보세요.</div>`;
+  if (!accountCurrentYearlyList || !accountCurrentYearlyList.length) {
+    container.innerHTML = `
+      <div style="font-size:11.5px;color:#94a3b8;padding:12px 8px;text-align:center;background:rgba(0,0,0,0.2);border-radius:6px;">
+        등록된 연도별 납입 이력이 없습니다.<br>
+        상단에서 <strong>연도와 납입금액</strong>을 입력 후 <strong>[➕ 연도 추가 / 반영]</strong>을 눌러주세요.
+      </div>
+    `;
   } else {
+    // Sort descending by year
+    accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+
     container.innerHTML = accountCurrentYearlyList.map((yc, idx) => {
-      const yr = yc.year || (2024 - idx);
+      const yr = String(yc.year || "").trim();
       const dep = Number(yc.deposit || 0);
-      const ded = isGlobalDeductible && yc.is_deductible !== false && String(yc.is_deductible) !== "false";
-      const target = ded ? Math.min(dep, baseLimit) : 0;
-      const saved = ded ? Math.floor(target * (rate / 100)) : 0;
-      if (ded) cumulativeSaved += saved;
+      const isDed = yc.is_deductible !== false && String(yc.is_deductible) !== "false";
+      const incLvl = yc.income_level || defaultIncomeLvl;
+      const rate = incLvl === "high" ? 13.2 : 16.5;
+      const target = isDed ? Math.min(dep, baseLimit) : 0;
+      const saved = isDed ? Math.floor(target * (rate / 100)) : 0;
+
+      cumulativeDeposit += dep;
+      if (isDed) cumulativeSaved += saved;
 
       return `
-        <div class="account-yearly-row" data-index="${idx}" style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.25);border:1px solid rgba(56,189,248,0.2);padding:5px 8px;border-radius:6px;">
-          <input type="number" class="account-yearly-year" value="${yr}" placeholder="연도" style="width:68px;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#f8fafc;" />
-          <span style="font-size:11px;color:#94a3b8;">년</span>
-          <input type="number" class="account-yearly-deposit" value="${dep || ''}" placeholder="납입액" style="flex:1;min-width:70px;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#f8fafc;" min="0" step="any" />
-          <span style="font-size:11px;color:#94a3b8;">원</span>
-          <select class="account-yearly-deductible" style="width:78px;font-size:11.5px;padding:3px 4px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:${ded ? '#38bdf8' : '#34d399'};font-weight:600;">
-            <option value="true" ${yc.is_deductible !== false && String(yc.is_deductible) !== "false" ? "selected" : ""}>공제</option>
-            <option value="false" ${yc.is_deductible === false || String(yc.is_deductible) === "false" ? "selected" : ""}>비공제</option>
-          </select>
-          <span class="account-yearly-saved-badge" style="min-width:85px;text-align:right;font-size:11.5px;font-weight:700;color:${ded ? '#4ade80' : '#34d399'};">
-            ${ded ? `+₩${number(saved, 0)}` : '비공제(₩0)'}
-          </span>
-          <button type="button" class="account-yearly-del-btn" data-index="${idx}" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0 4px;" title="삭제">✕</button>
+        <div class="account-yearly-card" data-index="${idx}" data-year="${yr}" style="display:flex;align-items:center;justify-content:space-between;background:rgba(15,23,42,0.7);border:1px solid ${isDed ? 'rgba(56,189,248,0.25)' : 'rgba(52,211,153,0.25)'};padding:7px 10px;border-radius:6px;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;">
+            <span style="font-weight:700;font-size:13px;color:#38bdf8;min-width:55px;">${yr}년</span>
+            <span style="font-size:12.5px;color:#f8fafc;font-weight:600;min-width:90px;">₩${number(dep, 0)}</span>
+            <span style="font-size:11px;padding:2px 7px;border-radius:4px;background:${isDed ? 'rgba(56,189,248,0.15)' : 'rgba(52,211,153,0.15)'};color:${isDed ? '#38bdf8' : '#34d399'};font-weight:600;">
+              ${isDed ? `🎯 공제 (${rate}%)` : '🌿 비공제'}
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;font-weight:700;color:${isDed ? '#4ade80' : '#94a3b8'};min-width:80px;text-align:right;">
+              ${isDed ? `+₩${number(saved, 0)}` : '절세제외(₩0)'}
+            </span>
+            <button type="button" class="account-yearly-edit-btn" data-index="${idx}" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;" title="상단 입력창으로 불러와 수정">수정</button>
+            <button type="button" class="account-yearly-del-btn" data-index="${idx}" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;" title="삭제">✕</button>
+          </div>
         </div>
       `;
     }).join("");
   }
 
-  const cumEl = form?.querySelector("#accountCumulativeSavedText");
-  if (cumEl) cumEl.textContent = `₩${number(cumulativeSaved, 0)}`;
+  const cumSavedEl = form?.querySelector("#accountCumulativeSavedText");
+  if (cumSavedEl) cumSavedEl.textContent = `₩${number(cumulativeSaved, 0)}`;
+
+  const cumDepEl = form?.querySelector("#accountCumulativeDepositText");
+  if (cumDepEl) cumDepEl.textContent = `₩${number(cumulativeDeposit, 0)}`;
 }
 
 function updateAccountTaxBenefitFields(form) {
@@ -5110,16 +5129,14 @@ function updateAccountTaxBenefitFields(form) {
     const refundEl = form.querySelector(".pension-tax-refund-text");
 
     if (!isDeductible) {
-      if (targetEl) targetEl.textContent = `₩${number(isaTarget, 0)}${isaTarget > 0 ? ' (ISA 추가공제만 적용)' : ' (세액공제 제외)'}`;
+      if (targetEl) targetEl.textContent = isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : '';
       if (refundEl) refundEl.innerHTML = isaTarget > 0
-        ? `+₩${number(Math.floor(isaTarget * (rate / 100)), 0)} <span style="font-size:11px;color:#a7f3d0;">(원금 ₩${number(annualDep, 0)} 비과세 인출용)</span>`
-        : `<span style="color:#a7f3d0;font-size:12px;">₩0 (원금 100% 비과세 인출 대상)</span>`;
+        ? `+₩${number(Math.floor(isaTarget * (rate / 100)), 0)} <span style="font-size:11px;color:#a7f3d0;">(원금 ₩${number(annualDep, 0)} 비과세)</span>`
+        : `<span style="color:#a7f3d0;font-size:12px;">₩0 (원금 비과세 인출 대상)</span>`;
     } else {
-      if (targetEl) targetEl.textContent = `₩${number(totalTarget, 0)}${isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : ''}`;
+      if (targetEl) targetEl.textContent = isaTarget > 0 ? ` (ISA 추가 ₩${number(isaTarget, 0)})` : '';
       if (refundEl) refundEl.textContent = `₩${number(totalRefund, 0)} (${rate}%)`;
     }
-
-    renderAccountYearlyFormRows(form);
   }
 }
 
@@ -5153,6 +5170,22 @@ function openAccountEditDialog(account) {
   accountCurrentYearlyList = Array.isArray(account.yearly_contributions)
     ? JSON.parse(JSON.stringify(account.yearly_contributions))
     : [];
+
+  // Sort descending by year
+  accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+
+  // Set top input year & values
+  const yrInput = form.querySelector(".pension-entry-year");
+  if (yrInput) {
+    if (accountCurrentYearlyList.length > 0) {
+      yrInput.value = accountCurrentYearlyList[0].year || "2026";
+      if (annualDep && (!annualDep.value || annualDep.value === "0")) {
+        annualDep.value = accountCurrentYearlyList[0].deposit || "";
+      }
+    } else {
+      yrInput.value = "2026";
+    }
+  }
 
   updateAccountTaxBenefitFields(form);
   renderAccountYearlyFormRows(form);
@@ -6315,14 +6348,44 @@ async function saveEditAccount() {
   const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
   const yearly_contributions = [];
-  form.querySelectorAll("#accountYearlyList .account-yearly-row").forEach(row => {
-    const yr = (row.querySelector(".account-yearly-year")?.value || "").trim();
-    const dep = Number(row.querySelector(".account-yearly-deposit")?.value) || 0;
-    const ded = row.querySelector(".account-yearly-deductible")?.value === "true";
-    if (yr) {
-      yearly_contributions.push({ year: yr, deposit: dep, is_deductible: ded });
+  accountCurrentYearlyList.forEach(item => {
+    if (item && item.year) {
+      yearly_contributions.push({
+        year: String(item.year).trim(),
+        deposit: Number(item.deposit || 0),
+        is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
+        income_level: item.income_level || income_level
+      });
     }
   });
+
+  // 상단 입력창에 입력된 연도/금액이 이력에 없으면 자동 포함
+  const topYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
+  if (topYr && (account_type === "pension_savings" || account_type === "irp")) {
+    const existing = yearly_contributions.find(y => y.year === topYr);
+    if (!existing && annual_deposit > 0) {
+      yearly_contributions.push({
+        year: topYr,
+        deposit: annual_deposit,
+        is_deductible: isDeductible,
+        income_level: income_level
+      });
+    }
+  }
+
+  // 연도 내림차순 정렬
+  yearly_contributions.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+
+  // 최신 연도 입금액을 annual_deposit에 동기화
+  if (yearly_contributions.length > 0) {
+    const curYearStr = String(new Date().getFullYear());
+    const matchedCur = yearly_contributions.find(y => y.year === curYearStr);
+    if (matchedCur) {
+      annual_deposit = matchedCur.deposit;
+    } else {
+      annual_deposit = yearly_contributions[0].deposit;
+    }
+  }
 
   if (!broker || !name) {
     alert("증권사와 계좌 이름을 모두 입력해 주세요.");
@@ -6440,16 +6503,14 @@ window.saveEditAccount = saveEditAccount;
 window.saveNewAccount = saveNewAccount;
 window.openAccountEditDialog = openAccountEditDialog;
 
-$("#accountEditSaveBtn")?.addEventListener("click", saveEditAccount);
 $("#accountEditForm")?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && !e.target.closest("textarea")) {
     e.preventDefault();
     saveEditAccount();
   }
 });
-$("#accountAddSaveBtn")?.addEventListener("click", saveNewAccount);
 $("#accountAddForm")?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && !e.target.closest("textarea")) {
     e.preventDefault();
     saveNewAccount();
   }
@@ -8923,35 +8984,98 @@ function initSavingsListeners() {
       }
     });
 
-    // 연금/IRP 연도별 이력 관리 이벤트
+    // 연금/IRP 연도별 이력 관리 이벤트 (상단 입력값 -> 하단 이력에 추가/갱신)
     document.getElementById("addAccountYearlyBtn")?.addEventListener("click", () => {
-      const years = accountCurrentYearlyList.map(y => Number(y.year) || 2024);
-      const nextYr = years.length > 0 ? Math.min(...years) - 1 : 2024;
-      accountCurrentYearlyList.push({ year: nextYr, deposit: 6000000, is_deductible: true });
-      renderAccountYearlyFormRows();
-    });
+      const editForm = document.getElementById("accountEditForm");
+      const yrInput = editForm?.querySelector(".pension-entry-year") || document.getElementById("accountInputYear");
+      const depInput = editForm?.querySelector(".pension-annual-deposit") || document.getElementById("accountInputDeposit");
+      const dedInput = editForm?.querySelector(".pension-tax-deductible") || document.getElementById("accountInputDeductible");
+      const incInput = editForm?.querySelector(".pension-income-level") || document.getElementById("accountInputIncomeLevel");
 
-    const handleAccountYearlyRowChange = (e) => {
-      const row = e.target.closest(".account-yearly-row");
-      if (!row) return;
-      const idx = Number(row.dataset.index);
-      if (accountCurrentYearlyList[idx]) {
-        accountCurrentYearlyList[idx].year = row.querySelector(".account-yearly-year")?.value || "";
-        accountCurrentYearlyList[idx].deposit = Number(row.querySelector(".account-yearly-deposit")?.value) || 0;
-        accountCurrentYearlyList[idx].is_deductible = row.querySelector(".account-yearly-deductible")?.value === "true";
-        renderAccountYearlyFormRows();
+      const yr = (yrInput?.value || "").trim();
+      const dep = Number(depInput?.value) || 0;
+      const isDed = dedInput ? dedInput.value !== "false" : true;
+      const incLvl = incInput?.value || "low";
+
+      if (!yr) {
+        alert("연도를 입력해 주세요 (예: 2026).");
+        yrInput?.focus();
+        return;
       }
-    };
-    document.getElementById("accountYearlyList")?.addEventListener("input", handleAccountYearlyRowChange);
-    document.getElementById("accountYearlyList")?.addEventListener("change", handleAccountYearlyRowChange);
+      if (dep < 0) {
+        alert("납입액을 0원 이상 입력해 주세요.");
+        depInput?.focus();
+        return;
+      }
+
+      // 기존 연도 확인 (있으면 갱신, 없으면 추가)
+      const existingIdx = accountCurrentYearlyList.findIndex(y => String(y.year).trim() === yr);
+      if (existingIdx >= 0) {
+        accountCurrentYearlyList[existingIdx].deposit = dep;
+        accountCurrentYearlyList[existingIdx].is_deductible = isDed;
+        accountCurrentYearlyList[existingIdx].income_level = incLvl;
+        toast(`${yr}년 이력이 ₩${number(dep, 0)} (${isDed ? '공제' : '비공제'})로 갱신되었습니다.`);
+      } else {
+        accountCurrentYearlyList.push({
+          year: yr,
+          deposit: dep,
+          is_deductible: isDed,
+          income_level: incLvl
+        });
+        toast(`${yr}년 납입 이력 ₩${number(dep, 0)}이 추가되었습니다.`);
+      }
+
+      // 연도 내림차순 정렬 후 렌더링
+      accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+      renderAccountYearlyFormRows(editForm);
+
+      // 다음 연도를 빠르게 입력할 수 있도록 연도 입력창 자동 제안 (이전 연도 추천)
+      const numYr = parseInt(yr, 10);
+      if (!isNaN(numYr) && yrInput) {
+        const nextSuggested = numYr - 1;
+        if (nextSuggested >= 2010 && !accountCurrentYearlyList.some(y => Number(y.year) === nextSuggested)) {
+          yrInput.value = nextSuggested;
+        }
+      }
+    });
 
     document.getElementById("accountYearlyList")?.addEventListener("click", (e) => {
       const delBtn = e.target.closest(".account-yearly-del-btn");
-      if (!delBtn) return;
-      const idx = Number(delBtn.dataset.index);
-      if (!isNaN(idx)) {
-        accountCurrentYearlyList.splice(idx, 1);
-        renderAccountYearlyFormRows();
+      if (delBtn) {
+        const idx = Number(delBtn.dataset.index);
+        if (!isNaN(idx) && accountCurrentYearlyList[idx]) {
+          const removedYr = accountCurrentYearlyList[idx].year;
+          accountCurrentYearlyList.splice(idx, 1);
+          renderAccountYearlyFormRows();
+          toast(`${removedYr}년 이력이 삭제되었습니다.`);
+        }
+        return;
+      }
+
+      const editBtn = e.target.closest(".account-yearly-edit-btn") || e.target.closest(".account-yearly-card");
+      if (editBtn) {
+        const idx = Number(editBtn.dataset.index);
+        const item = accountCurrentYearlyList[idx];
+        if (item) {
+          const editForm = document.getElementById("accountEditForm");
+          const yrInput = editForm?.querySelector(".pension-entry-year") || document.getElementById("accountInputYear");
+          const depInput = editForm?.querySelector(".pension-annual-deposit") || document.getElementById("accountInputDeposit");
+          const dedInput = editForm?.querySelector(".pension-tax-deductible") || document.getElementById("accountInputDeductible");
+          const incInput = editForm?.querySelector(".pension-income-level") || document.getElementById("accountInputIncomeLevel");
+
+          if (yrInput) yrInput.value = item.year || "";
+          if (depInput) {
+            depInput.value = item.deposit || "";
+            refreshDialogKoreanHints($("#accountEditDialog"));
+            depInput.focus();
+            depInput.select();
+          }
+          if (dedInput) dedInput.value = (item.is_deductible !== false && String(item.is_deductible) !== "false") ? "true" : "false";
+          if (incInput) incInput.value = item.income_level || "low";
+
+          updateAccountTaxBenefitFields(editForm);
+          toast(`${item.year}년 정보가 상단 입력창에 로드되었습니다.`);
+        }
       }
     });
 
@@ -8974,7 +9098,6 @@ function initSavingsListeners() {
         renderYuYearlyFormRows();
       }
     };
-    document.getElementById("yuYearlyList")?.addEventListener("input", handleYuYearlyRowChange);
     document.getElementById("yuYearlyList")?.addEventListener("change", handleYuYearlyRowChange);
 
     document.getElementById("yuYearlyList")?.addEventListener("click", (e) => {
