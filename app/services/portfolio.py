@@ -294,8 +294,27 @@ def get_dashboard(data: dict[str, Any] | None = None, username: str | None = Non
         cash_usd = to_number(acc_cash.get("USD"))
         cash_total_krw = cash_krw + (cash_usd * usd_rate)
 
+        # Ensure yearly_contributions consistency for pension & irp accounts
+        acc_type = a.get("account_type")
+        a_name = (a.get("name") or "").lower()
+        if not acc_type:
+            acc_type = "pension_savings" if ("연금" in a_name) else ("irp" if ("irp" in a_name) else "general")
+
+        ycs = a.get("yearly_contributions")
+        ann_dep = to_number(a.get("annual_deposit"), 0.0)
+        if (acc_type in ("pension_savings", "irp")) and (not ycs or len(ycs) == 0) and ann_dep > 0:
+            ycs = [{
+                "year": "2026",
+                "deposit": ann_dep,
+                "is_deductible": a.get("tax_deductible", True),
+                "income_level": a.get("income_level", "low")
+            }]
+            a["yearly_contributions"] = ycs
+
         accounts[acc_id] = {
             **a,
+            "account_type": acc_type,
+            "yearly_contributions": ycs or [],
             "stock_value_krw": 0.0,
             "cash_krw": cash_krw,
             "cash_usd": cash_usd,

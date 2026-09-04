@@ -5175,6 +5175,17 @@ function openAccountEditDialog(account) {
     ? JSON.parse(JSON.stringify(account.yearly_contributions))
     : [];
 
+  const curYrStr = String(new Date().getFullYear());
+  const acctAnnualDep = Number(account.annual_deposit) || 0;
+  if ((aType === "pension_savings" || aType === "irp") && accountCurrentYearlyList.length === 0 && acctAnnualDep > 0) {
+    accountCurrentYearlyList.push({
+      year: curYrStr,
+      deposit: acctAnnualDep,
+      is_deductible: isTaxDeductible,
+      income_level: acctIncomeLvl
+    });
+  }
+
   // Sort descending by year
   accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
 
@@ -5190,7 +5201,7 @@ function openAccountEditDialog(account) {
   if (yrInput) {
     if (accountCurrentYearlyList.length > 0) {
       const topItem = accountCurrentYearlyList[0];
-      yrInput.value = topItem.year || "2026";
+      yrInput.value = topItem.year || curYrStr;
       if (annualDep) {
         annualDep.value = (topItem.deposit !== undefined && topItem.deposit !== null) ? topItem.deposit : (account.annual_deposit || "");
       }
@@ -5198,10 +5209,10 @@ function openAccountEditDialog(account) {
         dedSel.value = (topItem.is_deductible !== false && String(topItem.is_deductible) !== "false") ? "true" : "false";
       }
       if (incomeLvl) {
-        incomeLvl.value = acctIncomeLvl;
+        incomeLvl.value = topItem.income_level || acctIncomeLvl;
       }
     } else {
-      yrInput.value = "2026";
+      yrInput.value = curYrStr;
       if (annualDep) annualDep.value = (account.annual_deposit && account.annual_deposit > 0) ? account.annual_deposit : "";
     }
   }
@@ -6143,6 +6154,10 @@ $("#accountList")?.addEventListener("click", async (e) => {
         const rAcct = rawDashboard.accounts.find(a => a.id === accId);
         if (rAcct) { rAcct.tax_deductible = newDed; }
       }
+      if (dashboard && Array.isArray(dashboard.accounts)) {
+        const dAcct = dashboard.accounts.find(a => a.id === accId);
+        if (dAcct) { dAcct.tax_deductible = newDed; }
+      }
       renderWithOwner(rawDashboard || dashboard, currentOwner);
       try {
         await api(`/api/accounts/${accId}`, {
@@ -6157,7 +6172,8 @@ $("#accountList")?.addEventListener("click", async (e) => {
             income_level: acct.income_level || "low",
             annual_deposit: Number(acct.annual_deposit) || 0,
             isa_transfer_amount: Number(acct.isa_transfer_amount) || 0,
-            isa_transfer_year: acct.isa_transfer_year || "2026"
+            isa_transfer_year: acct.isa_transfer_year || "2026",
+            yearly_contributions: acct.yearly_contributions || []
           })
         });
         toast(`[${acctName}] ${newDed ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'}으로 전환되었습니다.`);
@@ -6391,7 +6407,7 @@ async function saveEditAccount() {
           year: String(item.year).trim(),
           deposit: Number(item.deposit || 0),
           is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
-          income_level: income_level
+          income_level: item.income_level || income_level
         });
       }
     });
@@ -6430,24 +6446,33 @@ async function saveEditAccount() {
       annual_deposit = 0;
     }
 
+    // 전역 상태 동기화
+    accountCurrentYearlyList = JSON.parse(JSON.stringify(yearly_contributions));
+
     // 1. 메모리 데이터 즉시 갱신 (Optimistic Update)
+    const updateAcctInMemory = (acctObj) => {
+      if (!acctObj) return;
+      acctObj.broker = broker;
+      acctObj.name = name;
+      acctObj.owner = owner;
+      acctObj.account_type = account_type;
+      acctObj.tax_deductible = isDeductible;
+      acctObj.income_level = income_level;
+      acctObj.annual_deposit = annual_deposit;
+      acctObj.isa_transfer_amount = isa_transfer_amount;
+      acctObj.isa_transfer_year = isa_transfer_year;
+      acctObj.yearly_contributions = yearly_contributions;
+    };
+
     if (rawDashboard && Array.isArray(rawDashboard.accounts)) {
-      const localAcct = rawDashboard.accounts.find(a => a.id === accountId);
-      if (localAcct) {
-        localAcct.broker = broker;
-        localAcct.name = name;
-        localAcct.owner = owner;
-        localAcct.account_type = account_type;
-        localAcct.tax_deductible = isDeductible;
-        localAcct.income_level = income_level;
-        localAcct.annual_deposit = annual_deposit;
-        localAcct.isa_transfer_amount = isa_transfer_amount;
-        localAcct.isa_transfer_year = isa_transfer_year;
-        localAcct.yearly_contributions = yearly_contributions;
-      }
+      updateAcctInMemory(rawDashboard.accounts.find(a => a.id === accountId));
     }
+    if (dashboard && Array.isArray(dashboard.accounts)) {
+      updateAcctInMemory(dashboard.accounts.find(a => a.id === accountId));
+    }
+
     // 2. 화면 즉시 재렌더링
-    if (rawDashboard) renderWithOwner(rawDashboard, currentOwner);
+    if (rawDashboard || dashboard) renderWithOwner(rawDashboard || dashboard, currentOwner);
 
     // 3. 다이얼로그 즉시 닫기
     document.getElementById("accountEditDialog")?.close();
@@ -6517,7 +6542,13 @@ async function saveNewAccount() {
         income_level,
         annual_deposit,
         isa_transfer_amount,
-        isa_transfer_year
+        isa_transfer_year,
+        yearly_contributions: (annual_deposit > 0 && (account_type === 'pension_savings' || account_type === 'irp')) ? [{
+          year: "2026",
+          deposit: annual_deposit,
+          is_deductible: isDeductible,
+          income_level: income_level
+        }] : []
       })
     });
     document.getElementById("accountAddDialog")?.close();
@@ -9071,21 +9102,8 @@ function initSavingsListeners() {
       // 연도 내림차순 정렬 후 렌더링
       accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
       renderAccountYearlyFormRows(editForm);
-
-      // 입력한 금액 필드를 비워 다음 저장 시 중복/팬텀 추가 방지
-      if (depInput) {
-        depInput.value = "";
-        refreshDialogKoreanHints(editForm);
-      }
-
-      // 다음 연도를 빠르게 입력할 수 있도록 연도 입력창 자동 제안 (이전 연도 추천)
-      const numYr = parseInt(yr, 10);
-      if (!isNaN(numYr) && yrInput) {
-        const nextSuggested = numYr - 1;
-        if (nextSuggested >= 2010 && !accountCurrentYearlyList.some(y => Number(y.year) === nextSuggested)) {
-          yrInput.value = nextSuggested;
-        }
-      }
+      updateAccountTaxBenefitFields(editForm);
+      refreshDialogKoreanHints(editForm);
     });
 
     document.getElementById("accountYearlyList")?.addEventListener("click", (e) => {
