@@ -190,11 +190,11 @@
                 </div>
               </div>
 
-              <!-- 2. 총 투자자산 / 총 주식자산 -->
-              <div class="summary-row featured" id="totalInvestRow">
+              <!-- 2. 투자자산 / 총 주식자산 -->
+              <div class="summary-row featured" id="totalInvestRow" style="background:rgba(167,139,250,0.06);border-left:3px solid #a78bfa;">
                 <div class="summary-row-label">
-                  <span class="card-icon mini">◈</span>
-                  <strong id="totalInvestLabelText" style="color:#ffffff;font-size:14.5px;">총 투자자산</strong>
+                  <span class="card-icon mini" style="background:rgba(167,139,250,0.2);color:#a78bfa;">◈</span>
+                  <strong id="totalInvestLabelText" style="color:#ffffff;font-size:14.5px;">투자자산</strong>
                 </div>
                 <div class="summary-row-val">
                   <strong id="totalValue" class="value-highlight" style="color:#ffffff;font-size:19px;font-weight:800;">₩0</strong>
@@ -206,10 +206,10 @@
               </div>
 
               <!-- 3. 기대수익 / 총 수익 & 일간 수익 -->
-              <div class="summary-row" id="expectedProfitRow">
+              <div class="summary-row featured" id="expectedProfitRow" style="background:rgba(244,63,94,0.06);border-left:3px solid #f43f5e;">
                 <div class="summary-row-label">
-                  <span class="card-icon mini">↗</span>
-                  <strong id="profitLabelText" style="color:#e2e8f0;">기대수익</strong>
+                  <span class="card-icon mini" style="background:rgba(244,63,94,0.2);color:#f43f5e;">↗</span>
+                  <strong id="profitLabelText" style="color:#ffffff;font-size:14.5px;">기대수익</strong>
                 </div>
                 <div class="summary-row-val">
                   <div class="val-line" style="display:flex;align-items:baseline;justify-content:flex-end;gap:6px;">
@@ -224,16 +224,16 @@
               </div>
 
               <!-- 4. 실현손익 (자산: 통합 실현손익 / 주식: 주식 실현손익) -->
-              <div class="summary-row" id="realizedPnlRow">
+              <div class="summary-row featured" id="realizedPnlRow" style="background:rgba(245,158,11,0.06);border-left:3px solid #f59e0b;">
                 <div class="summary-row-label">
-                  <span class="card-icon mini">📈</span>
-                  <strong id="pnlLabelText" style="color:#e2e8f0;">실현손익</strong>
+                  <span class="card-icon mini" style="background:rgba(245,158,11,0.2);color:#f59e0b;">📈</span>
+                  <strong id="pnlLabelText" style="color:#ffffff;font-size:14.5px;">실현손익</strong>
                 </div>
                 <div class="summary-row-val">
                   <div class="val-line">
                     <strong id="summaryRealizedPnl" class="gain up" style="color:#f43f5e;font-weight:700;font-size:16px;">+₩0</strong>
                   </div>
-                  <div id="pnlSubBreakdown" style="font-size:11px;color:#94a3b8;margin-top:2px;display:none;text-align:right;"></div>
+                  <div id="pnlSubBreakdown" style="font-size:11.5px;color:#cbd5e1;margin-top:4px;display:none;flex-direction:column;align-items:flex-end;gap:2px;"></div>
                   <div style="margin-top:5px;font-size:12px;line-height:1.6;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
                     <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;">
                       <span id="pnlYearLabel" style="color:#94a3b8;font-size:11.5px;min-width:30px;text-align:right;">26년</span>
@@ -248,10 +248,10 @@
               </div>
 
               <!-- 5. 총 배당금 및 이자 (주식 탭 전용 행) -->
-              <div class="summary-row" id="dividendRow" style="display:none;">
+              <div class="summary-row featured" id="dividendRow" style="display:none;background:rgba(234,179,8,0.06);border-left:3px solid #eab308;">
                 <div class="summary-row-label">
-                  <span class="card-icon mini">💰</span>
-                  <strong id="divLabelText" style="color:#e2e8f0;">배당금</strong>
+                  <span class="card-icon mini" style="background:rgba(234,179,8,0.2);color:#eab308;">💰</span>
+                  <strong id="divLabelText" style="color:#ffffff;font-size:14.5px;">배당금</strong>
                 </div>
                 <div class="summary-row-val">
                   <div class="val-line">
@@ -2654,7 +2654,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260904-v5512"></script>
+    <script src="/static/wealth.js?v=20260904-v5513"></script>
   </body>
 </html>
 

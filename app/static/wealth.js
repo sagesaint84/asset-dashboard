@@ -1103,9 +1103,9 @@ function renderSummary(data) {
         : `부채 ₩0`;
     }
 
-    // 2. 총 투자자산 (부동산 + 주식)
+    // 2. 투자자산 (부동산 + 주식)
     if ($("#totalInvestRow")) $("#totalInvestRow").style.display = "flex";
-    if ($("#totalInvestLabelText")) $("#totalInvestLabelText").textContent = "총 투자자산";
+    if ($("#totalInvestLabelText")) $("#totalInvestLabelText").textContent = "투자자산";
     if ($("#totalValue")) $("#totalValue").textContent = money(totalInvestAssets);
     if ($("#subAssetBreakdown")) $("#subAssetBreakdown").style.display = "flex";
     if ($("#subRealEstateVal")) $("#subRealEstateVal").textContent = `부동산 ${money(totalREInvestEquity)}`;
@@ -1137,8 +1137,11 @@ function renderSummary(data) {
       $("#summaryRealizedPnl").style.color = combinedRealizedKrw >= 0 ? "#f43f5e" : "#38bdf8";
     }
     if ($("#pnlSubBreakdown")) {
-      $("#pnlSubBreakdown").style.display = "block";
-      $("#pnlSubBreakdown").textContent = `매매차익 ₩${number(totalRealizedKrw, 0)} · 배당/이자 ₩${number(totalActualDivKrw, 0)}`;
+      $("#pnlSubBreakdown").style.display = "flex";
+      $("#pnlSubBreakdown").innerHTML = `
+        <span style="color:#cbd5e1;display:block;">매매차익 ₩${number(totalRealizedKrw, 0)}</span>
+        <span style="color:#cbd5e1;display:block;">배당/이자 ₩${number(totalActualDivKrw, 0)}</span>
+      `;
     }
     if ($("#pnlYearLabel")) $("#pnlYearLabel").textContent = `${currYear2Digit}년`;
     if ($("#summaryRealizedPnlYear")) {
