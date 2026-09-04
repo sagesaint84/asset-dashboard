@@ -5202,6 +5202,7 @@ function openAccountEditDialog(account) {
       }
     } else {
       yrInput.value = "2026";
+      if (annualDep) annualDep.value = (account.annual_deposit && account.annual_deposit > 0) ? account.annual_deposit : "";
     }
   }
 
@@ -6425,6 +6426,8 @@ async function saveEditAccount() {
       } else {
         annual_deposit = yearly_contributions[0].deposit;
       }
+    } else {
+      annual_deposit = 0;
     }
 
     // 1. 메모리 데이터 즉시 갱신 (Optimistic Update)
@@ -9069,6 +9072,12 @@ function initSavingsListeners() {
       accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
       renderAccountYearlyFormRows(editForm);
 
+      // 입력한 금액 필드를 비워 다음 저장 시 중복/팬텀 추가 방지
+      if (depInput) {
+        depInput.value = "";
+        refreshDialogKoreanHints(editForm);
+      }
+
       // 다음 연도를 빠르게 입력할 수 있도록 연도 입력창 자동 제안 (이전 연도 추천)
       const numYr = parseInt(yr, 10);
       if (!isNaN(numYr) && yrInput) {
@@ -9088,6 +9097,22 @@ function initSavingsListeners() {
           accountCurrentYearlyList.splice(idx, 1);
           renderAccountYearlyFormRows();
           toast(`${removedYr}년 이력이 삭제되었습니다.`);
+
+          // 상단 입력창이 삭제된 연도를 가리키고 있었다면 초기화하여 저장 시 부활 방지
+          const editForm = document.getElementById("accountEditForm");
+          const yrInput = editForm?.querySelector(".pension-entry-year");
+          const depInput = editForm?.querySelector(".pension-annual-deposit");
+          if (yrInput && String(yrInput.value).trim() === String(removedYr).trim()) {
+            if (accountCurrentYearlyList.length > 0) {
+              yrInput.value = accountCurrentYearlyList[0].year;
+              if (depInput) depInput.value = accountCurrentYearlyList[0].deposit || "";
+            } else {
+              yrInput.value = "2026";
+              if (depInput) depInput.value = "";
+            }
+            refreshDialogKoreanHints(editForm);
+            updateAccountTaxBenefitFields(editForm);
+          }
         }
         return;
       }
