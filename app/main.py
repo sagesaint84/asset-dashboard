@@ -995,6 +995,17 @@ async def create_account(request: Request) -> dict:
         "profit_krw": 0,
         "holding_count": 0,
     }
+    cash_krw = float(to_number(body.get("cash_krw", 0.0)))
+    cash_usd = float(to_number(body.get("cash_usd", 0.0)))
+    if cash_krw > 0 or cash_usd > 0:
+        cash_balances = data["settings"].setdefault("cash_balances", {})
+        cash_balances[new_account["id"]] = {"KRW": cash_krw, "USD": cash_usd}
+        usd_rate = float(data.get("settings", {}).get("usd_krw_rate", 1400.0))
+        cash_total_krw = cash_krw + (cash_usd * usd_rate)
+        new_account["cash_krw"] = cash_krw
+        new_account["cash_usd"] = cash_usd
+        new_account["cash_total_krw"] = cash_total_krw
+        new_account["market_value_krw"] = cash_total_krw
     if "yearly_contributions" in body:
         new_account["yearly_contributions"] = body.get("yearly_contributions") or []
     data.setdefault("accounts", []).append(new_account)
@@ -1443,13 +1454,20 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
             "income_level": account.get("income_level", "low")
         }]
 
+    if "cash_krw" in payload or "cash_usd" in payload:
+        cash_balances = data["settings"].setdefault("cash_balances", {})
+        existing_cash = cash_balances.get(account_id, {})
+        cash_krw = float(to_number(payload["cash_krw"])) if "cash_krw" in payload else float(to_number(existing_cash.get("KRW", 0.0)))
+        cash_usd = float(to_number(payload["cash_usd"])) if "cash_usd" in payload else float(to_number(existing_cash.get("USD", 0.0)))
+        cash_balances[account_id] = {"KRW": cash_krw, "USD": cash_usd}
+
     for holding in data["holdings"]:
         if holding.get("account_id") == account_id:
             holding["account_name"] = name
             if broker:
                 holding["broker"] = broker
     write_portfolio(data, username=username)
-    return {"message": "증권사 및 계좌 정보를 수정했습니다."}
+    return {"message": "증권사 및 계좌 정보를 수정했습니다.", "dashboard": get_dashboard(username=username)}
 
 
 @app.get("/api/tax-benefits")

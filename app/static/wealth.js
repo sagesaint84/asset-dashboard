@@ -1545,7 +1545,6 @@ function renderAccounts(items) {
           ${taxBenefitBox}
         </div>
         <div class="account-row-actions">
-          <button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button>
           <button class="account-action-button" data-account-edit-id="${account.id}" title="계좌 정보 수정" type="button">✎</button>
           <button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button>
         </div>
@@ -5407,6 +5406,8 @@ function openAccountEditDialog(account) {
   form.broker.value = account.broker || "";
   form.name.value = account.name || "";
   if (form.owner) form.owner.value = account.owner || "모두";
+  if (form.cash_krw) form.cash_krw.value = account.cash_krw || "";
+  if (form.cash_usd) form.cash_usd.value = account.cash_usd || "";
 
   const aName = (account.name || "").toLowerCase();
   const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
@@ -6686,6 +6687,8 @@ async function saveEditAccount() {
     let annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
     const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
     const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
+    const cash_krw = Number(form.querySelector("[name='cash_krw']")?.value) || 0;
+    const cash_usd = Number(form.querySelector("[name='cash_usd']")?.value) || 0;
 
     // 만약 특정 연도 항목을 [수정] 모드로 변경 중인 상태에서 바로 [저장]을 누른 경우
     let editingIndexApplied = false;
@@ -6769,6 +6772,11 @@ async function saveEditAccount() {
       acctObj.isa_transfer_amount = isa_transfer_amount;
       acctObj.isa_transfer_year = isa_transfer_year;
       acctObj.yearly_contributions = yearly_contributions;
+      acctObj.cash_krw = cash_krw;
+      acctObj.cash_usd = cash_usd;
+      const usdRate = Number(dashboard?.summary?.usd_krw_rate || rawDashboard?.summary?.usd_krw_rate || 1400);
+      acctObj.cash_total_krw = cash_krw + (cash_usd * usdRate);
+      acctObj.market_value_krw = Number(acctObj.stock_value_krw || 0) + acctObj.cash_total_krw;
     };
 
     if (rawDashboard && Array.isArray(rawDashboard.accounts)) {
@@ -6798,11 +6806,17 @@ async function saveEditAccount() {
         annual_deposit,
         isa_transfer_amount,
         isa_transfer_year,
-        yearly_contributions
+        yearly_contributions,
+        cash_krw,
+        cash_usd
       })
     });
 
-    toast(`[${name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} (납입 ₩${number(annual_deposit, 0)}) 저장되었습니다.`);
+    if (account_type === "pension_savings" || account_type === "irp") {
+      toast(`[${name}] ${isDeductible ? '🎯 세액공제 신청' : '🌿 세액공제 제외(비공제)'} (납입 ₩${number(annual_deposit, 0)}) 저장되었습니다.`);
+    } else {
+      toast(`[${name}] 계좌 정보 및 예수금이 저장되었습니다.`);
+    }
     await loadDashboard();
   } catch (err) {
     console.error("계좌 수정 오류:", err);
@@ -6830,6 +6844,8 @@ async function saveNewAccount() {
   const annual_deposit = Number(form.querySelector(".pension-annual-deposit")?.value) || 0;
   const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
   const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
+  const cash_krw = Number(form.querySelector("[name='cash_krw']")?.value) || 0;
+  const cash_usd = Number(form.querySelector("[name='cash_usd']")?.value) || 0;
 
   if (!broker || !account_name) {
     alert("증권사와 계좌 이름을 모두 입력해 주세요.");
@@ -6860,7 +6876,9 @@ async function saveNewAccount() {
           deposit: annual_deposit,
           is_deductible: isDeductible,
           income_level: income_level
-        }] : []
+        }] : [],
+        cash_krw,
+        cash_usd
       })
     });
     document.getElementById("accountAddDialog")?.close();
