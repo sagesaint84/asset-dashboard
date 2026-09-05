@@ -1641,9 +1641,11 @@
 dialog.dialog {
   max-width: 620px !important;
   width: 95vw !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   padding: 24px !important;
   box-sizing: border-box !important;
-  overflow-x: hidden !important;
   border-radius: 12px !important;
 }
 

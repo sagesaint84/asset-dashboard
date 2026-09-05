@@ -4882,7 +4882,10 @@ function renderTaxAccountHoldings(owner = currentOwner) {
             <strong style="color:#f8fafc;font-size:12.5px;">${html(acct.name)}</strong>
             ${isAcctActive ? '<span style="font-size:9.5px;padding:1px 5px;border-radius:3px;background:#a78bfa;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
           </div>
-          ${typeBadge}
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${typeBadge}
+            <button class="account-action-button" data-account-id="${acct.id}" title="계좌 정보 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#cbd5e1;cursor:pointer;">✎</button>
+          </div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:2px;">
           <span>${html(acct.broker)} [${html(acct.owner || '모두')}]</span>
@@ -5397,6 +5400,20 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // ✎ 증권/연금/IRP 계좌 정보 수정 모달 열기 (증권 탭, 보험/연금 탭, 절세계좌 탭 어디서든 100% 동작)
+  const acctEditBtn = e.target.closest('[data-account-id]');
+  if (acctEditBtn) {
+    e.preventDefault();
+    const aid = acctEditBtn.dataset.accountId;
+    const acct = (dashboard?.accounts || []).find(a => a.id === aid) || (rawDashboard?.accounts || []).find(a => a.id === aid);
+    if (acct) {
+      openAccountEditDialog(acct);
+    } else {
+      console.warn("[openAccountEditDialog] 계좌를 찾을 수 없습니다:", aid);
+    }
+    return;
+  }
+
   // 보험/연금 수정
   const insEditBtn = e.target.closest('[data-insurance-edit-id]');
   if (insEditBtn) {
@@ -5569,24 +5586,6 @@ document.addEventListener('click', async (e) => {
       } catch (err) {
         toast(err.message || '삭제 실패', true);
       }
-    }
-    return;
-  }
-
-  // 💾 계좌 추가 저장 버튼
-  if (e.target.closest('#accountAddSaveBtn')) {
-    e.preventDefault();
-    if (typeof saveNewAccount === 'function') {
-      saveNewAccount();
-    }
-    return;
-  }
-
-  // 💾 계좌 수정 저장 버튼
-  if (e.target.closest('#accountEditSaveBtn')) {
-    e.preventDefault();
-    if (typeof saveEditAccount === 'function') {
-      saveEditAccount();
     }
     return;
   }
@@ -6372,10 +6371,14 @@ $("#accountCashForm")?.addEventListener("submit", async (e) => {
   }
 });
 
+let isSavingAccount = false;
+
 async function saveEditAccount() {
+  if (isSavingAccount) return;
   const form = document.getElementById("accountEditForm");
   if (!form) return;
   const saveBtn = document.getElementById("accountEditSaveBtn");
+  isSavingAccount = true;
   if (saveBtn) busy(saveBtn, true);
 
   try {
@@ -6384,9 +6387,10 @@ async function saveEditAccount() {
       alert("계좌 식별자(ID)를 찾을 수 없습니다. 다시 시도해 주세요.");
       return;
     }
-    const broker = (form.querySelector("[name='broker']")?.value || "").trim();
-    const name = (form.querySelector("[name='name']")?.value || "").trim();
-    const owner = (form.querySelector("[name='owner']")?.value || "모두").trim();
+    const existingAcct = (dashboard?.accounts || []).find(a => a.id === accountId) || (rawDashboard?.accounts || []).find(a => a.id === accountId);
+    const broker = (form.querySelector("[name='broker']")?.value || "").trim() || (existingAcct?.broker || "");
+    const name = (form.querySelector("[name='name']")?.value || "").trim() || (existingAcct?.name || "");
+    const owner = (form.querySelector("[name='owner']")?.value || "").trim() || (existingAcct?.owner || "모두");
 
     if (!broker || !name) {
       alert("증권사와 계좌 이름을 모두 입력해 주세요.");
@@ -6503,11 +6507,15 @@ async function saveEditAccount() {
     toast(err.message || String(err), true);
     await loadDashboard();
   } finally {
+    isSavingAccount = false;
     if (saveBtn) busy(saveBtn, false);
   }
 }
 
+let isSavingNewAccount = false;
+
 async function saveNewAccount() {
+  if (isSavingNewAccount) return;
   const form = document.getElementById("accountAddForm");
   if (!form) return;
   const broker = (form.querySelector("[name='broker']")?.value || "").trim();
@@ -6526,6 +6534,7 @@ async function saveNewAccount() {
   }
 
   const saveBtn = document.getElementById("accountAddSaveBtn");
+  isSavingNewAccount = true;
   if (saveBtn) busy(saveBtn, true);
 
   try {
@@ -6560,6 +6569,7 @@ async function saveNewAccount() {
     alert(`계좌 추가 중 오류가 발생했습니다: ${err.message}`);
     toast(err.message, true);
   } finally {
+    isSavingNewAccount = false;
     if (saveBtn) busy(saveBtn, false);
   }
 }
@@ -9088,7 +9098,7 @@ function initSavingsListeners() {
         accountCurrentYearlyList[existingIdx].deposit = dep;
         accountCurrentYearlyList[existingIdx].is_deductible = isDed;
         accountCurrentYearlyList[existingIdx].income_level = incLvl;
-        toast(`${yr}년 이력이 ₩${number(dep, 0)} (${isDed ? '공제' : '비공제'})로 갱신되었습니다.`);
+        toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 반영되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
       } else {
         accountCurrentYearlyList.push({
           year: yr,
@@ -9096,7 +9106,7 @@ function initSavingsListeners() {
           is_deductible: isDed,
           income_level: incLvl
         });
-        toast(`${yr}년 납입 이력 ₩${number(dep, 0)}이 추가되었습니다.`);
+        toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 목록에 추가되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
       }
 
       // 연도 내림차순 정렬 후 렌더링
