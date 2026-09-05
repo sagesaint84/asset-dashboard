@@ -1,4 +1,15 @@
+v5.5.37
+
+(feat) 📱 주식기록 [전체주식] 탭 날짜별 자산추이 모바일 스크롤 및 테마별 스크롤바 디자인 지원
+- **날짜별 자산추이 기록(`.record-list`) 모바일 스크롤 컨테이너 복원**:
+  - 기존 1100px 이하 모바일/태블릿 반응형 미디어 쿼리에서 `max-height: none`으로 풀려 화면 전체로 길어지던 현상 수정
+  - 모바일(1100px 이하 및 600px 이하) 환경에서 최적 높이(`max-height: 380px` / `340px`) 및 부드러운 터치 스크롤(`-webkit-overflow-scrolling: touch; overscroll-behavior: contain`) 적용
+- **다크/화이트/OLED 테마별 커스텀 슬림 스크롤바 적용**:
+  - 다크, 화이트, OLED 테마 색상에 최적화된 은은한 슬림 스크롤바(`width: 6px`) 및 Firefox(`scrollbar-width: thin`) 완벽 호환
+(perf) 서비스 워커 캐시 버전(`wealth-cache-v135`) 및 정적 자산 쿼리(`v5537`) 갱신
+
 v5.5.36
+
 
 (fix) 💾 전체 데이터 백업(저장하기) 및 복원(가져오기) 시 스마트 가계부(ledger) 및 OpenAPI 설정 포함 지원
 - **데이터 백업(`/api/export`) 가계부 내역 완전 포함**:
