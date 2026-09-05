@@ -180,26 +180,33 @@ class NhPlugOpenAPI:
             
             # 예수금: D+2 결제반영 추정 예수금(nxt2_dd_dca) 또는 원장 예수금(dca) 우선
             krw_cash = 0.0
-            for k in ("nxt2_dd_dca", "dca", "nas_amt", "drn_pbl_amt", "orr_pbl_amt1"):
-                val = out_0.get(k)
-                if val is not None:
-                    f_val = as_float(val)
-                    if f_val > 0:
-                        krw_cash = f_val
-                        break
-            if krw_cash == 0.0 and out_0.get("dca") is not None:
+            if out_0.get("nxt2_dd_dca") is not None and str(out_0.get("nxt2_dd_dca")).strip() != "":
+                krw_cash = as_float(out_0.get("nxt2_dd_dca"))
+            elif out_0.get("dca") is not None and str(out_0.get("dca")).strip() != "":
                 krw_cash = as_float(out_0.get("dca"))
+            else:
+                for k in ("nas_amt", "drn_pbl_amt", "orr_pbl_amt1"):
+                    val = out_0.get(k)
+                    if val is not None and str(val).strip() != "":
+                        krw_cash = as_float(val)
+                        break
 
             usd_cash = 0.0
             self.account_cash[account_no] = {"KRW": krw_cash, "USD": 0.0}
 
             for item in domestic.get("Output_1", []) or []:
-                # 수량: 결제기준(itg_bnc_qty)이 0인 경우 체결기준 잔여수량(rsdl_qty, ny_stl_qty) 확인
-                qty = as_float(item.get("itg_bnc_qty"))
-                if qty <= 0:
-                    qty = as_float(item.get("rsdl_qty") or item.get("ny_stl_qty", 0))
-                
-                if qty <= 0:
+                # 수량: 체결기준 잔여수량(rsdl_qty)이 최우선 (당일 매도 체결 시 0으로 반영)
+                qty = None
+                if item.get("rsdl_qty") is not None and str(item.get("rsdl_qty")).strip() != "":
+                    qty = as_float(item.get("rsdl_qty"))
+                elif item.get("itg_bnc_qty") is not None:
+                    itg = as_float(item.get("itg_bnc_qty"))
+                    ny = as_float(item.get("ny_stl_qty", 0))
+                    qty = itg + ny if item.get("ny_stl_qty") is not None else itg
+                else:
+                    qty = as_float(item.get("hldg_qty") or item.get("qty", 0))
+
+                if qty is None or qty <= 0:
                     continue
 
                 code = str(item.get("iem_cd", "")).strip()
@@ -227,14 +234,30 @@ class NhPlugOpenAPI:
                     )
                     ov_out0 = overseas.get("Output_0") or {}
                     if currency == "USD":
-                        ov_usd = as_float(ov_out0.get("fc_dca") or ov_out0.get("fc_ny_stl_xcl_amt") or ov_out0.get("fc_aet_amt", 0))
-                        if ov_usd > 0:
-                            usd_cash = ov_usd
-                            self.account_cash[account_no]["USD"] = usd_cash
+                        for k in ("fc_dca", "fc_ny_stl_xcl_amt", "fc_aet_amt"):
+                            val = ov_out0.get(k)
+                            if val is not None and str(val).strip() != "":
+                                ov_usd = as_float(val)
+                                if ov_usd != 0:
+                                    usd_cash = ov_usd
+                                    break
+                        self.account_cash[account_no]["USD"] = usd_cash
 
                     for item in overseas.get("Output_1", []) or []:
-                        ov_qty = as_float(item.get("cns_bse_bnc_qty") or item.get("fc_cns_bse_bnc_qty") or item.get("rsdl_qty") or item.get("itg_bnc_qty", 0))
-                        if ov_qty <= 0:
+                        ov_qty = None
+                        for k in ("cns_bse_bnc_qty", "fc_cns_bse_bnc_qty", "rsdl_qty"):
+                            if item.get(k) is not None and str(item.get(k)).strip() != "":
+                                ov_qty = as_float(item.get(k))
+                                break
+                        if ov_qty is None:
+                            if item.get("itg_bnc_qty") is not None:
+                                itg = as_float(item.get("itg_bnc_qty"))
+                                ny = as_float(item.get("ny_stl_qty") or item.get("fc_ny_stl_qty", 0))
+                                ov_qty = itg + ny if (item.get("ny_stl_qty") is not None or item.get("fc_ny_stl_qty") is not None) else itg
+                            else:
+                                ov_qty = as_float(item.get("hldg_qty") or item.get("qty", 0))
+
+                        if ov_qty is None or ov_qty <= 0:
                             continue
                         ov_code = str(item.get("iem_cd", "")).strip()
                         ov_name = str(item.get("iem_nm") or item.get("oss_iem_eng_nm", "")).strip() or ov_code
