@@ -3294,7 +3294,9 @@ dialog.dialog .dialog-actions {
 
 /* ── 주식기록 [절세계좌] 탭 전용 레이아웃: 좌측 계좌내역, 우측 보유종목 및 전체변화 카드 제외 ── */
 .records-panel.is-tax-view .records-grid {
-  grid-template-columns: minmax(320px, 0.88fr) minmax(0, 1.42fr);
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
 }
 
 .records-panel.is-tax-view .record-side {
@@ -3303,6 +3305,7 @@ dialog.dialog .dialog-actions {
 
 .records-panel.is-tax-view .record-chart-wrap {
   order: 2;
+  min-width: 0;
 }
 
 .records-panel.is-tax-view .record-side-summary {
@@ -3310,7 +3313,42 @@ dialog.dialog .dialog-actions {
 }
 
 .records-panel.is-tax-view .record-list {
-  max-height: 520px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.records-panel.is-tax-view .tax-table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 560px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.records-panel.is-tax-view .tax-holdings-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.records-panel.is-tax-view .tax-holdings-table thead th {
+  position: sticky;
+  top: 0;
+  background: #0d1424;
+  z-index: 3;
+  padding: 12px 10px;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.records-panel.is-tax-view .tax-holdings-table tbody td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.records-panel.is-tax-view .tax-holdings-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 @media (max-width: 1100px) {
@@ -3318,6 +3356,7 @@ dialog.dialog .dialog-actions {
     grid-template-columns: 1fr !important;
   }
 }
+
 
 
 

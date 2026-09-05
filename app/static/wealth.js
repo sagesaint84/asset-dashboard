@@ -11,6 +11,8 @@ let currentStockChartCurrency = 'KRW';
 let currentStockChartPeriod = '1M'; // '1D' | '1W' | '1M' | '1Y'
 let holdingSortField = 'market_value_krw';
 let holdingSortOrder = 'desc'; // 'asc' | 'desc'
+let taxHoldingSortField = 'market_value_krw';
+let taxHoldingSortOrder = 'desc'; // 'asc' | 'desc'
 let heatmapViewMode = localStorage.getItem("heatmap_view_mode") || "treemap"; // 'treemap' | 'cards'
 let heatmapPeriod = localStorage.getItem("heatmap_period") || "1D";
 let heatmapTheme = localStorage.getItem("heatmap_theme") || "kr";
@@ -4592,17 +4594,63 @@ function renderTaxAccountHoldings(owner = currentOwner) {
     filterBadgeName = '전체';
   }
 
-  // 표시 종목 정렬: 평가금액 큰 순서
-  filteredHoldings.sort((a, b) => {
-    const valA = Number(a.market_value_krw) || ((Number(a.quantity) || 0) * (Number(a.current_price) || 0));
-    const valB = Number(b.market_value_krw) || ((Number(b.quantity) || 0) * (Number(b.current_price) || 0));
-    return valB - valA;
+  // 종목 단위 그룹화 (동일 종목을 보유한 계좌들을 하위에 나열)
+  const groups = new Map();
+  filteredHoldings.forEach((h) => {
+    const key = `${h.code || ''}|${h.currency || 'KRW'}|${h.name || ''}`;
+    const group = groups.get(key) || {
+      code: h.code || '',
+      name: h.name || '',
+      market: h.market || '',
+      currency: h.currency || 'KRW',
+      sector: h.sector || '기타',
+      current_price: Number(h.current_price || 0),
+      day_change_rate: Number(h.day_change_rate || 0),
+      quantity: 0,
+      market_value_krw: 0,
+      cost_value_krw: 0,
+      profit_krw: 0,
+      items: [],
+    };
+    const qty = Number(h.quantity || 0);
+    const curPrice = Number(h.current_price || 0);
+    const avgPrice = Number(h.avg_price || 0);
+    const marketVal = Number(h.market_value_krw) || (qty * curPrice);
+    const costVal = Number(h.cost_value_krw) || (qty * avgPrice);
+    const profitVal = Number(h.profit_krw) || (marketVal - costVal);
+
+    group.quantity += qty;
+    group.market_value_krw += marketVal;
+    group.cost_value_krw += costVal;
+    group.profit_krw += profitVal;
+    group.items.push(h);
+    groups.set(key, group);
+  });
+
+  let sortedGroups = [...groups.values()].map((item) => {
+    const rate = item.cost_value_krw ? (item.profit_krw / item.cost_value_krw) * 100 : 0;
+    return { ...item, return_rate: rate };
+  });
+
+  // 정렬 적용 (종목명, 섹터, 수량, 평가금액, 손익, 수익률, 등락률)
+  sortedGroups.sort((a, b) => {
+    let valA = a[taxHoldingSortField];
+    let valB = b[taxHoldingSortField];
+
+    if (taxHoldingSortField === 'name' || taxHoldingSortField === 'sector') {
+      valA = String(valA || '').toLowerCase();
+      valB = String(valB || '').toLowerCase();
+      return taxHoldingSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    }
+    valA = Number(valA || 0);
+    valB = Number(valB || 0);
+    return taxHoldingSortOrder === 'asc' ? valA - valB : valB - valA;
   });
 
   const filteredStats = calcHoldingStats(filteredHoldings);
 
   // 상단 사이드 요약 업데이트 (전체변화 카드는 절세계좌 탭에서 제외)
-  if ($("#recordCount")) $("#recordCount").textContent = `${filteredHoldings.length}개 종목 (${filterBadgeName})`;
+  if ($("#recordCount")) $("#recordCount").textContent = `${sortedGroups.length}개 종목 (${filterBadgeName})`;
   if (sideSummaryEl) sideSummaryEl.style.display = "none";
 
   // 스냅샷/추가 버튼 숨김/표시
@@ -4625,84 +4673,88 @@ function renderTaxAccountHoldings(owner = currentOwner) {
     return;
   }
 
-  // 좌측 종목 리스트 렌더링
+  // 우측 종목 리스트 렌더링 (기존보유종목과 동일한 테이블 구조 및 보유계좌 나열)
   let holdingsHtml = '';
-  if (!filteredHoldings.length) {
+  if (!sortedGroups.length) {
     holdingsHtml = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:260px;color:#94a3b8;text-align:center;">
         <span style="font-size:32px;margin-bottom:8px;">🔍</span>
         <strong style="font-size:15px;color:#cbd5e1;margin-bottom:6px;">${filterTitle}에 등록된 보유종목이 없습니다.</strong>
-        <p style="font-size:12px;margin:0 0 12px;color:#64748b;">우측 카드에서 다른 절세계좌를 선택하시거나 전체보기를 눌러주세요.</p>
+        <p style="font-size:12px;margin:0 0 12px;color:#64748b;">좌측 카드에서 다른 절세계좌를 선택하시거나 전체보기를 눌러주세요.</p>
         <button type="button" class="button secondary compact" style="cursor:pointer;" onclick="currentTaxAccountFilter='all';renderTaxAccountHoldings(currentOwner);">🌿 절세계좌 전체 보기</button>
       </div>
     `;
   } else {
-    holdingsHtml = filteredHoldings.map((h) => {
-      const acct = h._matchedAccount || taxAccountMap.get(h.account_id) || {};
-      const acctName = acct.name || h.account_name || '절세계좌';
-      const acctBroker = acct.broker || h.broker || '';
-      const cat = h._taxCategory || getTaxCategory(acct);
-      const isDeductible = isAccountTaxDeductible(acct);
+    const trsHtml = sortedGroups.map((item) => {
+      const dayRate = Number(item.day_change_rate || 0);
+      const accounts = item.items.map((detail) => {
+        const acct = detail._matchedAccount || taxAccountMap.get(detail.account_id) || {};
+        const acctName = acct.name || detail.account_name || '절세계좌';
+        const acctBroker = acct.broker || detail.broker || '';
+        const acctOwner = detail.owner || acct.owner || '';
+        const ownerLabel = (o === '모두' && acctOwner) ? ` [${acctOwner}]` : '';
 
-      const qty = Number(h.quantity || 0);
-      const curPrice = Number(h.current_price || 0);
-      const avgPrice = Number(h.avg_price || 0);
-      const marketVal = Number(h.market_value_krw) || (qty * curPrice);
-      const costVal = Number(h.cost_value_krw) || (qty * avgPrice);
-      const profitVal = Number(h.profit_krw) || (marketVal - costVal);
-      const profitRate = costVal > 0 ? (profitVal / costVal) * 100 : (Number(h.profit_rate) || 0);
-
-      let typeBadge = '';
-      if (cat === 'isa') {
-        typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;font-size:11px;font-weight:700;">🔄 ISA 비과세</span>`;
-      } else if (cat === 'irp') {
-        typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(167,139,250,0.18)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#c4b5fd' : '#34d399'};font-size:11px;font-weight:700;">🛡️ IRP ${isDeductible ? '공제' : '비공제'}</span>`;
-      } else {
-        typeBadge = `<span style="display:inline-block;padding:2px 7px;border-radius:4px;background:${isDeductible ? 'rgba(56,189,248,0.15)' : 'rgba(16,185,129,0.15)'};color:${isDeductible ? '#38bdf8' : '#34d399'};font-size:11px;font-weight:700;">💎 연금저축 ${isDeductible ? '공제' : '비공제'}</span>`;
-      }
+        return `
+          <span class="holding-account-detail">
+            ${html(acctBroker)} ${html(acctName)}${html(ownerLabel)} ${number(detail.quantity, 0)}주
+            <button class="mini-edit-button edit-button" data-id="${detail.id}" title="수정" type="button">✎</button>
+            <button class="mini-edit-button delete-button" data-id="${detail.id}" title="삭제" type="button">×</button>
+          </span>
+        `;
+      }).join("");
 
       return `
-        <div class="tax-holding-item" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:10px;background:rgba(15,23,42,0.85);border:1px solid rgba(255,255,255,0.08);margin-bottom:8px;gap:14px;">
-          <!-- 보유종목명과 수량 (최우선 표시) -->
-          <div style="flex:1.4;min-width:0;">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px;">
-              <strong style="font-size:15px;font-weight:700;color:#f8fafc;letter-spacing:-0.2px;">${html(h.name)}</strong>
-              <span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:6px;background:linear-gradient(135deg, rgba(167,139,250,0.25), rgba(99,102,241,0.25));border:1px solid rgba(167,139,250,0.5);color:#ddd6fe;font-size:14px;font-weight:800;letter-spacing:0.4px;">
-                ${number(qty, 0)}주
-              </span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#94a3b8;flex-wrap:wrap;">
-              <span style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-family:monospace;">${html(h.code || '')}</span>
-              <span>${html(h.sector || '기타')}</span>
-              <span style="color:#475569;">|</span>
-              <span style="color:#cbd5e1;font-weight:600;">${html(acctName)}</span>
-              <span style="color:#64748b;">(${html(acctBroker)})</span>
-              <span style="color:#94a3b8;">[${html(h.owner || acct.owner || '모두')}]</span>
-              ${typeBadge}
-            </div>
-          </div>
-
-          <!-- 단가 및 평가금액 / 손익 -->
-          <div style="text-align:right;min-width:145px;flex-shrink:0;">
-            <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:2px;">
-              ₩${number(marketVal, 0)}
-            </div>
-            <div style="font-size:11.5px;color:#94a3b8;margin-bottom:3px;">
-              현재 ₩${number(curPrice, 0)} <span style="font-size:10px;color:#64748b;">(매입 ₩${number(avgPrice, 0)})</span>
-            </div>
-            <div class="${signClass(profitVal)}" style="font-size:12px;font-weight:700;">
-              ${profitVal >= 0 ? '+' : ''}₩${number(profitVal, 0)} (${profitVal >= 0 ? '+' : ''}${number(profitRate, 2)}%)
-            </div>
-          </div>
-        </div>
+        <tr data-code="${html(item.code)}">
+          <td class="holding-name-cell" style="text-align:left;">
+            <strong class="holding-name-link" data-code="${html(item.code)}" data-name="${html(item.name)}" data-price="${item.current_price}" data-currency="${item.currency}">
+              ${html(item.name)}
+            </strong>
+            <small>${html(item.code)} · ${html(item.market || item.currency || 'KRW')}</small>
+          </td>
+          <td style="text-align:left;">
+            <span class="sector-badge">${html(item.sector || '기타')}</span>
+          </td>
+          <td class="holding-accounts" style="text-align:left;">${accounts}</td>
+          <td>${number(item.quantity, 0)}</td>
+          <td><strong>₩${number(item.market_value_krw, 0)}</strong></td>
+          <td class="${signClass(item.profit_krw)}">${item.profit_krw >= 0 ? "+" : ""}₩${number(item.profit_krw, 0)}</td>
+          <td class="${signClass(item.return_rate)}">${item.return_rate >= 0 ? "+" : ""}${number(item.return_rate, 2)}%</td>
+          <td class="${signClass(dayRate)}">${dayRate >= 0 ? "+" : ""}${number(dayRate, 2)}%</td>
+          <td style="text-align:center;">
+            <button class="stock-chart-btn" data-code="${html(item.code)}" data-name="${html(item.name)}" data-price="${item.current_price}" data-currency="${item.currency}" title="인터랙티브 차트" type="button">
+              📊
+            </button>
+          </td>
+        </tr>
       `;
-    }).join('');
+    }).join("");
+
+    holdingsHtml = `
+      <div class="table-wrap tax-table-wrap">
+        <table class="tax-holdings-table">
+          <thead>
+            <tr>
+              <th data-tax-sort="name" class="sortable-th ${taxHoldingSortField === 'name' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" style="text-align:left;">종목 <span class="sort-icon"></span></th>
+              <th data-tax-sort="sector" class="sortable-th ${taxHoldingSortField === 'sector' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" style="text-align:left;">섹터 <span class="sort-icon"></span></th>
+              <th style="text-align:left;">보유계좌</th>
+              <th data-tax-sort="quantity" class="sortable-th ${taxHoldingSortField === 'quantity' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}">수량 <span class="sort-icon"></span></th>
+              <th data-tax-sort="market_value_krw" class="sortable-th ${taxHoldingSortField === 'market_value_krw' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}">평가금액 <span class="sort-icon"></span></th>
+              <th data-tax-sort="profit_krw" class="sortable-th ${taxHoldingSortField === 'profit_krw' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}">평가손익 <span class="sort-icon"></span></th>
+              <th data-tax-sort="return_rate" class="sortable-th ${taxHoldingSortField === 'return_rate' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}">수익률 <span class="sort-icon"></span></th>
+              <th data-tax-sort="day_change_rate" class="sortable-th ${taxHoldingSortField === 'day_change_rate' ? (taxHoldingSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}">등락률 <span class="sort-icon"></span></th>
+              <th style="text-align:center;">차트</th>
+            </tr>
+          </thead>
+          <tbody id="taxHoldingsBody">${trsHtml}</tbody>
+        </table>
+      </div>
+    `;
   }
 
   chartWrap.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:12px;flex-wrap:wrap;gap:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:8px;flex-wrap:wrap;gap:6px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">${filterTitle} (${filteredHoldings.length}개 종목)</span>
+        <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">${filterTitle} (${sortedGroups.length}개 종목)</span>
         <span style="font-size:11px;color:#94a3b8;">${filterSubtitle}</span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;font-size:12px;">
@@ -4712,9 +4764,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
         </span>
       </div>
     </div>
-    <div class="tax-holdings-scroll-list" style="max-height:460px;overflow-y:auto;padding-right:4px;">
-      ${holdingsHtml}
-    </div>
+    ${holdingsHtml}
   `;
 
   // 3. 좌측 사이드 패널: 절세계좌 카드 목록 렌더링
@@ -5756,6 +5806,33 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 절세계좌 보유종목 정렬 헤더 클릭
+  const taxTh = e.target.closest('#assetChart [data-tax-sort]');
+  if (taxTh) {
+    const sortField = taxTh.dataset.taxSort;
+    if (taxHoldingSortField === sortField) {
+      taxHoldingSortOrder = taxHoldingSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      taxHoldingSortField = sortField;
+      taxHoldingSortOrder = 'desc';
+    }
+    renderTaxAccountHoldings(currentOwner);
+    return;
+  }
+
+  // 절세계좌 보유종목 수정/삭제 버튼
+  const taxEditBtn = e.target.closest('#assetChart .edit-button');
+  const taxDelBtn = e.target.closest('#assetChart .delete-button');
+  if (taxEditBtn) {
+    const item = (dashboard?.holdings || []).find(row => String(row.id) === String(taxEditBtn.dataset.id));
+    if (item) openHoldingDialog(item);
+    return;
+  }
+  if (taxDelBtn && confirm("이 보유종목을 삭제할까요?")) {
+    await action(taxDelBtn, () => api(`/api/holdings/${taxDelBtn.dataset.id}`, { method: "DELETE" }), () => loadDashboard());
+    return;
+  }
+
   // 보유종목 정렬 헤더 클릭
   const th = e.target.closest('.sortable-th');
   if (th && th.dataset.sort) {
@@ -6308,6 +6385,9 @@ $("#accountList")?.addEventListener("click", async (e) => {
 
 // 10. 자산기록 리스트 수정/삭제 및 절세계좌 필터 클릭
 $("#assetRecordList")?.addEventListener("click", async (e) => {
+  if (e.target.closest("[data-account-edit-id]")) {
+    return;
+  }
   if (currentRecordView === 'tax_accounts') {
     const taxCard = e.target.closest("[data-tax-filter]");
     if (taxCard) {
