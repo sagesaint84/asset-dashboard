@@ -1484,10 +1484,20 @@ function renderAccounts(items) {
   });
   container.innerHTML = [...groups.values()].map((group) => {
     const accounts = group.items.map((account) => {
-      const parts = [];
-      if (account.cash_krw) parts.push(`₩${number(account.cash_krw)}`);
-      if (account.cash_usd) parts.push(`$${number(account.cash_usd, 2)}`);
-      const cashText = parts.length ? ` · 예수금 ${parts.join(" / ")}` : "";
+      const stockVal = Number(account.stock_value_krw || 0);
+      const cashKrw = Number(account.cash_krw || 0);
+      const cashUsd = Number(account.cash_usd || 0);
+      const usdRate = Number(dashboard?.fx_rates?.USD || dashboard?.summary?.usd_krw_rate || rawDashboard?.summary?.usd_krw_rate || 1400);
+      const cashTotalKrw = account.cash_total_krw !== undefined && account.cash_total_krw !== null
+        ? Number(account.cash_total_krw)
+        : (cashKrw + cashUsd * usdRate);
+      const totalVal = Number(account.market_value_krw !== undefined ? account.market_value_krw : (stockVal + cashTotalKrw));
+      const profitVal = Number(account.profit_krw || 0);
+
+      const cashDetailParts = [];
+      if (cashKrw > 0 || cashTotalKrw === 0) cashDetailParts.push(`₩${number(cashKrw, 0)}`);
+      if (cashUsd > 0) cashDetailParts.push(`$${number(cashUsd, 2)}`);
+      const cashFormatted = cashDetailParts.length ? cashDetailParts.join(" / ") : `₩${number(cashTotalKrw, 0)}`;
 
       const aName = (account.name || "").toLowerCase();
       const aType = account.account_type || (aName.includes("연금") ? "pension_savings" : (aName.includes("irp") ? "irp" : (aName.includes("isa") ? "isa" : "general")));
@@ -1538,15 +1548,34 @@ function renderAccounts(items) {
         }
       }
 
-      return `<div class="account-row">
-        <div class="account-row-info">
-          <strong>${typeBadge}${html(account.name)} <span class="saving-owner-badge" style="font-size:10px;padding:1px 5px;margin-left:4px;">${html(account.owner || '모두')}</span></strong>
-          <span>${number(account.holding_count, 0)}종목${cashText}</span>
+      return `<div class="account-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#111a33;border:1px solid #1f2b48;border-radius:9px;margin-bottom:8px;">
+        <div class="account-row-info" style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            ${typeBadge}
+            <strong style="font-size:14px;color:#f1f4fb;font-weight:700;">${html(account.name)}</strong>
+            <span class="saving-owner-badge" style="font-size:10.5px;padding:1px 6px;">${html(account.owner || '모두')}</span>
+          </div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span>주식자산 <strong style="color:#e2e8f0;font-weight:600;">₩${number(stockVal, 0)}</strong> (${number(account.holding_count, 0)}종목)</span>
+            <span style="color:#475569;">·</span>
+            <span>예수금 <strong style="color:#38bdf8;font-weight:600;">${cashFormatted}</strong></span>
+          </div>
           ${taxBenefitBox}
         </div>
-        <div class="account-row-actions">
-          <button class="account-action-button" data-account-edit-id="${account.id}" title="계좌 정보 수정" type="button">✎</button>
-          <button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button>
+        <div class="account-row-right" style="display:flex;align-items:center;gap:14px;margin-left:14px;flex-shrink:0;">
+          <div class="account-row-values" style="text-align:right;">
+            <div style="font-size:10.5px;color:#94a3b8;margin-bottom:1px;font-weight:500;">통장 총 자산</div>
+            <strong style="font-size:15px;color:#f8fafc;font-weight:800;letter-spacing:-0.3px;">₩${number(totalVal, 0)}</strong>
+            ${profitVal !== 0 ? `
+              <div style="font-size:11.5px;margin-top:2px;font-weight:700;" class="${signClass(profitVal)}">
+                ${profitVal > 0 ? '+' : ''}₩${number(profitVal, 0)}
+              </div>
+            ` : ''}
+          </div>
+          <div class="account-row-actions" style="display:flex;align-items:center;gap:5px;">
+            <button class="account-action-button" data-account-edit-id="${account.id}" title="계좌 정보 및 예수금 수정" type="button">✎</button>
+            <button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button>
+          </div>
         </div>
       </div>`;
     }).join("");
@@ -4701,22 +4730,66 @@ function renderTaxAccountHoldings(owner = currentOwner) {
 
   // 우측 종목 리스트 렌더링 (기존보유종목과 동일한 테이블 구조 및 보유계좌 나열)
   let holdingsHtml = '';
-  if (!sortedGroups.length) {
-    const cashNotice = currentFilterCash > 0
-      ? `<div style="margin-top:10px;padding:8px 14px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);border-radius:6px;font-size:12.5px;color:#7dd3fc;">
-           💵 현재 계좌 예수금: <strong>₩${number(currentFilterCash, 0)}</strong>
-         </div>`
-      : '';
+  if (!sortedGroups.length && currentFilterCash <= 0) {
     holdingsHtml = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:260px;color:#94a3b8;text-align:center;">
         <span style="font-size:32px;margin-bottom:8px;">🔍</span>
         <strong style="font-size:15px;color:#cbd5e1;margin-bottom:6px;">${filterTitle}에 등록된 보유종목이 없습니다.</strong>
-        ${cashNotice}
         <p style="font-size:12px;margin:10px 0 12px;color:#64748b;">좌측 카드에서 다른 절세계좌를 선택하시거나 전체보기를 눌러주세요.</p>
         <button type="button" class="button secondary compact" style="cursor:pointer;" onclick="currentTaxAccountFilter='all';renderTaxAccountHoldings(currentOwner);">🌿 절세계좌 전체 보기</button>
       </div>
     `;
   } else {
+    let cashRowHtml = '';
+    if (currentFilterCash > 0) {
+      let cashAccountLabel = '절세계좌 합산';
+      if (currentTaxAccountFilter === 'isa') cashAccountLabel = `ISA (${isaAccounts.length}개 계좌)`;
+      else if (currentTaxAccountFilter === 'irp') cashAccountLabel = `IRP (${irpAccounts.length}개 계좌)`;
+      else if (currentTaxAccountFilter === 'pension_savings') cashAccountLabel = `연금저축 (${pensionAccounts.length}개 계좌)`;
+      else if (currentTaxAccountFilter.startsWith('acc_')) {
+        const accId = currentTaxAccountFilter.replace('acc_', '');
+        const targetAcc = taxAccountMap.get(accId);
+        if (targetAcc) cashAccountLabel = `${targetAcc.broker || ''} ${targetAcc.name}`;
+      }
+
+      cashRowHtml = `
+        <tr class="tax-cash-table-row" style="background:rgba(56,189,248,0.06);border-bottom:1px solid rgba(56,189,248,0.25);">
+          <td class="holding-name-cell" style="text-align:left;">
+            <strong style="color:#38bdf8;font-size:13px;display:flex;align-items:center;gap:6px;">
+              💵 예수금 (현금 잔고)
+            </strong>
+            <small style="color:#7dd3fc;">미투자 현금 잔액</small>
+          </td>
+          <td style="text-align:left;">
+            <span class="sector-badge" style="background:rgba(56,189,248,0.18);color:#38bdf8;border:1px solid rgba(56,189,248,0.35);">현금·예수금</span>
+          </td>
+          <td class="holding-accounts" style="text-align:left;">
+            <span class="holding-account-detail" style="background:rgba(56,189,248,0.12);border-color:rgba(56,189,248,0.3);color:#7dd3fc;font-weight:600;">
+              ${html(cashAccountLabel)} ₩${number(currentFilterCash, 0)}
+            </span>
+          </td>
+          <td style="color:#64748b;text-align:right;">-</td>
+          <td style="text-align:right;"><strong style="color:#38bdf8;font-size:13.5px;font-weight:700;">₩${number(currentFilterCash, 0)}</strong></td>
+          <td style="color:#64748b;text-align:right;">-</td>
+          <td style="color:#64748b;text-align:right;">-</td>
+          <td style="color:#64748b;text-align:right;">-</td>
+          <td style="text-align:center;color:#64748b;">-</td>
+        </tr>
+      `;
+    }
+
+    let emptyStockNotice = '';
+    if (!sortedGroups.length && currentFilterCash > 0) {
+      emptyStockNotice = `
+        <tr style="text-align:center;color:#94a3b8;">
+          <td colspan="9" style="padding:28px 14px;text-align:center;color:#94a3b8;">
+            <div style="font-size:13px;color:#cbd5e1;font-weight:600;margin-bottom:4px;">보유 중인 주식 종목이 없습니다.</div>
+            <div style="font-size:11.5px;color:#64748b;">예수금 ₩${number(currentFilterCash, 0)}이 안전하게 보관되어 있습니다.</div>
+          </td>
+        </tr>
+      `;
+    }
+
     const trsHtml = sortedGroups.map((item) => {
       const dayRate = Number(item.day_change_rate || 0);
       const accounts = item.items.map((detail) => {
@@ -4777,7 +4850,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
               <th style="text-align:center;">차트</th>
             </tr>
           </thead>
-          <tbody id="taxHoldingsBody">${trsHtml}</tbody>
+          <tbody id="taxHoldingsBody">${cashRowHtml}${emptyStockNotice}${trsHtml}</tbody>
         </table>
       </div>
     `;
@@ -4852,8 +4925,8 @@ function renderTaxAccountHoldings(owner = currentOwner) {
         <span style="font-size:11px;color:#94a3b8;">${filterSubtitle}</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap;">
-        <span style="color:#94a3b8;">평가: <strong style="color:#f8fafc;font-size:13.5px;">₩${number(filteredTotalMarket, 0)}</strong></span>
-        ${currentFilterCash > 0 ? `<span style="color:#38bdf8;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;">예수금 ₩${number(currentFilterCash, 0)}</span>` : ''}
+        <span style="color:#94a3b8;">총 자산: <strong style="color:#f8fafc;font-size:14px;font-weight:800;">₩${number(filteredTotalMarket, 0)}</strong></span>
+        <span style="color:#94a3b8;">(주식 <strong style="color:#e2e8f0;font-weight:600;">₩${number(filteredStats.market, 0)}</strong> · <strong style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(currentFilterCash, 0)}</strong>)</span>
         <span class="${signClass(filteredStats.profit)}" style="font-weight:700;">
           ${filteredStats.profit >= 0 ? '+' : ''}₩${number(filteredStats.profit, 0)} (${filteredStats.profit >= 0 ? '+' : ''}${number(filteredStats.profitRate, 2)}%)
         </span>
@@ -4876,23 +4949,29 @@ function renderTaxAccountHoldings(owner = currentOwner) {
   const isAllActive = currentTaxAccountFilter === 'all';
   const allCardHtml = `
     <div class="tax-card record-row ${isAllActive ? 'active-tax-card' : ''}" data-tax-filter="all">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <div style="display:flex;align-items:center;gap:7px;">
           <span style="font-size:16px;">🌿</span>
           <strong style="color:#f8fafc;font-size:13.5px;font-weight:700;">절세계좌 전체</strong>
           ${isAllActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#8b5cf6;color:#fff;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.06);padding:2px 7px;border-radius:4px;">
-          ${taxHoldings.length}개 종목 · ${taxAccounts.length}개 계좌${allCash > 0 ? ` · 예수금 ₩${number(allCash, 0)}` : ''}
+          ${taxHoldings.length}개 종목 · ${taxAccounts.length}개 계좌
         </span>
       </div>
 
       <!-- 절세계좌 총액 -->
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-        <span style="font-size:11.5px;color:#94a3b8;">절세계좌 총액</span>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+        <span style="font-size:11.5px;color:#94a3b8;">절세계좌 총 자산</span>
         <strong style="font-size:16px;color:#f8fafc;font-weight:800;letter-spacing:-0.3px;">
           ₩${number(allTotalMarket, 0)}
         </strong>
+      </div>
+
+      <!-- 자산 구성: 주식 + 예수금 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 7px;border-radius:4px;margin-bottom:5px;">
+        <span style="color:#cbd5e1;">주식 ₩${number(allStats.market, 0)}</span>
+        <span style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(allCash, 0)}</span>
       </div>
 
       <!-- 수익금액 및 수익률 -->
@@ -4917,19 +4996,23 @@ function renderTaxAccountHoldings(owner = currentOwner) {
   const isIsaActive = currentTaxAccountFilter === 'isa';
   const isaCardHtml = `
     <div class="tax-card record-row ${isIsaActive ? 'active-tax-card' : ''}" data-tax-filter="isa">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:15px;">🔄</span>
           <strong style="color:#f8fafc;font-size:13px;font-weight:700;">중개형 ISA</strong>
           ${isIsaActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#38bdf8;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.12);padding:2px 6px;border-radius:4px;font-weight:600;">
-          ${isaHoldings.length}개 종목 (${isaAccounts.length}개 계좌)${isaCash > 0 ? ` · 예수금 ₩${number(isaCash, 0)}` : ''}
+          ${isaHoldings.length}개 종목 (${isaAccounts.length}개 계좌)
         </span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
-        <span style="font-size:11.5px;color:#94a3b8;">평가금액</span>
-        <strong style="font-size:14.5px;color:#f8fafc;font-weight:700;">₩${number(isaTotalMarket, 0)}</strong>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+        <span style="font-size:11.5px;color:#94a3b8;">총 자산</span>
+        <strong style="font-size:14.5px;color:#f8fafc;font-weight:800;">₩${number(isaTotalMarket, 0)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-bottom:5px;">
+        <span style="color:#cbd5e1;">주식 ₩${number(isaStats.market, 0)}</span>
+        <span style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(isaCash, 0)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="font-size:11.5px;color:#94a3b8;">수익 / 수익률</span>
@@ -4947,19 +5030,23 @@ function renderTaxAccountHoldings(owner = currentOwner) {
   const isIrpActive = currentTaxAccountFilter === 'irp';
   const irpCardHtml = `
     <div class="tax-card record-row ${isIrpActive ? 'active-tax-card' : ''}" data-tax-filter="irp">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:15px;">🛡️</span>
           <strong style="color:#f8fafc;font-size:13px;font-weight:700;">개인형 IRP</strong>
           ${isIrpActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#a78bfa;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#c4b5fd;background:rgba(167,139,250,0.15);padding:2px 6px;border-radius:4px;font-weight:600;">
-          ${irpHoldings.length}개 종목 (${irpAccounts.length}개 계좌)${irpCash > 0 ? ` · 예수금 ₩${number(irpCash, 0)}` : ''}
+          ${irpHoldings.length}개 종목 (${irpAccounts.length}개 계좌)
         </span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
-        <span style="font-size:11.5px;color:#94a3b8;">평가금액</span>
-        <strong style="font-size:14.5px;color:#f8fafc;font-weight:700;">₩${number(irpTotalMarket, 0)}</strong>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+        <span style="font-size:11.5px;color:#94a3b8;">총 자산</span>
+        <strong style="font-size:14.5px;color:#f8fafc;font-weight:800;">₩${number(irpTotalMarket, 0)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-bottom:5px;">
+        <span style="color:#cbd5e1;">주식 ₩${number(irpStats.market, 0)}</span>
+        <span style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(irpCash, 0)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="font-size:11.5px;color:#94a3b8;">수익 / 수익률</span>
@@ -4977,19 +5064,23 @@ function renderTaxAccountHoldings(owner = currentOwner) {
   const isPensionActive = currentTaxAccountFilter === 'pension_savings';
   const pensionCardHtml = `
     <div class="tax-card record-row ${isPensionActive ? 'active-tax-card' : ''}" data-tax-filter="pension_savings">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:15px;">💎</span>
           <strong style="color:#f8fafc;font-size:13px;font-weight:700;">연금저축</strong>
           ${isPensionActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#34d399;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#34d399;background:rgba(52,211,153,0.15);padding:2px 6px;border-radius:4px;font-weight:600;">
-          ${pensionHoldings.length}개 종목 (${pensionAccounts.length}개 계좌)${pensionCash > 0 ? ` · 예수금 ₩${number(pensionCash, 0)}` : ''}
+          ${pensionHoldings.length}개 종목 (${pensionAccounts.length}개 계좌)
         </span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
-        <span style="font-size:11.5px;color:#94a3b8;">평가금액</span>
-        <strong style="font-size:14.5px;color:#f8fafc;font-weight:700;">₩${number(pensionTotalMarket, 0)}</strong>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+        <span style="font-size:11.5px;color:#94a3b8;">총 자산</span>
+        <strong style="font-size:14.5px;color:#f8fafc;font-weight:800;">₩${number(pensionTotalMarket, 0)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-bottom:5px;">
+        <span style="color:#cbd5e1;">주식 ₩${number(pensionStats.market, 0)}</span>
+        <span style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(pensionCash, 0)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span style="font-size:11.5px;color:#94a3b8;">수익 / 수익률</span>
@@ -5064,16 +5155,20 @@ function renderTaxAccountHoldings(owner = currentOwner) {
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             ${typeBadge}
-            <button class="account-action-button" data-account-edit-id="${acct.id}" title="계좌 정보 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#cbd5e1;cursor:pointer;">✎</button>
+            <button class="account-action-button" data-account-edit-id="${acct.id}" title="계좌 정보 및 예수금 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#cbd5e1;cursor:pointer;">✎</button>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:2px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:#94a3b8;margin-top:3px;">
           <span>${html(acct.broker)} [${html(acct.owner || '모두')}]</span>
-          <strong style="color:#f1f5f9;font-size:13px;">₩${number(acctTotalMarket, 0)}</strong>
+          <strong style="color:#f8fafc;font-size:13.5px;font-weight:800;">₩${number(acctTotalMarket, 0)}</strong>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;border-top:1px dashed rgba(255,255,255,0.06);padding-top:4px;margin-top:2px;">
-          <span>보유 ${acctHoldings.length}개 종목${acctCash > 0 ? ` · 예수금 ₩${number(acctCash, 0)}` : ''}</span>
-          <span class="${signClass(acctStats.profit)}" style="font-weight:700;">${acctStats.profit >= 0 ? '+' : ''}₩${number(acctStats.profit, 0)}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-top:4px;">
+          <span style="color:#cbd5e1;">주식 ₩${number(acctStats.market, 0)} (${acctHoldings.length}종목)</span>
+          <span style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(acctCash, 0)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-top:4px;padding-top:2px;">
+          <span>평가손익</span>
+          <span class="${signClass(acctStats.profit)}" style="font-weight:700;">${acctStats.profit >= 0 ? '+' : ''}₩${number(acctStats.profit, 0)} (${acctStats.profit >= 0 ? '+' : ''}${number(acctStats.profitRate, 2)}%)</span>
         </div>
         ${taxSavedRowHtml}
       </div>
