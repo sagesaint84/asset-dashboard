@@ -7433,6 +7433,9 @@ document.getElementById('importBackupFile')?.addEventListener('change', async (e
     toast(result.message || '데이터를 복원했습니다.');
     await loadDashboard();
     await loadAssetRecords(currentOwner);
+    if (typeof loadLedger === 'function') {
+      await loadLedger();
+    }
   } catch (err) {
     toast(err.message, true);
   } finally {

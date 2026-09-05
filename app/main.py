@@ -1524,22 +1524,26 @@ async def import_portfolio(request: Request, file: UploadFile = File(...), broke
 
 @app.get("/api/export")
 async def export_data(request: Request):
-    """포트폴리오 전체 데이터를 JSON 파일로 다운로드"""
+    """포트폴리오, 가계부 등 전체 데이터를 JSON 파일로 다운로드"""
     import json
     from app.services.portfolio import read_portfolio
     from app.services.asset_records import read_asset_records
     from app.services.dividend_records import read_dividend_records
     from app.services.pnl_records import read_pnl_records
+    from app.services.ledger import read_ledger
+    from app.services.user_openapi import get_user_openapi_config
 
     username = get_current_username(request)
     bundle = {
-        "version": "2.0",
+        "version": "2.1",
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "user": username,
         "portfolio": read_portfolio(username=username),
         "asset_records": read_asset_records(username=username),
         "dividend_records": read_dividend_records(username=username),
         "realized_pnl_records": read_pnl_records(username=username),
+        "ledger": read_ledger(username=username),
+        "openapi_config": get_user_openapi_config(username=username),
     }
     content = json.dumps(bundle, ensure_ascii=False, indent=2)
     from starlette.responses import Response
@@ -1554,12 +1558,14 @@ async def export_data(request: Request):
 
 @app.post("/api/import-backup")
 async def import_backup(request: Request, file: UploadFile = File(...)) -> dict:
-    """백업 JSON 파일에서 데이터 복원"""
+    """백업 JSON 파일에서 데이터 복원 (포트폴리오, 자산기록, 배당, 손익, 가계부, OpenAPI)"""
     import json
     from app.services.portfolio import write_portfolio
     from app.services.asset_records import write_asset_records
     from app.services.dividend_records import write_dividend_records
     from app.services.pnl_records import write_pnl_records
+    from app.services.ledger import write_ledger, DEFAULT_CATEGORIES
+    from app.services.user_openapi import save_user_openapi_config
 
     username = get_current_username(request)
     try:
@@ -1568,22 +1574,38 @@ async def import_backup(request: Request, file: UploadFile = File(...)) -> dict:
     except Exception as exc:
         raise HTTPException(400, f"JSON 파싱 실패: {exc}") from exc
 
-    if "portfolio" not in bundle and "asset_records" not in bundle:
+    if "portfolio" not in bundle and "asset_records" not in bundle and "ledger" not in bundle:
         raise HTTPException(400, "유효한 백업 파일이 아닙니다.")
 
     msgs = []
-    if "portfolio" in bundle:
+    if "portfolio" in bundle and bundle["portfolio"]:
         write_portfolio(bundle["portfolio"], username=username)
         msgs.append("포트폴리오")
-    if "asset_records" in bundle:
+    if "asset_records" in bundle and bundle["asset_records"]:
         write_asset_records(bundle["asset_records"], username=username)
         msgs.append("자산기록")
-    if "dividend_records" in bundle:
+    if "dividend_records" in bundle and bundle["dividend_records"]:
         write_dividend_records(bundle["dividend_records"], username=username)
         msgs.append("배당내역")
-    if "realized_pnl_records" in bundle:
+    if "realized_pnl_records" in bundle and bundle["realized_pnl_records"]:
         write_pnl_records(bundle["realized_pnl_records"], username=username)
         msgs.append("매도실현손익")
+    if "ledger" in bundle and isinstance(bundle["ledger"], dict):
+        ledger_data = bundle["ledger"]
+        ledger_data.setdefault("version", "1.0")
+        ledger_data.setdefault("categories", DEFAULT_CATEGORIES)
+        ledger_data.setdefault("transactions", [])
+        ledger_data.setdefault("recurring", [])
+        ledger_data.setdefault("cards", [])
+        ledger_data.setdefault("budgets", {})
+        write_ledger(ledger_data, username=username)
+        msgs.append("가계부")
+    if "openapi_config" in bundle and isinstance(bundle["openapi_config"], dict):
+        try:
+            save_user_openapi_config(username=username, update_data=bundle["openapi_config"])
+            msgs.append("OpenAPI설정")
+        except Exception as e:
+            logger.warning("OpenAPI config restore warning: %s", e)
 
     return {"message": f"{', '.join(msgs)} 데이터를 복원했습니다."}
 
