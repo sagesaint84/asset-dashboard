@@ -1544,7 +1544,7 @@ function renderAccounts(items) {
         </div>
         <div class="account-row-actions">
           <button class="account-action-button" data-cash-id="${account.id}" title="예수금 수정" type="button">💵</button>
-          <button class="account-action-button" data-account-id="${account.id}" title="계좌 정보 수정" type="button">✎</button>
+          <button class="account-action-button" data-account-edit-id="${account.id}" title="계좌 정보 수정" type="button">✎</button>
           <button class="mini-delete-button" data-account-del-id="${account.id}" title="계좌 삭제" type="button">🗑️</button>
         </div>
       </div>`;
@@ -2571,7 +2571,7 @@ function renderInsuranceWithOwner(owner = '모두') {
             <span class="saving-bank-name">${html(a.broker)}</span>
           </div>
           <div class="account-row-actions saving-card-actions">
-            <button class="account-action-button" data-account-id="${a.id}" title="계좌 정보 수정" type="button">✎</button>
+            <button class="account-action-button" data-account-edit-id="${a.id}" title="계좌 정보 수정" type="button">✎</button>
           </div>
         </div>
 
@@ -4884,7 +4884,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             ${typeBadge}
-            <button class="account-action-button" data-account-id="${acct.id}" title="계좌 정보 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#cbd5e1;cursor:pointer;">✎</button>
+            <button class="account-action-button" data-account-edit-id="${acct.id}" title="계좌 정보 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#cbd5e1;cursor:pointer;">✎</button>
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:2px;">
@@ -5143,6 +5143,54 @@ function updateAccountTaxBenefitFields(form) {
   }
 }
 
+function handleAddAccountYearly() {
+  const editForm = document.getElementById("accountEditForm");
+  const yrInput = editForm?.querySelector(".pension-entry-year") || document.getElementById("accountInputYear");
+  const depInput = editForm?.querySelector(".pension-annual-deposit") || document.getElementById("accountInputDeposit");
+  const dedInput = editForm?.querySelector(".pension-tax-deductible") || document.getElementById("accountInputDeductible");
+  const incInput = editForm?.querySelector(".pension-income-level") || document.getElementById("accountInputIncomeLevel");
+
+  const yr = (yrInput?.value || "").trim();
+  const dep = Number(depInput?.value) || 0;
+  const isDed = dedInput ? dedInput.value !== "false" : true;
+  const incLvl = incInput?.value || "low";
+
+  if (!yr) {
+    alert("연도를 입력해 주세요 (예: 2026).");
+    yrInput?.focus();
+    return;
+  }
+  if (dep < 0) {
+    alert("납입액을 0원 이상 입력해 주세요.");
+    depInput?.focus();
+    return;
+  }
+
+  // 기존 연도 확인 (있으면 갱신, 없으면 추가)
+  const existingIdx = accountCurrentYearlyList.findIndex(y => String(y.year).trim() === yr);
+  if (existingIdx >= 0) {
+    accountCurrentYearlyList[existingIdx].deposit = dep;
+    accountCurrentYearlyList[existingIdx].is_deductible = isDed;
+    accountCurrentYearlyList[existingIdx].income_level = incLvl;
+    toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 반영되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
+  } else {
+    accountCurrentYearlyList.push({
+      year: yr,
+      deposit: dep,
+      is_deductible: isDed,
+      income_level: incLvl
+    });
+    toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 목록에 추가되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
+  }
+
+  // 연도 내림차순 정렬 후 렌더링
+  accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+  renderAccountYearlyFormRows(editForm);
+  updateAccountTaxBenefitFields(editForm);
+  refreshDialogKoreanHints(editForm);
+}
+window.handleAddAccountYearly = handleAddAccountYearly;
+
 let currentEditingAccountId = null;
 
 function openAccountEditDialog(account) {
@@ -5150,7 +5198,18 @@ function openAccountEditDialog(account) {
   if (!form || !account) return;
   form.reset();
   currentEditingAccountId = account.id;
-  form.dataset.accountId = account.id;
+  form.removeAttribute("data-account-id");
+  form.removeAttribute("data-account-edit-id");
+  delete form.dataset.accountId;
+  delete form.dataset.accountEditId;
+  let idInput = form.querySelector("[name='id']");
+  if (!idInput) {
+    idInput = document.createElement("input");
+    idInput.type = "hidden";
+    idInput.name = "id";
+    form.prepend(idInput);
+  }
+  idInput.value = account.id;
   form.broker.value = account.broker || "";
   form.name.value = account.name || "";
   if (form.owner) form.owner.value = account.owner || "모두";
@@ -5401,10 +5460,10 @@ document.addEventListener('click', async (e) => {
   }
 
   // ✎ 증권/연금/IRP 계좌 정보 수정 모달 열기 (증권 탭, 보험/연금 탭, 절세계좌 탭 어디서든 100% 동작)
-  const acctEditBtn = e.target.closest('[data-account-id]');
+  const acctEditBtn = e.target.closest('[data-account-edit-id]');
   if (acctEditBtn) {
     e.preventDefault();
-    const aid = acctEditBtn.dataset.accountId;
+    const aid = acctEditBtn.dataset.accountEditId;
     const acct = (dashboard?.accounts || []).find(a => a.id === aid) || (rawDashboard?.accounts || []).find(a => a.id === aid);
     if (acct) {
       openAccountEditDialog(acct);
@@ -6138,7 +6197,7 @@ $("#holdingsBody")?.addEventListener("click", (e) => {
 $("#accountList")?.addEventListener("click", async (e) => {
   const toggleTaxBtn = e.target.closest("[data-toggle-tax-account-id]");
   const cashBtn = e.target.closest("[data-cash-id]");
-  const editBtn = e.target.closest("[data-account-id]");
+  const editBtn = e.target.closest("[data-account-edit-id]");
   const delBtn = e.target.closest("[data-account-del-id]");
 
   if (toggleTaxBtn) {
@@ -6190,7 +6249,7 @@ $("#accountList")?.addEventListener("click", async (e) => {
     return;
   }
   if (editBtn) {
-    const acct = (dashboard?.accounts || []).find(a => a.id === editBtn.dataset.accountId) || (rawDashboard?.accounts || []).find(a => a.id === editBtn.dataset.accountId);
+    const acct = (dashboard?.accounts || []).find(a => a.id === editBtn.dataset.accountEditId) || (rawDashboard?.accounts || []).find(a => a.id === editBtn.dataset.accountEditId);
     if (acct) openAccountEditDialog(acct);
     return;
   }
@@ -6382,7 +6441,7 @@ async function saveEditAccount() {
   if (saveBtn) busy(saveBtn, true);
 
   try {
-    const accountId = form.dataset.accountId || form.getAttribute("data-account-id") || currentEditingAccountId;
+    const accountId = form.querySelector("[name='id']")?.value || currentEditingAccountId || form.dataset.accountId || form.getAttribute("data-account-id");
     if (!accountId) {
       alert("계좌 식별자(ID)를 찾을 수 없습니다. 다시 시도해 주세요.");
       return;
@@ -9069,49 +9128,26 @@ function initSavingsListeners() {
     });
 
     // 연금/IRP 연도별 이력 관리 이벤트 (상단 입력값 -> 하단 이력에 추가/갱신)
-    document.getElementById("addAccountYearlyBtn")?.addEventListener("click", () => {
+    document.getElementById("addAccountYearlyBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleAddAccountYearly();
+    });
+
+    // 연도 입력창 변경 시 해당 연도 기존 이력 데이터 자동 로드
+    document.getElementById("accountInputYear")?.addEventListener("change", (e) => {
+      const yr = (e.target.value || "").trim();
+      if (!yr) return;
+      const match = accountCurrentYearlyList.find(y => String(y.year).trim() === yr);
       const editForm = document.getElementById("accountEditForm");
-      const yrInput = editForm?.querySelector(".pension-entry-year") || document.getElementById("accountInputYear");
-      const depInput = editForm?.querySelector(".pension-annual-deposit") || document.getElementById("accountInputDeposit");
-      const dedInput = editForm?.querySelector(".pension-tax-deductible") || document.getElementById("accountInputDeductible");
-      const incInput = editForm?.querySelector(".pension-income-level") || document.getElementById("accountInputIncomeLevel");
-
-      const yr = (yrInput?.value || "").trim();
-      const dep = Number(depInput?.value) || 0;
-      const isDed = dedInput ? dedInput.value !== "false" : true;
-      const incLvl = incInput?.value || "low";
-
-      if (!yr) {
-        alert("연도를 입력해 주세요 (예: 2026).");
-        yrInput?.focus();
-        return;
+      if (!editForm) return;
+      const depInput = editForm.querySelector(".pension-annual-deposit");
+      const dedInput = editForm.querySelector(".pension-tax-deductible");
+      const incInput = editForm.querySelector(".pension-income-level");
+      if (match) {
+        if (depInput) depInput.value = (match.deposit !== undefined && match.deposit !== null) ? match.deposit : "";
+        if (dedInput) dedInput.value = match.is_deductible !== false ? "true" : "false";
+        if (incInput && match.income_level) incInput.value = match.income_level;
       }
-      if (dep < 0) {
-        alert("납입액을 0원 이상 입력해 주세요.");
-        depInput?.focus();
-        return;
-      }
-
-      // 기존 연도 확인 (있으면 갱신, 없으면 추가)
-      const existingIdx = accountCurrentYearlyList.findIndex(y => String(y.year).trim() === yr);
-      if (existingIdx >= 0) {
-        accountCurrentYearlyList[existingIdx].deposit = dep;
-        accountCurrentYearlyList[existingIdx].is_deductible = isDed;
-        accountCurrentYearlyList[existingIdx].income_level = incLvl;
-        toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 반영되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
-      } else {
-        accountCurrentYearlyList.push({
-          year: yr,
-          deposit: dep,
-          is_deductible: isDed,
-          income_level: incLvl
-        });
-        toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 목록에 추가되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
-      }
-
-      // 연도 내림차순 정렬 후 렌더링
-      accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
-      renderAccountYearlyFormRows(editForm);
       updateAccountTaxBenefitFields(editForm);
       refreshDialogKoreanHints(editForm);
     });

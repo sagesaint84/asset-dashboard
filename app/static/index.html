@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260905-v5524" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260905-v5525" />
   </head>
   <body>
     <main class="shell">
@@ -1015,9 +1015,10 @@
     <!-- 증권사 및 계좌 정보 수정 다이얼로그 -->
     <dialog id="accountEditDialog" class="dialog" style="max-width:560px;width:95vw;max-height:90vh;overflow-y:auto;">
       <form id="accountEditForm" onsubmit="return false;">
+        <input type="hidden" name="id" />
         <div class="dialog-head">
           <h2>증권사 및 계좌 정보 수정</h2>
-          <button value="cancel" class="close" aria-label="닫기">×</button>
+          <button type="button" class="close" aria-label="닫기" onclick="this.closest('dialog')?.close()">×</button>
         </div>
         <p class="dialog-description">계좌 유형과 연말정산 세액공제 설정을 관리합니다.</p>
         <div class="form-grid">
@@ -1101,7 +1102,7 @@
                 <strong class="pension-tax-refund-text" style="color:#4ade80;font-size:13px;font-weight:700;">₩0</strong>
                 <span class="pension-deduction-target-text" style="font-size:10.5px;color:#38bdf8;margin-left:4px;"></span>
               </div>
-              <button type="button" class="button primary compact" id="addAccountYearlyBtn" style="padding:6px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer;background:linear-gradient(135deg, #0284c7, #0ea5e9);border:none;border-radius:5px;color:#fff;">
+              <button type="button" class="button primary compact" id="addAccountYearlyBtn" onclick="handleAddAccountYearly()" style="padding:6px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer;background:linear-gradient(135deg, #0284c7, #0ea5e9);border:none;border-radius:5px;color:#fff;">
                 <span>➕</span> <span>연도 추가 / 반영</span>
               </button>
             </div>
@@ -1131,7 +1132,7 @@
       <form id="accountAddForm" onsubmit="return false;">
         <div class="dialog-head">
           <h2>계좌 추가</h2>
-          <button value="cancel" class="close" aria-label="닫기">×</button>
+          <button type="button" class="close" aria-label="닫기" onclick="this.closest('dialog')?.close()">×</button>
         </div>
         <div class="form-grid">
           <label>증권사<input name="broker" placeholder="KB증권, 토스증권, 나무증권 등" required /></label>
@@ -2732,7 +2733,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260905-v5524"></script>
+    <script src="/static/wealth.js?v=20260905-v5525"></script>
   </body>
 </html>
 
