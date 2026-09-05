@@ -4751,17 +4751,80 @@ function renderTaxAccountHoldings(owner = currentOwner) {
     `;
   }
 
+  // 현재 필터(전체 / 카테고리 / 개별 계좌)의 누적 절세액 산출
+  let filterTaxSavedHtml = '';
+  if (currentTaxAccountFilter === 'all') {
+    filterTaxSavedHtml = `
+      <span style="color:#c4b5fd;background:rgba(167,139,250,0.14);border:1px solid rgba(167,139,250,0.3);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">
+        💎 누적 절세액: <strong style="color:#ddd6fe;font-size:12.5px;">₩${number(allCumulativeTaxSaved, 0)}</strong>
+      </span>
+    `;
+  } else if (currentTaxAccountFilter === 'irp') {
+    filterTaxSavedHtml = `
+      <span style="color:#c4b5fd;background:rgba(167,139,250,0.14);border:1px solid rgba(167,139,250,0.3);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">
+        🛡️ 누적 절세액: <strong style="color:#ddd6fe;font-size:12.5px;">₩${number(irpCumulativeTaxSaved, 0)}</strong>
+      </span>
+    `;
+  } else if (currentTaxAccountFilter === 'pension_savings') {
+    filterTaxSavedHtml = `
+      <span style="color:#34d399;background:rgba(52,211,153,0.14);border:1px solid rgba(52,211,153,0.3);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">
+        💎 누적 절세액: <strong style="color:#a7f3d0;font-size:12.5px;">₩${number(pensionCumulativeTaxSaved, 0)}</strong>
+      </span>
+    `;
+  } else if (currentTaxAccountFilter === 'isa') {
+    filterTaxSavedHtml = `
+      <span style="color:#38bdf8;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:700;">
+        🔄 ISA 혜택: 비과세 200~400만 + 9.9% 분리과세
+      </span>
+    `;
+  } else if (currentTaxAccountFilter.startsWith('acc_')) {
+    const accId = currentTaxAccountFilter.replace('acc_', '');
+    const targetAcc = taxAccountMap.get(accId);
+    if (targetAcc) {
+      const cat = getTaxCategory(targetAcc);
+      const isDed = isAccountTaxDeductible(targetAcc);
+      const targetTaxSaved = calcAccountCumulativeTaxSaved(targetAcc);
+
+      if (cat === 'isa') {
+        filterTaxSavedHtml = `
+          <span style="color:#38bdf8;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:700;">
+            🔄 ISA 비과세 200~400만 + 9.9% 분리과세
+          </span>
+        `;
+      } else if (isDed && targetTaxSaved > 0) {
+        filterTaxSavedHtml = `
+          <span style="color:#c4b5fd;background:rgba(167,139,250,0.16);border:1px solid rgba(167,139,250,0.35);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;">
+            💎 누적 절세액: <strong style="color:#ddd6fe;font-size:12.5px;">₩${number(targetTaxSaved, 0)}</strong>
+          </span>
+        `;
+      } else if (!isDed) {
+        filterTaxSavedHtml = `
+          <span style="color:#34d399;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:700;">
+            🌱 비공제 계좌: 원금 인출 시 비과세
+          </span>
+        `;
+      } else {
+        filterTaxSavedHtml = `
+          <span style="color:#94a3b8;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:700;">
+            누적 절세액: ₩0
+          </span>
+        `;
+      }
+    }
+  }
+
   chartWrap.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:8px;flex-wrap:wrap;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">${filterTitle} (${sortedGroups.length}개 종목)</span>
         <span style="font-size:11px;color:#94a3b8;">${filterSubtitle}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;font-size:12px;">
+      <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap;">
         <span style="color:#94a3b8;">평가: <strong style="color:#f8fafc;font-size:13.5px;">₩${number(filteredStats.market, 0)}</strong></span>
         <span class="${signClass(filteredStats.profit)}" style="font-weight:700;">
           ${filteredStats.profit >= 0 ? '+' : ''}₩${number(filteredStats.profit, 0)} (${filteredStats.profit >= 0 ? '+' : ''}${number(filteredStats.profitRate, 2)}%)
         </span>
+        ${filterTaxSavedHtml}
       </div>
     </div>
     ${holdingsHtml}
@@ -4915,6 +4978,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
     const cat = getTaxCategory(acct);
     const isDed = isAccountTaxDeductible(acct);
     const isAcctActive = currentTaxAccountFilter === `acc_${acct.id}`;
+    const acctSavedTax = calcAccountCumulativeTaxSaved(acct);
 
     let typeBadge = '';
     if (cat === 'isa') {
@@ -4923,6 +4987,37 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       typeBadge = `<span style="color:${isDed ? '#c4b5fd' : '#34d399'};background:${isDed ? 'rgba(167,139,250,0.15)' : 'rgba(16,185,129,0.15)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">IRP ${isDed ? '공제' : '비공제'}</span>`;
     } else {
       typeBadge = `<span style="color:${isDed ? '#38bdf8' : '#34d399'};background:${isDed ? 'rgba(56,189,248,0.12)' : 'rgba(16,185,129,0.12)'};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;">연금저축 ${isDed ? '공제' : '비공제'}</span>`;
+    }
+
+    let taxSavedRowHtml = '';
+    if (cat === 'isa') {
+      taxSavedRowHtml = `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#7dd3fc;background:rgba(56,189,248,0.08);padding:3px 7px;border-radius:4px;margin-top:4px;">
+          <span>절세 혜택</span>
+          <span style="color:#38bdf8;font-weight:600;">비과세 200~400만</span>
+        </div>
+      `;
+    } else if (isDed && acctSavedTax > 0) {
+      taxSavedRowHtml = `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#ddd6fe;background:rgba(167,139,250,0.09);border:1px solid rgba(167,139,250,0.22);padding:3px 7px;border-radius:4px;margin-top:4px;">
+          <span style="color:#c4b5fd;font-weight:600;">💎 누적 절세액</span>
+          <strong style="color:#ddd6fe;font-size:12px;font-weight:800;">₩${number(acctSavedTax, 0)}</strong>
+        </div>
+      `;
+    } else if (!isDed) {
+      taxSavedRowHtml = `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#a7f3d0;background:rgba(16,185,129,0.07);padding:3px 7px;border-radius:4px;margin-top:4px;">
+          <span>절세 분류</span>
+          <span style="color:#34d399;">비공제 (원금인출 비과세)</span>
+        </div>
+      `;
+    } else {
+      taxSavedRowHtml = `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#94a3b8;background:rgba(255,255,255,0.04);padding:3px 7px;border-radius:4px;margin-top:4px;">
+          <span>누적 절세액</span>
+          <span style="color:#cbd5e1;">₩0</span>
+        </div>
+      `;
     }
 
     return `
@@ -4945,6 +5040,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
           <span>보유 ${acctHoldings.length}개 종목</span>
           <span class="${signClass(acctStats.profit)}" style="font-weight:700;">${acctStats.profit >= 0 ? '+' : ''}₩${number(acctStats.profit, 0)}</span>
         </div>
+        ${taxSavedRowHtml}
       </div>
     `;
   }).join('');
