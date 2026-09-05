@@ -1435,8 +1435,9 @@ async def rename_account(account_id: str, payload: dict, request: Request) -> di
                 yc["income_level"] = inc
         account["yearly_contributions"] = ycs
     elif account.get("account_type") in ("pension_savings", "irp") and float(account.get("annual_deposit") or 0) > 0 and not account.get("yearly_contributions"):
+        from datetime import datetime as _dt
         account["yearly_contributions"] = [{
-            "year": "2026",
+            "year": str(_dt.now().year),
             "deposit": float(account.get("annual_deposit") or 0),
             "is_deductible": account.get("tax_deductible", True),
             "income_level": account.get("income_level", "low")

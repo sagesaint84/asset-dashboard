@@ -1,3 +1,18 @@
+v5.5.27
+
+(fix) 🔧 연금/IRP 계좌 세액공제 연도별 납입 이력 저장·수정 구조적 결함 전면 수정
+- **`saveEditAccount` 이중 처리(Double Processing) 버그 해결**:
+  - 수정 모드(`editingAccountYearlyIndex`)에서 항목을 갱신한 후, 하단 `topYr` 동기화 블록이 동일한 연도를 또다시 덮어쓰거나 중복 추가하던 결함 해결
+  - `editingIndexApplied` 플래그를 도입하여 수정 모드 반영 후에는 topYr 자동 추가를 건너뛰도록 방어
+- **팬텀 2026년 자동 생성 버그 완전 차단**:
+  - 마지막 이력 항목 삭제 시 입력창이 하드코딩 `"2026"`으로 리셋되던 것을 동적 현재 연도(`new Date().getFullYear()`)로 변경
+  - 백엔드 `portfolio.py`와 `main.py`의 fallback 브릿지도 하드코딩 `"2026"` → `datetime.now().year` 동적 연도로 전면 교체
+- **연도별 이력 카드 전체 클릭 시 의도치 않은 수정모드 진입 방지**:
+  - 기존에 `.account-yearly-card` 전체 영역을 클릭해도 수정모드에 진입하던 것을 `[수정]` 버튼(`.account-yearly-edit-btn`)만 반응하도록 제한
+- **연도별 소득 구간(`income_level`) 개별 존중**:
+  - 수정 다이얼로그 열 때 계좌 수준의 `income_level`로 모든 연도 이력을 강제 덮어쓰던 것을, 이미 설정된 연도별 값은 유지하고 누락된 항목만 기본값 적용하도록 개선
+(perf) 서비스 워커 캐시 버전(`wealth-cache-v127`) 및 정적 자산 쿼리(`v5527`) 갱신
+
 v5.5.26
 
 (fix) 🛡️ 납입 연도 한글 입력 지원('24년', '24년도' 등) 및 연도별 납입 이력 [수정] 제자리 갱신(In-Place Update) 완벽 구현

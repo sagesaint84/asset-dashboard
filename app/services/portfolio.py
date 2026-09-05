@@ -303,8 +303,9 @@ def get_dashboard(data: dict[str, Any] | None = None, username: str | None = Non
         ycs = a.get("yearly_contributions")
         ann_dep = to_number(a.get("annual_deposit"), 0.0)
         if (acc_type in ("pension_savings", "irp")) and (not ycs or len(ycs) == 0) and ann_dep > 0:
+            cur_year = str(datetime.now().year)
             ycs = [{
-                "year": "2026",
+                "year": cur_year,
                 "deposit": ann_dep,
                 "is_deductible": a.get("tax_deductible", True),
                 "income_level": a.get("income_level", "low")

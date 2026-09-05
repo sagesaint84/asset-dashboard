@@ -5299,10 +5299,10 @@ function openAccountEditDialog(account) {
   // Sort descending by year
   accountCurrentYearlyList.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
 
-  // If account has an income_level, ensure items in accountCurrentYearlyList inherit it
+  // If account has an income_level, fill it in for yearly items that don't have one
   if (account.income_level) {
     accountCurrentYearlyList.forEach(item => {
-      item.income_level = acctIncomeLvl;
+      if (!item.income_level) item.income_level = acctIncomeLvl;
     });
   }
 
@@ -6512,6 +6512,7 @@ async function saveEditAccount() {
     const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
     // 만약 특정 연도 항목을 [수정] 모드로 변경 중인 상태에서 바로 [저장]을 누른 경우
+    let editingIndexApplied = false;
     if (editingAccountYearlyIndex !== null && accountCurrentYearlyList[editingAccountYearlyIndex]) {
       const rawYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
       const normYr = normalizeYear(rawYr) || accountCurrentYearlyList[editingAccountYearlyIndex].year;
@@ -6521,6 +6522,7 @@ async function saveEditAccount() {
       accountCurrentYearlyList[editingAccountYearlyIndex].income_level = income_level;
       editingAccountYearlyIndex = null;
       resetAddAccountYearlyBtn();
+      editingIndexApplied = true;
     }
 
     const yearly_contributions = [];
@@ -6538,23 +6540,21 @@ async function saveEditAccount() {
       }
     });
 
-    // 상단 입력창에 입력된 연도/금액이 이력에 있으면 갱신, 없으면 추가
-    const rawTopYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
-    const topYr = normalizeYear(rawTopYr);
-    if (topYr && (account_type === "pension_savings" || account_type === "irp")) {
-      const existing = yearly_contributions.find(y => normalizeYear(y.year) === topYr);
-      if (existing) {
-        existing.year = topYr;
-        existing.deposit = annual_deposit;
-        existing.is_deductible = isDeductible;
-        existing.income_level = income_level;
-      } else if (annual_deposit > 0) {
-        yearly_contributions.push({
-          year: topYr,
-          deposit: annual_deposit,
-          is_deductible: isDeductible,
-          income_level: income_level
-        });
+    // 상단 입력창에 입력된 연도/금액이 이력에 이미 없는 경우에만 추가
+    // (수정 모드에서 이미 반영된 경우 중복 방지)
+    if (!editingIndexApplied && (account_type === "pension_savings" || account_type === "irp")) {
+      const rawTopYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
+      const topYr = normalizeYear(rawTopYr);
+      if (topYr && annual_deposit > 0) {
+        const existing = yearly_contributions.find(y => normalizeYear(y.year) === topYr);
+        if (!existing) {
+          yearly_contributions.push({
+            year: topYr,
+            deposit: annual_deposit,
+            is_deductible: isDeductible,
+            income_level: income_level
+          });
+        }
       }
     }
 
@@ -9252,7 +9252,7 @@ function initSavingsListeners() {
               yrInput.value = accountCurrentYearlyList[0].year;
               if (depInput) depInput.value = accountCurrentYearlyList[0].deposit || "";
             } else {
-              yrInput.value = "2026";
+              yrInput.value = String(new Date().getFullYear());
               if (depInput) depInput.value = "";
             }
             refreshDialogKoreanHints(editForm);
@@ -9262,7 +9262,7 @@ function initSavingsListeners() {
         return;
       }
 
-      const editBtn = e.target.closest(".account-yearly-edit-btn") || e.target.closest(".account-yearly-card");
+      const editBtn = e.target.closest(".account-yearly-edit-btn");
       if (editBtn) {
         const idx = Number(editBtn.dataset.index);
         const item = accountCurrentYearlyList[idx];
