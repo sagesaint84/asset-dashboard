@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260819-8" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260905-v5525" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260905-v5526" />
   </head>
   <body>
     <main class="shell">
@@ -1061,7 +1061,7 @@
             
             <div class="form-grid" style="grid-template-columns:100px 1fr;gap:8px;margin-bottom:8px;">
               <label>납입 연도
-                <input type="number" id="accountInputYear" class="pension-entry-year" placeholder="예: 2026" min="2010" max="2035" value="2026" style="font-weight:700;text-align:center;" />
+                <input type="text" id="accountInputYear" class="pension-entry-year" placeholder="예: 2024 또는 24년" maxlength="10" value="2026" style="font-weight:700;text-align:center;" />
               </label>
               <label>해당 연도 납입액 (KRW)
                 <input type="number" id="accountInputDeposit" name="annual_deposit" class="pension-annual-deposit pension-entry-deposit" placeholder="예: 6000000" min="0" max="18000000" step="any" data-korean-currency />
@@ -2733,7 +2733,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260905-v5525"></script>
+    <script src="/static/wealth.js?v=20260905-v5526"></script>
   </body>
 </html>
 

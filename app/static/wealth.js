@@ -5143,6 +5143,36 @@ function updateAccountTaxBenefitFields(form) {
   }
 }
 
+function normalizeYear(val) {
+  if (!val) return "";
+  const digits = String(val).replace(/\D/g, "");
+  if (!digits) return "";
+  const num = parseInt(digits, 10);
+  if (num >= 2000 && num <= 2099) return String(num);
+  if (num >= 0 && num <= 99) return String(2000 + num);
+  if (num >= 1970 && num < 2000) return String(num);
+  return String(num);
+}
+window.normalizeYear = normalizeYear;
+
+let editingAccountYearlyIndex = null;
+
+function resetAddAccountYearlyBtn() {
+  const btn = document.getElementById("addAccountYearlyBtn");
+  if (btn) {
+    btn.innerHTML = `<span>➕</span> <span>연도 추가 / 반영</span>`;
+    btn.style.background = "linear-gradient(135deg, #0284c7, #0ea5e9)";
+  }
+}
+
+function setEditingAccountYearlyBtn(yr) {
+  const btn = document.getElementById("addAccountYearlyBtn");
+  if (btn) {
+    btn.innerHTML = `<span>✏️</span> <span>[${yr}년] 수정 반영</span>`;
+    btn.style.background = "linear-gradient(135deg, #059669, #10b981)";
+  }
+}
+
 function handleAddAccountYearly() {
   const editForm = document.getElementById("accountEditForm");
   const yrInput = editForm?.querySelector(".pension-entry-year") || document.getElementById("accountInputYear");
@@ -5150,13 +5180,14 @@ function handleAddAccountYearly() {
   const dedInput = editForm?.querySelector(".pension-tax-deductible") || document.getElementById("accountInputDeductible");
   const incInput = editForm?.querySelector(".pension-income-level") || document.getElementById("accountInputIncomeLevel");
 
-  const yr = (yrInput?.value || "").trim();
+  const rawYr = (yrInput?.value || "").trim();
+  const yr = normalizeYear(rawYr);
   const dep = Number(depInput?.value) || 0;
   const isDed = dedInput ? dedInput.value !== "false" : true;
   const incLvl = incInput?.value || "low";
 
   if (!yr) {
-    alert("연도를 입력해 주세요 (예: 2026).");
+    alert("연도를 올바르게 입력해 주세요 (예: 2024 또는 24년).");
     yrInput?.focus();
     return;
   }
@@ -5166,21 +5197,36 @@ function handleAddAccountYearly() {
     return;
   }
 
-  // 기존 연도 확인 (있으면 갱신, 없으면 추가)
-  const existingIdx = accountCurrentYearlyList.findIndex(y => String(y.year).trim() === yr);
-  if (existingIdx >= 0) {
-    accountCurrentYearlyList[existingIdx].deposit = dep;
-    accountCurrentYearlyList[existingIdx].is_deductible = isDed;
-    accountCurrentYearlyList[existingIdx].income_level = incLvl;
-    toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 반영되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
+  // 상단 입력창에도 정규화된 4자리 연도로 표시
+  if (yrInput) yrInput.value = yr;
+
+  if (editingAccountYearlyIndex !== null && accountCurrentYearlyList[editingAccountYearlyIndex]) {
+    const oldYr = accountCurrentYearlyList[editingAccountYearlyIndex].year;
+    accountCurrentYearlyList[editingAccountYearlyIndex].year = yr;
+    accountCurrentYearlyList[editingAccountYearlyIndex].deposit = dep;
+    accountCurrentYearlyList[editingAccountYearlyIndex].is_deductible = isDed;
+    accountCurrentYearlyList[editingAccountYearlyIndex].income_level = incLvl;
+    editingAccountYearlyIndex = null;
+    resetAddAccountYearlyBtn();
+    toast(`[${oldYr}년 ➔ ${yr}년 ₩${number(dep, 0)}] 수정이 반영되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
   } else {
-    accountCurrentYearlyList.push({
-      year: yr,
-      deposit: dep,
-      is_deductible: isDed,
-      income_level: incLvl
-    });
-    toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 목록에 추가되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
+    // 기존 연도 확인 (있으면 갱신, 없으면 추가)
+    const existingIdx = accountCurrentYearlyList.findIndex(y => normalizeYear(y.year) === yr);
+    if (existingIdx >= 0) {
+      accountCurrentYearlyList[existingIdx].year = yr;
+      accountCurrentYearlyList[existingIdx].deposit = dep;
+      accountCurrentYearlyList[existingIdx].is_deductible = isDed;
+      accountCurrentYearlyList[existingIdx].income_level = incLvl;
+      toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 반영되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
+    } else {
+      accountCurrentYearlyList.push({
+        year: yr,
+        deposit: dep,
+        is_deductible: isDed,
+        income_level: incLvl
+      });
+      toast(`[${yr}년 ₩${number(dep, 0)}] 이력이 목록에 추가되었습니다. 하단 [저장]을 눌러 최종 저장하세요.`);
+    }
   }
 
   // 연도 내림차순 정렬 후 렌더링
@@ -5197,6 +5243,8 @@ function openAccountEditDialog(account) {
   const form = $("#accountEditForm");
   if (!form || !account) return;
   form.reset();
+  editingAccountYearlyIndex = null;
+  resetAddAccountYearlyBtn();
   currentEditingAccountId = account.id;
   form.removeAttribute("data-account-id");
   form.removeAttribute("data-account-edit-id");
@@ -6463,23 +6511,40 @@ async function saveEditAccount() {
     const isa_transfer_amount = Number(form.querySelector(".pension-isa-transfer")?.value) || 0;
     const isa_transfer_year = form.querySelector(".pension-isa-year")?.value || "2026";
 
+    // 만약 특정 연도 항목을 [수정] 모드로 변경 중인 상태에서 바로 [저장]을 누른 경우
+    if (editingAccountYearlyIndex !== null && accountCurrentYearlyList[editingAccountYearlyIndex]) {
+      const rawYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
+      const normYr = normalizeYear(rawYr) || accountCurrentYearlyList[editingAccountYearlyIndex].year;
+      accountCurrentYearlyList[editingAccountYearlyIndex].year = normYr;
+      accountCurrentYearlyList[editingAccountYearlyIndex].deposit = annual_deposit;
+      accountCurrentYearlyList[editingAccountYearlyIndex].is_deductible = isDeductible;
+      accountCurrentYearlyList[editingAccountYearlyIndex].income_level = income_level;
+      editingAccountYearlyIndex = null;
+      resetAddAccountYearlyBtn();
+    }
+
     const yearly_contributions = [];
     accountCurrentYearlyList.forEach(item => {
       if (item && item.year) {
-        yearly_contributions.push({
-          year: String(item.year).trim(),
-          deposit: Number(item.deposit || 0),
-          is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
-          income_level: item.income_level || income_level
-        });
+        const normYr = normalizeYear(item.year);
+        if (normYr) {
+          yearly_contributions.push({
+            year: normYr,
+            deposit: Number(item.deposit || 0),
+            is_deductible: item.is_deductible !== false && String(item.is_deductible) !== "false",
+            income_level: item.income_level || income_level
+          });
+        }
       }
     });
 
     // 상단 입력창에 입력된 연도/금액이 이력에 있으면 갱신, 없으면 추가
-    const topYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
+    const rawTopYr = (form.querySelector(".pension-entry-year")?.value || "").trim();
+    const topYr = normalizeYear(rawTopYr);
     if (topYr && (account_type === "pension_savings" || account_type === "irp")) {
-      const existing = yearly_contributions.find(y => y.year === topYr);
+      const existing = yearly_contributions.find(y => normalizeYear(y.year) === topYr);
       if (existing) {
+        existing.year = topYr;
         existing.deposit = annual_deposit;
         existing.is_deductible = isDeductible;
         existing.income_level = income_level;
@@ -7068,7 +7133,10 @@ window.addEventListener("appinstalled", () => {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js", { scope: "/" })
-      .then((reg) => console.log("[PWA] Service Worker registered with scope:", reg.scope))
+      .then((reg) => {
+        reg.update();
+        console.log("[PWA] Service Worker registered with scope:", reg.scope);
+      })
       .catch((err) => console.error("[PWA] Service Worker registration failed:", err));
   });
 }
@@ -9133,11 +9201,13 @@ function initSavingsListeners() {
       handleAddAccountYearly();
     });
 
-    // 연도 입력창 변경 시 해당 연도 기존 이력 데이터 자동 로드
+    // 연도 입력창 변경 시 해당 연도 기존 이력 데이터 자동 로드 및 정규화
     document.getElementById("accountInputYear")?.addEventListener("change", (e) => {
-      const yr = (e.target.value || "").trim();
+      const rawYr = (e.target.value || "").trim();
+      const yr = normalizeYear(rawYr);
       if (!yr) return;
-      const match = accountCurrentYearlyList.find(y => String(y.year).trim() === yr);
+      e.target.value = yr;
+      const match = accountCurrentYearlyList.find(y => normalizeYear(y.year) === yr);
       const editForm = document.getElementById("accountEditForm");
       if (!editForm) return;
       const depInput = editForm.querySelector(".pension-annual-deposit");
@@ -9152,6 +9222,11 @@ function initSavingsListeners() {
       refreshDialogKoreanHints(editForm);
     });
 
+    document.getElementById("accountInputYear")?.addEventListener("blur", (e) => {
+      const norm = normalizeYear(e.target.value);
+      if (norm) e.target.value = norm;
+    });
+
     document.getElementById("accountYearlyList")?.addEventListener("click", (e) => {
       const delBtn = e.target.closest(".account-yearly-del-btn");
       if (delBtn) {
@@ -9159,6 +9234,12 @@ function initSavingsListeners() {
         if (!isNaN(idx) && accountCurrentYearlyList[idx]) {
           const removedYr = accountCurrentYearlyList[idx].year;
           accountCurrentYearlyList.splice(idx, 1);
+          if (editingAccountYearlyIndex === idx) {
+            editingAccountYearlyIndex = null;
+            resetAddAccountYearlyBtn();
+          } else if (editingAccountYearlyIndex !== null && editingAccountYearlyIndex > idx) {
+            editingAccountYearlyIndex--;
+          }
           renderAccountYearlyFormRows();
           toast(`${removedYr}년 이력이 삭제되었습니다.`);
 
@@ -9166,7 +9247,7 @@ function initSavingsListeners() {
           const editForm = document.getElementById("accountEditForm");
           const yrInput = editForm?.querySelector(".pension-entry-year");
           const depInput = editForm?.querySelector(".pension-annual-deposit");
-          if (yrInput && String(yrInput.value).trim() === String(removedYr).trim()) {
+          if (yrInput && normalizeYear(yrInput.value) === normalizeYear(removedYr)) {
             if (accountCurrentYearlyList.length > 0) {
               yrInput.value = accountCurrentYearlyList[0].year;
               if (depInput) depInput.value = accountCurrentYearlyList[0].deposit || "";
@@ -9186,6 +9267,7 @@ function initSavingsListeners() {
         const idx = Number(editBtn.dataset.index);
         const item = accountCurrentYearlyList[idx];
         if (item) {
+          editingAccountYearlyIndex = idx;
           const editForm = document.getElementById("accountEditForm");
           const yrInput = editForm?.querySelector(".pension-entry-year") || document.getElementById("accountInputYear");
           const depInput = editForm?.querySelector(".pension-annual-deposit") || document.getElementById("accountInputDeposit");
@@ -9202,9 +9284,11 @@ function initSavingsListeners() {
           if (dedInput) dedInput.value = (item.is_deductible !== false && String(item.is_deductible) !== "false") ? "true" : "false";
           if (incInput) incInput.value = item.income_level || "low";
 
+          setEditingAccountYearlyBtn(item.year || "");
           updateAccountTaxBenefitFields(editForm);
-          toast(`${item.year}년 정보가 상단 입력창에 로드되었습니다.`);
+          toast(`[${item.year}년] 수정 모드: 연도나 납입액을 변경한 후 [수정 반영] 또는 하단 [저장]을 눌러주세요.`);
         }
+        return;
       }
     });
 
