@@ -219,7 +219,9 @@ class KiwoomOpenAPI:
                         break
 
                 for item in raw_items:
-                    qty = as_float(item.get("hldg_qty") or item.get("hold_qty") or item.get("qty") or item.get("bal_qty", 0))
+                    hldg = as_float(item.get("hldg_qty") or item.get("hold_qty") or item.get("qty") or item.get("bal_qty", 0))
+                    sll = as_float(item.get("thdt_sll_qty") or item.get("sll_qty", 0))
+                    qty = max(0.0, hldg - sll) if sll > 0 else hldg
                     if qty <= 0:
                         continue
 
@@ -241,12 +243,12 @@ class KiwoomOpenAPI:
                         "source": "kiwoom_api",
                     })
 
-                # 예수금 추출
+                # 예수금 추출: D+2 결제반영 추정 예수금(d2_evlt_amt, prvs_rcdl_excc_amt) 우선
                 cash_candidates = [
-                    body.get("entr_amt"),
-                    body.get("dnca_tot_amt"),
                     body.get("d2_evlt_amt"),
                     body.get("prvs_rcdl_excc_amt"),
+                    body.get("dnca_tot_amt"),
+                    body.get("entr_amt"),
                     body.get("deposit"),
                 ]
                 for c in cash_candidates:
@@ -290,7 +292,9 @@ class KiwoomOpenAPI:
                 body = res_uapi.json()
                 raw_items = body.get("output1", [])
                 for item in raw_items:
-                    qty = as_float(item.get("hldg_qty", 0) or item.get("hold_qty", 0))
+                    hldg = as_float(item.get("hldg_qty", 0) or item.get("hold_qty", 0))
+                    sll = as_float(item.get("thdt_sll_qty") or item.get("sll_qty", 0))
+                    qty = max(0.0, hldg - sll) if sll > 0 else hldg
                     if qty <= 0:
                         continue
                     code = str(item.get("pdno", "") or item.get("item_code", "")).strip()
@@ -309,9 +313,9 @@ class KiwoomOpenAPI:
                     })
                 output2 = body.get("output2", [])
                 if isinstance(output2, list) and output2:
-                    cash_krw = as_float(output2[0].get("dnca_tot_amt", 0) or output2[0].get("prvs_rcdl_excc_amt", 0))
+                    cash_krw = as_float(output2[0].get("prvs_rcdl_excc_amt", 0)) or as_float(output2[0].get("dnca_tot_amt", 0))
                 elif isinstance(output2, dict):
-                    cash_krw = as_float(output2.get("dnca_tot_amt", 0) or output2.get("prvs_rcdl_excc_amt", 0))
+                    cash_krw = as_float(output2.get("prvs_rcdl_excc_amt", 0)) or as_float(output2.get("dnca_tot_amt", 0))
         except Exception as e:
             logger.warning("키움 uapi fallback 조회 중 오류: %s", e)
 
@@ -350,7 +354,9 @@ class KiwoomOpenAPI:
                 if isinstance(raw_items, dict):
                     raw_items = [raw_items]
                 for item in raw_items:
-                    qty = as_float(item.get("ovrs_cblc_qty") or item.get("hldg_qty") or item.get("qty", 0))
+                    ovrs_cblc = as_float(item.get("ovrs_cblc_qty") or item.get("hldg_qty") or item.get("qty", 0))
+                    sll = as_float(item.get("thdt_sll_qty") or item.get("sll_qty", 0))
+                    qty = max(0.0, ovrs_cblc - sll) if sll > 0 else ovrs_cblc
                     if qty <= 0:
                         continue
                     code = str(item.get("ovrs_pdno") or item.get("stk_cd") or item.get("symbol", "")).strip()
@@ -402,7 +408,9 @@ class KiwoomOpenAPI:
                 body = res_uapi.json()
                 raw_items = body.get("output1", [])
                 for item in raw_items:
-                    qty = as_float(item.get("ovrs_cblc_qty", 0) or item.get("hold_qty", 0))
+                    ovrs_cblc = as_float(item.get("ovrs_cblc_qty", 0) or item.get("hold_qty", 0))
+                    sll = as_float(item.get("thdt_sll_qty") or item.get("sll_qty", 0))
+                    qty = max(0.0, ovrs_cblc - sll) if sll > 0 else ovrs_cblc
                     if qty <= 0:
                         continue
                     code = str(item.get("ovrs_pdno", "") or item.get("item_code", "")).strip()

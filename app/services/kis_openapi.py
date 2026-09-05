@@ -186,7 +186,9 @@ class KISOpenAPI:
         holdings: list[dict[str, Any]] = []
         raw_items = body.get("output1", [])
         for item in raw_items:
-            qty = as_float(item.get("hldg_qty", 0))
+            hldg = as_float(item.get("hldg_qty", 0))
+            sll = as_float(item.get("thdt_sll_qty", 0))
+            qty = max(0.0, hldg - sll) if sll > 0 else hldg
             if qty <= 0:
                 continue
 
@@ -206,14 +208,14 @@ class KISOpenAPI:
                 "source": "kis_api",
             })
 
-        # output2 예수금 정보
+        # output2 예수금 정보: D+2 결제반영 추정예수금(prvs_rcdl_excc_amt) 우선
         output2 = body.get("output2", [])
         cash_krw = 0.0
-        if isinstance(output2, list) and output2:
-            summary = output2[0]
-            cash_krw = as_float(summary.get("dnca_tot_amt", 0)) or as_float(summary.get("prvs_rcdl_excc_amt", 0))
-        elif isinstance(output2, dict):
-            cash_krw = as_float(output2.get("dnca_tot_amt", 0)) or as_float(output2.get("prvs_rcdl_excc_amt", 0))
+        summary = output2[0] if isinstance(output2, list) and output2 else (output2 if isinstance(output2, dict) else {})
+        if summary.get("prvs_rcdl_excc_amt") is not None and str(summary.get("prvs_rcdl_excc_amt")).strip() != "":
+            cash_krw = as_float(summary.get("prvs_rcdl_excc_amt"))
+        elif summary.get("dnca_tot_amt") is not None and str(summary.get("dnca_tot_amt")).strip() != "":
+            cash_krw = as_float(summary.get("dnca_tot_amt"))
 
         return holdings, cash_krw
 
@@ -254,7 +256,9 @@ class KISOpenAPI:
                 body = response.json()
                 raw_items = body.get("output1", [])
                 for item in raw_items:
-                    qty = as_float(item.get("ovrs_cblc_qty", 0))
+                    ovrs_cblc = as_float(item.get("ovrs_cblc_qty", 0))
+                    sll = as_float(item.get("thdt_sll_qty", 0))
+                    qty = max(0.0, ovrs_cblc - sll) if sll > 0 else ovrs_cblc
                     if qty <= 0:
                         continue
 
@@ -276,7 +280,10 @@ class KISOpenAPI:
 
                 output2 = body.get("output2", {})
                 if isinstance(output2, dict):
-                    cash_usd = as_float(output2.get("frcr_dncl_amt_2", 0)) or as_float(output2.get("ovrs_tot_pfls", 0))
+                    if output2.get("frcr_dncl_amt_2") is not None and str(output2.get("frcr_dncl_amt_2")).strip() != "":
+                        cash_usd = as_float(output2.get("frcr_dncl_amt_2"))
+                    else:
+                        cash_usd = as_float(output2.get("frcr_drwg_psbl_amt_1") or output2.get("ovrs_tot_pfls", 0))
         except Exception as e:
             logger.warning("한국투자증권 해외주식 잔고 조회 중 알림: %s", e)
 

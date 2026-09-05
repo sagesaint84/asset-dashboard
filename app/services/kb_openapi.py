@@ -116,9 +116,15 @@ class KBOpenAPI:
         records: list[dict[str, Any]] = []
         for row in domestic.get("Record1", []):
             code = str(row.get("is_no", ""))[-6:]
-            records.append({"code": code, "name": row.get("is_nm", code), "quantity": as_float(row.get("gnrl_q")), "avg_price": 0, "current_price": 0, "currency": "KRW", "market": "KRX"})
+            qty = max(0.0, as_float(row.get("gnrl_q", 0)) - as_float(row.get("sll_q", 0) or row.get("tdy_sll_q", 0)))
+            if qty <= 0:
+                continue
+            records.append({"code": code, "name": row.get("is_nm", code), "quantity": qty, "avg_price": 0, "current_price": 0, "currency": "KRW", "market": "KRX"})
         for row in overseas.get("Record2", []):
-            records.append({"code": row.get("is_cd", ""), "name": row.get("is_nm", ""), "quantity": as_float(row.get("frgn_hld_q_p6")), "avg_price": as_float(row.get("byng_avr_prc_p4")), "current_price": as_float(row.get("now_prc_p4")), "currency": row.get("crncy_clsf_nm", "USD"), "market": row.get("mkt_clsf", "")})
+            qty = max(0.0, as_float(row.get("frgn_hld_q_p6", 0)) - as_float(row.get("sll_q", 0) or row.get("tdy_sll_q", 0)))
+            if qty <= 0:
+                continue
+            records.append({"code": row.get("is_cd", ""), "name": row.get("is_nm", ""), "quantity": qty, "avg_price": as_float(row.get("byng_avr_prc_p4")), "current_price": as_float(row.get("now_prc_p4")), "currency": row.get("crncy_clsf_nm", "USD"), "market": row.get("mkt_clsf", "")})
         return [row for row in records if row["code"] and row["quantity"] > 0]
 
     async def refresh_prices(self, holdings: list[dict[str, Any]]) -> tuple[dict[str, float], list[str]]:
