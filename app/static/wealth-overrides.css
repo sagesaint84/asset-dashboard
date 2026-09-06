@@ -2057,11 +2057,14 @@ dialog.dialog .dialog-actions {
   border-color: #e2e8f0 !important;
 }
 
-[data-theme="white"] .account-row-info strong {
+[data-theme="white"] .account-row-info strong,
+[data-theme="white"] .account-row-values strong,
+[data-theme="white"] .account-row-info span strong {
   color: #0f172a !important;
 }
 
-[data-theme="white"] .account-row-info span {
+[data-theme="white"] .account-row-info span,
+[data-theme="white"] .account-row-values small {
   color: #64748b !important;
 }
 
@@ -2150,13 +2153,41 @@ dialog.dialog .dialog-actions {
 }
 
 [data-theme="white"] .summary-row-label strong,
-[data-theme="white"] .summary-row-val strong,
+[data-theme="white"] .summary-row-val strong:not(.gain):not(.loss):not(.up):not(.down),
+[data-theme="white"] .summary-row-val .value-highlight,
+[data-theme="white"] #totalInvestLabelText,
+[data-theme="white"] #profitLabelText,
+[data-theme="white"] #pnlLabelText,
+[data-theme="white"] #divLabelText,
+[data-theme="white"] #summaryActualDividend,
 [data-theme="white"] .classification-title strong,
 [data-theme="white"] .classification-value b,
 [data-theme="white"] h1, [data-theme="white"] h2, [data-theme="white"] h3,
-[data-theme="white"] strong:not(.tile-name):not(.heatmap-tile-inner *):not(.heatmap-tooltip *):not(.heatmap-stock-card *),
+[data-theme="white"] strong:not(.tile-name):not(.heatmap-tile-inner *):not(.heatmap-tooltip *):not(.heatmap-stock-card *):not(.gain):not(.loss):not(.up):not(.down),
 [data-theme="white"] th, [data-theme="white"] td {
-  color: #0f172a;
+  color: #0f172a !important;
+}
+
+[data-theme="white"] #subRealEstateVal,
+[data-theme="white"] #subStockVal {
+  color: #6366f1 !important;
+}
+
+[data-theme="white"] #subSafeCashVal,
+[data-theme="white"] #subSafeLeaseVal,
+[data-theme="white"] #subSafeInsuranceVal {
+  color: #059669 !important;
+}
+
+[data-theme="white"] #dayCaption,
+[data-theme="white"] #pnlSubBreakdown,
+[data-theme="white"] #pnlYearLabel,
+[data-theme="white"] #pnlMonthLabel,
+[data-theme="white"] #divYearLabel,
+[data-theme="white"] #divMonthLabel,
+[data-theme="white"] #summaryKrwStockCount,
+[data-theme="white"] #summaryTotalDebtCaption {
+  color: #64748b !important;
 }
 
 [data-theme="white"] .classification-row {
@@ -2196,9 +2227,28 @@ dialog.dialog .dialog-actions {
 [data-theme="white"] .heatmap-select,
 [data-theme="white"] .toolbar input,
 [data-theme="white"] select,
-[data-theme="white"] input {
+[data-theme="white"] input,
+[data-theme="white"] textarea {
   background: #f1f5f9 !important;
   border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .dialog label,
+[data-theme="white"] .dashboard-dialog label {
+  color: #334155 !important;
+}
+
+[data-theme="white"] .dialog-head h2 {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .dialog-description,
+[data-theme="white"] .close {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .close:hover {
   color: #0f172a !important;
 }
 
@@ -2839,9 +2889,37 @@ dialog.dialog .dialog-actions {
   border-color: #e2e8f0 !important;
 }
 
+[data-theme="white"] .saving-detail-label {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .saving-detail-val:not(.gain):not(.loss) {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .saving-detail-val small {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .saving-bank-name {
+  color: #64748b !important;
+}
+
 [data-theme="white"] .saving-interest-box {
-  background: #f0fdf4 !important;
-  border-color: #bbf7d0 !important;
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="white"] .saving-interest-row span:first-child {
+  color: #475569 !important;
+}
+
+[data-theme="white"] .saving-interest-row span:last-child:not([style*="color"]) {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .saving-interest-row.maturity-row {
+  border-top-color: #e2e8f0 !important;
 }
 
 [data-theme="white"] .savings-subtab {
@@ -3266,6 +3344,93 @@ dialog.dialog .dialog-actions {
   }
 }
 
+/* 화이트 테마 오버라이드: 가계부 */
+[data-theme="white"] .sub-panel,
+[data-theme="white"] #ledgerSectionPanel .sub-panel,
+[data-theme="white"] #ledgerSectionPanel div[style*="background:rgba(15,23,42"] {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .ledger-cat-row {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="white"] .ledger-cat-bar-track {
+  background: #e2e8f0 !important;
+}
+[data-theme="white"] .ledger-trend-bars {
+  background: #f1f5f9 !important;
+}
+[data-theme="white"] .ledger-tx-table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+[data-theme="white"] .ledger-tx-table td {
+  border-bottom-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+[data-theme="white"] .ledger-tx-row:hover td {
+  background: #f8fafc !important;
+}
+[data-theme="white"] #ledgerTxCountBadge {
+  background: #e2e8f0 !important;
+  color: #334155 !important;
+}
+[data-theme="white"] #ledgerFilterType,
+[data-theme="white"] #ledgerSearchInput {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] #ledgerSectionPanel div[style*="border:2px dashed"] {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="white"] #ledgerImportText {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* OLED 테마 오버라이드: 가계부 */
+[data-theme="oled"] .sub-panel,
+[data-theme="oled"] #ledgerSectionPanel .sub-panel,
+[data-theme="oled"] #ledgerSectionPanel div[style*="background:rgba(15,23,42"] {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+}
+[data-theme="oled"] .ledger-cat-row {
+  background: #0d0d12 !important;
+  border-color: #1a1a24 !important;
+}
+[data-theme="oled"] .ledger-cat-bar-track {
+  background: #14141c !important;
+}
+[data-theme="oled"] .ledger-trend-bars {
+  background: #0d0d12 !important;
+}
+[data-theme="oled"] .ledger-tx-table th {
+  background: #0d0d12 !important;
+  color: #808b9e !important;
+  border-bottom-color: #1a1a24 !important;
+}
+[data-theme="oled"] .ledger-tx-table td {
+  border-bottom-color: #14141c !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="oled"] .ledger-tx-row:hover td {
+  background: #12121a !important;
+}
+[data-theme="oled"] #ledgerFilterType,
+[data-theme="oled"] #ledgerSearchInput,
+[data-theme="oled"] #ledgerImportText {
+  background: #0d0d12 !important;
+  border-color: #1a1a26 !important;
+  color: #f1f5f9 !important;
+}
+
 /* 절세계좌 필터 카드 */
 .tax-card {
   cursor: pointer !important;
@@ -3349,6 +3514,110 @@ dialog.dialog .dialog-actions {
 
 .records-panel.is-tax-view .tax-holdings-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.03);
+}
+
+/* 화이트 테마 오버라이드: 절세계좌 카드 & 테이블 */
+[data-theme="white"] .tax-card {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .tax-card:hover {
+  background: #f8fafc !important;
+  border-color: #818cf8 !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.12) !important;
+}
+[data-theme="white"] .tax-card.active-tax-card {
+  background: #eef2ff !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2) !important;
+}
+[data-theme="white"] .tax-card strong:not(.gain):not(.loss):not(.up):not(.down),
+[data-theme="white"] .tax-card h3,
+[data-theme="white"] .tax-card h4 {
+  color: #0f172a !important;
+}
+[data-theme="white"] .tax-card span[style*="color:#cbd5e1"] {
+  color: #475569 !important;
+}
+[data-theme="white"] .tax-card div[style*="background:rgba(167,139,250"] {
+  background: rgba(167, 139, 250, 0.1) !important;
+  border-color: rgba(167, 139, 250, 0.3) !important;
+}
+[data-theme="white"] .tax-card div[style*="background:rgba(167,139,250"] span {
+  color: #6d28d9 !important;
+}
+[data-theme="white"] .tax-card div[style*="background:rgba(167,139,250"] strong {
+  color: #6d28d9 !important;
+}
+[data-theme="white"] .tax-table-wrap,
+[data-theme="white"] .records-panel.is-tax-view .tax-table-wrap {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .tax-holdings-table thead th,
+[data-theme="white"] .records-panel.is-tax-view .tax-holdings-table thead th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+[data-theme="white"] .tax-holdings-table tbody td,
+[data-theme="white"] .records-panel.is-tax-view .tax-holdings-table tbody td {
+  border-bottom-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+[data-theme="white"] .records-panel.is-tax-view .tax-holdings-table tbody tr:hover td {
+  background: #f8fafc !important;
+}
+[data-theme="white"] .tax-cash-table-row {
+  background: #f0f9ff !important;
+  border-bottom-color: #bae6fd !important;
+}
+[data-theme="white"] .tax-cash-table-row strong {
+  color: #0284c7 !important;
+}
+[data-theme="white"] .tax-cash-table-row small {
+  color: #0369a1 !important;
+}
+[data-theme="white"] .tax-filter-title {
+  color: #6366f1 !important;
+}
+[data-theme="white"] .tax-table-header strong {
+  color: #0f172a !important;
+}
+
+/* OLED 테마 오버라이드: 절세계좌 */
+[data-theme="oled"] .tax-card {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+}
+[data-theme="oled"] .tax-card:hover {
+  background: #0d0d12 !important;
+  border-color: #3b82f6 !important;
+}
+[data-theme="oled"] .tax-card.active-tax-card {
+  background: #0e1022 !important;
+  border-color: #6366f1 !important;
+}
+[data-theme="oled"] .tax-table-wrap,
+[data-theme="oled"] .records-panel.is-tax-view .tax-table-wrap {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+}
+[data-theme="oled"] .tax-holdings-table thead th,
+[data-theme="oled"] .records-panel.is-tax-view .tax-holdings-table thead th {
+  background: #0d0d12 !important;
+  color: #808b9e !important;
+  border-bottom-color: #1a1a24 !important;
+}
+[data-theme="oled"] .tax-holdings-table tbody td,
+[data-theme="oled"] .records-panel.is-tax-view .tax-holdings-table tbody td {
+  border-bottom-color: #14141c !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="oled"] .records-panel.is-tax-view .tax-holdings-table tbody tr:hover td {
+  background: #12121a !important;
 }
 
 @media (max-width: 1100px) {
@@ -3486,6 +3755,20 @@ dialog.dialog .dialog-actions {
 [data-theme="white"] .saving-card.real-estate-card.badge-sold:hover {
   border-color: #f59e0b !important;
 }
+[data-theme="white"] .saving-card.real-estate-card.badge-sold .saving-product-name {
+  color: #0f172a !important;
+}
+[data-theme="white"] .saving-card.real-estate-card.badge-sold .saving-detail-row[style*="background"] {
+  background: #fef3c7 !important;
+}
+[data-theme="white"] .saving-card.real-estate-card.badge-sold .saving-detail-label {
+  color: #64748b !important;
+}
+[data-theme="white"] .saving-card.real-estate-card.badge-sold .d-day-badge {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
 
 /* OLED 테마 */
 [data-theme="oled"] #cardRealEstateRealized {
@@ -3495,6 +3778,86 @@ dialog.dialog .dialog-actions {
 [data-theme="oled"] .saving-card.real-estate-card.badge-sold {
   background: #0a0802 !important;
   border-color: #3f2a08 !important;
+}
+
+/* ── 다이얼로그 및 내부 컴포넌트 화이트 테마 오버라이드 ── */
+[data-theme="white"] .dialog,
+[data-theme="white"] .dashboard-dialog {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.15) !important;
+}
+[data-theme="white"] .dialog form,
+[data-theme="white"] .dashboard-dialog form {
+  color: #0f172a !important;
+}
+[data-theme="white"] .dialog label,
+[data-theme="white"] .dashboard-dialog label {
+  color: #334155 !important;
+}
+[data-theme="white"] .dialog label span,
+[data-theme="white"] .dashboard-dialog label span {
+  color: #475569 !important;
+}
+[data-theme="white"] .dialog input,
+[data-theme="white"] .dialog select,
+[data-theme="white"] .dialog textarea,
+[data-theme="white"] .dashboard-dialog input,
+[data-theme="white"] .dashboard-dialog select,
+[data-theme="white"] .dashboard-dialog textarea {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] .dialog-head h2,
+[data-theme="white"] .dashboard-dialog h2,
+[data-theme="white"] .dashboard-dialog h3 {
+  color: #0f172a !important;
+}
+[data-theme="white"] .dialog-description {
+  color: #64748b !important;
+}
+
+/* 다이얼로그 내부 절세/연금/대출 프리뷰 박스 */
+[data-theme="white"] #pensionAssetPreviewBox,
+[data-theme="white"] #yuTaxBenefitPreview,
+[data-theme="white"] .pension-preview-box,
+[data-theme="white"] #bankMinusPreviewBox,
+[data-theme="white"] #reKbResultDetail {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] #pensionDurationText,
+[data-theme="white"] #pensionAssetPreviewBox strong,
+[data-theme="white"] #reKbResultDetail strong {
+  color: #0f172a !important;
+}
+
+/* 연도별 공제/납입 이력 행 편집기 (.yu-yearly-row) */
+[data-theme="white"] .yu-yearly-row {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="white"] .yu-yearly-row input,
+[data-theme="white"] .yu-yearly-row select {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] .yu-yearly-row span {
+  color: #475569 !important;
+}
+
+/* 비밀번호 변경 및 OpenAPI 설정 모달 */
+[data-theme="white"] #forcePasswordModal,
+[data-theme="white"] #userOpenApiModal,
+[data-theme="white"] #changePasswordModal,
+[data-theme="white"] #adminUsersModal {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 
 

@@ -1573,15 +1573,15 @@ function renderAccounts(items) {
         }
       }
 
-      return `<div class="account-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#111a33;border:1px solid #1f2b48;border-radius:9px;margin-bottom:8px;">
+      return `<div class="account-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:9px;margin-bottom:8px;">
         <div class="account-row-info" style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             ${typeBadge}
-            <strong style="font-size:14px;color:#f1f4fb;font-weight:700;">${html(account.name)}</strong>
+            <strong style="font-size:14px;font-weight:700;">${html(account.name)}</strong>
             <span class="saving-owner-badge" style="font-size:10.5px;padding:1px 6px;">${html(account.owner || '모두')}</span>
           </div>
           <div style="font-size:12px;color:#94a3b8;margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span>주식자산 <strong style="color:#e2e8f0;font-weight:600;">₩${number(stockVal, 0)}</strong> (${number(account.holding_count, 0)}종목)</span>
+            <span>주식자산 <strong style="font-weight:600;">₩${number(stockVal, 0)}</strong> (${number(account.holding_count, 0)}종목)</span>
             <span style="color:#475569;">·</span>
             <span>예수금 <strong style="color:#38bdf8;font-weight:600;">${cashFormatted}</strong></span>
           </div>
@@ -1590,7 +1590,7 @@ function renderAccounts(items) {
         <div class="account-row-right" style="display:flex;align-items:center;gap:14px;margin-left:14px;flex-shrink:0;">
           <div class="account-row-values" style="text-align:right;">
             <div style="font-size:10.5px;color:#94a3b8;margin-bottom:1px;font-weight:500;">통장 총 자산</div>
-            <strong style="font-size:15px;color:#f8fafc;font-weight:800;letter-spacing:-0.3px;">₩${number(totalVal, 0)}</strong>
+            <strong style="font-size:15px;font-weight:800;letter-spacing:-0.3px;">₩${number(totalVal, 0)}</strong>
             ${profitVal !== 0 ? `
               <div style="font-size:11.5px;margin-top:2px;font-weight:700;" class="${signClass(profitVal)}">
                 ${profitVal > 0 ? '+' : ''}₩${number(profitVal, 0)}
@@ -2593,15 +2593,15 @@ function renderInsuranceWithOwner(owner = '모두') {
         if (yDeductible) cumulativeTaxSaved += ySaved;
 
         return `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:11.5px;margin-bottom:3px;">
-            <span><strong style="color:#e2e8f0;">${html(yYear)}년:</strong> 입금 ₩${number(yDep, 0)}</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;font-size:11.5px;margin-bottom:3px;">
+            <span><strong>${html(yYear)}년:</strong> 입금 ₩${number(yDep, 0)}</span>
             <span>➔ ${yDeductible ? `<strong style="color:#4ade80;">절세 ₩${number(ySaved, 0)}</strong>` : '<span style="color:#34d399;font-weight:600;">비공제 (₩0)</span>'}</span>
           </div>
         `;
       }).join('');
 
       yearlyHistoryHtml = `
-        <div style="margin-top:10px;padding:8px 10px;background:rgba(0,0,0,0.3);border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.25)' : 'rgba(16,185,129,0.25)'};border-radius:6px;">
+        <div class="insurance-yearly-history" style="margin-top:10px;padding:8px 10px;border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.25)' : 'rgba(16,185,129,0.25)'};border-radius:6px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11.5px;">
             <span style="font-weight:700;color:${isTaxDeductible ? '#38bdf8' : '#34d399'};">📅 연도별 절세 이력</span>
             <span style="font-weight:700;color:#4ade80;font-size:12px;">누적 절세액: ₩${number(cumulativeTaxSaved, 0)}</span>
@@ -2614,7 +2614,7 @@ function renderInsuranceWithOwner(owner = '모두') {
     }
 
     return `
-      <div class="saving-card" style="border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.35)' : 'rgba(16,185,129,0.35)'};background:linear-gradient(145deg, rgba(16,25,51,0.9), rgba(11,17,35,0.9));">
+      <div class="saving-card" style="border:1px solid ${isTaxDeductible ? 'rgba(56,189,248,0.35)' : 'rgba(16,185,129,0.35)'};">
         <div class="saving-card-header">
           <div class="saving-card-title-group">
             <div class="saving-badge-row">
@@ -2696,15 +2696,15 @@ function renderInsuranceWithOwner(owner = '모두') {
           if (yDeductible) yuCumulativeSaved += ySaved;
 
           return `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:rgba(255,255,255,0.03);border-radius:4px;font-size:11.5px;margin-bottom:3px;">
-              <span><strong style="color:#e2e8f0;">${html(yYear)}년:</strong> 입금 ₩${number(yDep, 0)}</span>
-              <span>➔ ${yDeductible ? `<strong style="color:#4ade80;">소득공제 절세 ₩${number(ySaved, 0)}</strong>` : '<span style="color:#34d399;font-weight:600;">비공제 (₩0)</span>'}</span>
-            </div>
-          `;
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;font-size:11.5px;margin-bottom:3px;">
+            <span><strong>${html(yYear)}년:</strong> 입금 ₩${number(yDep, 0)}</span>
+            <span>➔ ${yDeductible ? `<strong style="color:#4ade80;">소득공제 절세 ₩${number(ySaved, 0)}</strong>` : '<span style="color:#34d399;font-weight:600;">비공제 (₩0)</span>'}</span>
+          </div>
+        `;
         }).join('');
 
         yuYearlyRowsHtml = `
-          <div style="margin-top:10px;padding:8px 10px;background:rgba(0,0,0,0.3);border:1px solid rgba(234,179,8,0.3);border-radius:6px;">
+          <div class="insurance-yearly-history" style="margin-top:10px;padding:8px 10px;border:1px solid rgba(234,179,8,0.3);border-radius:6px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11.5px;">
               <span style="font-weight:700;color:#facc15;">📅 연도별 소득공제 이력</span>
               <span style="font-weight:700;color:#4ade80;font-size:12px;">누적 절세액: ₩${number(yuCumulativeSaved, 0)}</span>
@@ -2720,7 +2720,7 @@ function renderInsuranceWithOwner(owner = '모두') {
         <div class="saving-interest-box" style="background:rgba(234,179,8,0.08);border-color:rgba(234,179,8,0.35);margin-top:8px;">
           <div class="saving-interest-row">
             <span style="color:#facc15;">연간 소득공제 대상</span>
-            <span style="color:#e2e8f0;font-weight:600;">₩${number(deduction, 0)} (한도 ₩${number(limit, 0)})</span>
+            <span class="saving-detail-val" style="font-weight:600;">₩${number(deduction, 0)} (한도 ₩${number(limit, 0)})</span>
           </div>
           <div class="saving-interest-row maturity-row" style="border-top:1px dashed rgba(234,179,8,0.3);padding-top:4px;margin-top:4px;">
             <span style="color:#facc15;">예상 세금 절감(환급)액</span>
@@ -3175,15 +3175,15 @@ function renderRealEstateWithOwner(owner = '모두') {
         : (sold.owner || '모두');
 
       return `
-        <div class="saving-card real-estate-card badge-sold" style="border-color:rgba(245,158,11,0.3);background:linear-gradient(180deg,#131622,#0d111c);">
+        <div class="saving-card real-estate-card badge-sold">
           <div class="saving-card-header">
             <div class="saving-card-title-group">
               <div class="saving-badge-row">
                 <span class="saving-type-badge badge-sold" style="background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.35);font-weight:700;">🏷️ 매도 완료</span>
                 <span class="saving-owner-badge" title="${html(sold.owner || '')}">${html(ownerBadgeText)}</span>
-                <span class="d-day-badge" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid rgba(148,163,184,0.25);">📅 매도일: ${html(sold.date || '-')}</span>
+                <span class="d-day-badge">📅 매도일: ${html(sold.date || '-')}</span>
               </div>
-              <h3 class="saving-product-name" style="color:#f8fafc;font-size:15px;margin-top:2px;">${html(titleName)}</h3>
+              <h3 class="saving-product-name" style="font-size:15px;margin-top:2px;">${html(titleName)}</h3>
               <span class="saving-bank-name">${html(sold.address || sold.memo || '-')}</span>
             </div>
             <div class="account-row-actions saving-card-actions">
@@ -3207,8 +3207,8 @@ function renderRealEstateWithOwner(owner = '모두') {
                 <span class="saving-detail-val" style="color:#fb7185;">-₩${number(exp, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawExp, 0)})</small>` : ''}</span>
               </div>
             ` : ''}
-            <div class="saving-detail-row" style="grid-column:1/-1;background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;margin-top:2px;">
-              <span class="saving-detail-label" style="font-weight:700;color:#cbd5e1;">실현손익 (양도차익)</span>
+            <div class="saving-detail-row sold-profit-row" style="grid-column:1/-1;padding:8px 10px;border-radius:8px;margin-top:2px;">
+              <span class="saving-detail-label" style="font-weight:700;">실현손익 (양도차익)</span>
               <span class="saving-detail-val" style="color:${profitColor};font-size:14px;font-weight:800;">
                 ${profitSign}₩${number(pnl, 0)} ${profitRate != null ? `(${profitSign}${profitRate}%)` : ''}
               </span>
@@ -5236,14 +5236,14 @@ function renderTaxAccountHoldings(owner = currentOwner) {
   }
 
   chartWrap.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+    <div class="tax-table-header" style="display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:8px;flex-wrap:wrap;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:13.5px;font-weight:700;color:#c4b5fd;">${filterTitle} (${sortedGroups.length}개 종목)</span>
+        <span class="tax-filter-title" style="font-size:13.5px;font-weight:700;">${filterTitle} (${sortedGroups.length}개 종목)</span>
         <span style="font-size:11px;color:#94a3b8;">${filterSubtitle}</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap;">
-        <span style="color:#94a3b8;">총 자산: <strong style="color:#f8fafc;font-size:14px;font-weight:800;">₩${number(filteredTotalMarket, 0)}</strong></span>
-        <span style="color:#94a3b8;">(주식 <strong style="color:#e2e8f0;font-weight:600;">₩${number(filteredStats.market, 0)}</strong> · <strong style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(currentFilterCash, 0)}</strong>)</span>
+        <span style="color:#94a3b8;">총 자산: <strong style="font-size:14px;font-weight:800;">₩${number(filteredTotalMarket, 0)}</strong></span>
+        <span style="color:#94a3b8;">(주식 <strong style="font-weight:600;">₩${number(filteredStats.market, 0)}</strong> · <strong style="color:#38bdf8;font-weight:700;">💵 예수금 ₩${number(currentFilterCash, 0)}</strong>)</span>
         <span class="${signClass(filteredStats.profit)}" style="font-weight:700;">
           ${filteredStats.profit >= 0 ? '+' : ''}₩${number(filteredStats.profit, 0)} (${filteredStats.profit >= 0 ? '+' : ''}${number(filteredStats.profitRate, 2)}%)
         </span>
@@ -5269,7 +5269,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <div style="display:flex;align-items:center;gap:7px;">
           <span style="font-size:16px;">🌿</span>
-          <strong style="color:#f8fafc;font-size:13.5px;font-weight:700;">절세계좌 전체</strong>
+          <strong class="tax-card-title" style="font-size:13.5px;font-weight:700;">절세계좌 전체</strong>
           ${isAllActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#8b5cf6;color:#fff;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.06);padding:2px 7px;border-radius:4px;">
@@ -5280,7 +5280,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       <!-- 절세계좌 총액 -->
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
         <span style="font-size:11.5px;color:#94a3b8;">절세계좌 총 자산</span>
-        <strong style="font-size:16px;color:#f8fafc;font-weight:800;letter-spacing:-0.3px;">
+        <strong class="tax-card-val" style="font-size:16px;font-weight:800;letter-spacing:-0.3px;">
           ₩${number(allTotalMarket, 0)}
         </strong>
       </div>
@@ -5316,7 +5316,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:15px;">🔄</span>
-          <strong style="color:#f8fafc;font-size:13px;font-weight:700;">중개형 ISA</strong>
+          <strong class="tax-card-title" style="font-size:13px;font-weight:700;">중개형 ISA</strong>
           ${isIsaActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#38bdf8;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.12);padding:2px 6px;border-radius:4px;font-weight:600;">
@@ -5325,7 +5325,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
         <span style="font-size:11.5px;color:#94a3b8;">총 자산</span>
-        <strong style="font-size:14.5px;color:#f8fafc;font-weight:800;">₩${number(isaTotalMarket, 0)}</strong>
+        <strong class="tax-card-val" style="font-size:14.5px;font-weight:800;">₩${number(isaTotalMarket, 0)}</strong>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-bottom:5px;">
         <span style="color:#cbd5e1;">주식 ₩${number(isaStats.market, 0)}</span>
@@ -5350,7 +5350,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:15px;">🛡️</span>
-          <strong style="color:#f8fafc;font-size:13px;font-weight:700;">개인형 IRP</strong>
+          <strong class="tax-card-title" style="font-size:13px;font-weight:700;">개인형 IRP</strong>
           ${isIrpActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#a78bfa;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#c4b5fd;background:rgba(167,139,250,0.15);padding:2px 6px;border-radius:4px;font-weight:600;">
@@ -5359,7 +5359,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
         <span style="font-size:11.5px;color:#94a3b8;">총 자산</span>
-        <strong style="font-size:14.5px;color:#f8fafc;font-weight:800;">₩${number(irpTotalMarket, 0)}</strong>
+        <strong class="tax-card-val" style="font-size:14.5px;font-weight:800;">₩${number(irpTotalMarket, 0)}</strong>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-bottom:5px;">
         <span style="color:#cbd5e1;">주식 ₩${number(irpStats.market, 0)}</span>
@@ -5384,7 +5384,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:15px;">💎</span>
-          <strong style="color:#f8fafc;font-size:13px;font-weight:700;">연금저축</strong>
+          <strong class="tax-card-title" style="font-size:13px;font-weight:700;">연금저축</strong>
           ${isPensionActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#34d399;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
         </div>
         <span style="font-size:11px;color:#34d399;background:rgba(52,211,153,0.15);padding:2px 6px;border-radius:4px;font-weight:600;">
@@ -5393,7 +5393,7 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
         <span style="font-size:11.5px;color:#94a3b8;">총 자산</span>
-        <strong style="font-size:14.5px;color:#f8fafc;font-weight:800;">₩${number(pensionTotalMarket, 0)}</strong>
+        <strong class="tax-card-val" style="font-size:14.5px;font-weight:800;">₩${number(pensionTotalMarket, 0)}</strong>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-bottom:5px;">
         <span style="color:#cbd5e1;">주식 ₩${number(pensionStats.market, 0)}</span>
@@ -5467,17 +5467,17 @@ function renderTaxAccountHoldings(owner = currentOwner) {
       <div class="tax-card record-row ${isAcctActive ? 'active-tax-card' : ''}" data-tax-filter="acc_${acct.id}" style="padding:9px 12px !important;margin-bottom:6px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div style="display:flex;align-items:center;gap:6px;">
-            <strong style="color:#f8fafc;font-size:12.5px;">${html(acct.name)}</strong>
+            <strong class="tax-card-title" style="font-size:12.5px;">${html(acct.name)}</strong>
             ${isAcctActive ? '<span style="font-size:9.5px;padding:1px 5px;border-radius:3px;background:#a78bfa;color:#0f172a;font-weight:800;">선택됨</span>' : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             ${typeBadge}
-            <button class="account-action-button" data-account-edit-id="${acct.id}" title="계좌 정보 및 예수금 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#cbd5e1;cursor:pointer;">✎</button>
+            <button class="account-action-button" data-account-edit-id="${acct.id}" title="계좌 정보 및 예수금 수정" type="button" style="padding:1px 5px;font-size:11px;line-height:1;border-radius:4px;cursor:pointer;">✎</button>
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:#94a3b8;margin-top:3px;">
           <span>${html(acct.broker)} [${html(acct.owner || '모두')}]</span>
-          <strong style="color:#f8fafc;font-size:13.5px;font-weight:800;">₩${number(acctTotalMarket, 0)}</strong>
+          <strong class="tax-card-val" style="font-size:13.5px;font-weight:800;">₩${number(acctTotalMarket, 0)}</strong>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;background:rgba(255,255,255,0.03);padding:3px 6px;border-radius:4px;margin-top:4px;">
           <span style="color:#cbd5e1;">주식 ₩${number(acctStats.market, 0)} (${acctHoldings.length}종목)</span>
