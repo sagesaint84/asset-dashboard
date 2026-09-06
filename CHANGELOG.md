@@ -1,3 +1,16 @@
+v5.5.45
+
+(fix) 🎨 시스템 관리자(admin) 계정 화면 모던 화이트 테마 및 OLED 테마 완벽 지원
+- **Admin 메인 패널(`adminMainPanel`) 및 관리 모달(`adminUsersModal`) 테마 디자인 전면 개편**:
+  - 기존 하드코딩된 다크 인라인 스타일(`background: #0e1529`, `#091024`, `border: 1px solid #263558`)을 전면 제거하고 전용 시맨틱 클래스 체계로 전환
+  - 화이트 테마 적용 시 섹션 전체가 검정색 박스로 고정되던 문제를 완전 해결하여, 깨끗하고 부드러운 화이트 톤(`background: #ffffff`, `#f8fafc`, 테두리 `#e2e8f0`)으로 전환되도록 개선
+- **관리자 하위 컴포넌트 테마별 전용 클래스화**:
+  - 관리자 통계 요약 카드 3종(`.admin-stat-card`), 사용자 생성 박스(`.admin-create-box`), 폼 입력창(`.admin-input`), 사용자 목록 테이블(`.admin-table-wrap`, `.admin-thead-tr`, `.admin-row`)을 테마별(기본, OLED, 화이트)로 완벽 분리
+  - `refreshAdminUserList` 렌더링 시 하드코딩된 흰색/다크 텍스트(`color: #f3f5ff`)를 제거하고 테마별 고대비 텍스트 및 상태 뱃지(`.admin-status-badge.active`, `.admin-status-badge.pending`, `.admin-role-badge`) 적용
+- **OLED 다크 테마 완벽 동기화**:
+  - OLED 모드(`[data-theme="oled"]`)에서도 완전 블랙(`#070709`) 베이스와 딥 다크 박스(`#0b0b10`, `#050508`)로 일관성 있게 렌더링되도록 스타일 보강
+(perf) 서비스 워커 캐시 버전(`wealth-cache-v145`) 및 정적 자산 쿼리(`v5545`) 갱신
+
 v5.5.44
 
 (fix) 🎨 기본 테마 및 OLED 테마에서 증권사 OpenAPI 설정 모달 화이트 톤 노출 현상 해결

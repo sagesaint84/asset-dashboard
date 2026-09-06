@@ -4718,6 +4718,326 @@ dialog.dialog .dialog-actions {
   background: #f0f9ff !important;
 }
 
+/* ── Admin 패널 및 사용자 관리: 기본 테마 (다크/퍼플) ── */
+#adminMainPanel.admin-panel {
+  border: 1px solid #3b2d71;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+.admin-panel .panel-head {
+  border-bottom: 1px solid #263558;
+}
+.admin-badge {
+  color: #9d7bff;
+  background: rgba(157, 123, 255, 0.15);
+}
+.admin-desc {
+  color: #91a0c1;
+}
+.admin-stat-card {
+  background: #0e1529;
+  border: 1px solid #263558;
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+.admin-stat-label {
+  color: #91a0c1;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.admin-stat-value {
+  color: #f3f5ff;
+  font-size: 28px;
+  font-weight: 800;
+}
+.admin-stat-value.success {
+  color: #42d5a3;
+}
+.admin-stat-value.warning {
+  color: #f59e0b;
+}
+.admin-create-box {
+  background: #0e1529;
+  border: 1px solid #2d3e68;
+}
+.admin-box-title {
+  color: #c4b5fd;
+}
+.admin-label-text {
+  color: #91a0c1;
+}
+.admin-input {
+  background: #091024;
+  border: 1px solid #263558;
+  color: #f3f5ff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.admin-input:focus {
+  border-color: #818cf8;
+  outline: none;
+}
+.admin-help-text {
+  color: #91a0c1;
+}
+.admin-table-title {
+  color: #f3f5ff;
+}
+.admin-table-wrap {
+  border: 1px solid #263558;
+  background: #091024;
+}
+.admin-thead-tr {
+  background: #0e1529;
+  color: #91a0c1;
+  border-bottom: 1px solid #263558;
+}
+.admin-thead-tr th {
+  padding: 12px 16px;
+  color: #91a0c1;
+}
+.admin-row {
+  border-bottom: 1px solid #1c2742;
+}
+.admin-cell-user {
+  padding: 12px 16px;
+  font-weight: 700;
+  color: #f3f5ff;
+}
+.admin-self-badge {
+  font-size: 10px;
+  color: #9d7bff;
+  margin-left: 4px;
+  background: rgba(157, 123, 255, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.admin-cell-role {
+  padding: 12px 16px;
+  color: #c3cbea;
+}
+.admin-role-badge {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
+}
+.admin-role-badge.admin {
+  background: rgba(157, 123, 255, 0.15);
+  color: #c4b5fd;
+}
+.admin-role-badge.user {
+  background: rgba(255, 255, 255, 0.06);
+  color: #c3cbea;
+}
+.admin-status-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.admin-status-badge.active {
+  color: #42d5a3;
+  background: rgba(66, 213, 163, 0.12);
+}
+.admin-status-badge.pending {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+.admin-cell-status {
+  padding: 12px 16px;
+}
+.admin-cell-date {
+  padding: 12px 16px;
+  color: #8593b5;
+  font-size: 12px;
+}
+.admin-cell-actions {
+  padding: 12px 16px;
+  text-align: center;
+}
+.admin-btn-reset {
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  color: #c4b5fd;
+}
+.admin-btn-delete {
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  color: #ff718c;
+}
+.admin-empty-cell {
+  text-align: center;
+  padding: 16px;
+  color: #91a0c1;
+}
+
+/* ── Admin 패널 및 사용자 관리: OLED 다크 테마 ── */
+[data-theme="oled"] #adminMainPanel.admin-panel {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.85) !important;
+}
+[data-theme="oled"] .admin-panel .panel-head {
+  border-bottom-color: #1a1a24 !important;
+}
+[data-theme="oled"] .admin-stat-card {
+  background: #0b0b10 !important;
+  border-color: #1a1a26 !important;
+}
+[data-theme="oled"] .admin-create-box {
+  background: #0b0b10 !important;
+  border-color: #1a1a26 !important;
+}
+[data-theme="oled"] .admin-input {
+  background: #050508 !important;
+  border-color: #222230 !important;
+  color: #f8fafc !important;
+}
+[data-theme="oled"] .admin-input:focus {
+  border-color: #3b82f6 !important;
+}
+[data-theme="oled"] .admin-table-wrap {
+  border-color: #1a1a26 !important;
+  background: #070709 !important;
+}
+[data-theme="oled"] .admin-thead-tr {
+  background: #0b0b10 !important;
+  border-bottom-color: #1a1a26 !important;
+}
+[data-theme="oled"] .admin-row {
+  border-bottom-color: #14141d !important;
+}
+
+/* ── Admin 패널 및 사용자 관리: 화이트 테마 ── */
+[data-theme="white"] #adminMainPanel.admin-panel {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06) !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-panel .panel-head {
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+[data-theme="white"] .admin-panel .panel-head h2 {
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-badge {
+  color: #7c3aed !important;
+  background: #f5f3ff !important;
+  border: 1px solid #ddd6fe !important;
+}
+[data-theme="white"] .admin-desc {
+  color: #64748b !important;
+}
+[data-theme="white"] .admin-stat-card {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .admin-stat-label {
+  color: #64748b !important;
+}
+[data-theme="white"] .admin-stat-value {
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-stat-value.success {
+  color: #16a34a !important;
+}
+[data-theme="white"] .admin-stat-value.warning {
+  color: #d97706 !important;
+}
+[data-theme="white"] .admin-create-box {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .admin-box-title {
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-label-text {
+  color: #334155 !important;
+}
+[data-theme="white"] .admin-input {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-input:focus {
+  border-color: #2563eb !important;
+}
+[data-theme="white"] .admin-help-text {
+  color: #64748b !important;
+}
+[data-theme="white"] .admin-table-title {
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-table-wrap {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .admin-thead-tr {
+  background: #f1f5f9 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+[data-theme="white"] .admin-thead-tr th {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+[data-theme="white"] .admin-row {
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+[data-theme="white"] .admin-cell-user {
+  color: #0f172a !important;
+}
+[data-theme="white"] .admin-self-badge {
+  color: #7c3aed !important;
+  background: #f5f3ff !important;
+  border: 1px solid #ddd6fe !important;
+}
+[data-theme="white"] .admin-cell-role {
+  color: #334155 !important;
+}
+[data-theme="white"] .admin-role-badge.admin {
+  background: #ede9fe !important;
+  color: #6d28d9 !important;
+  border: 1px solid #ddd6fe !important;
+}
+[data-theme="white"] .admin-role-badge.user {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+[data-theme="white"] .admin-status-badge.active {
+  color: #15803d !important;
+  background: #dcfce7 !important;
+  border: 1px solid #86efac !important;
+}
+[data-theme="white"] .admin-status-badge.pending {
+  color: #b45309 !important;
+  background: #fef3c7 !important;
+  border: 1px solid #fde68a !important;
+}
+[data-theme="white"] .admin-cell-date {
+  color: #64748b !important;
+}
+[data-theme="white"] .admin-btn-reset {
+  color: #6d28d9 !important;
+  border-color: #ddd6fe !important;
+  background: #ffffff !important;
+}
+[data-theme="white"] .admin-btn-delete {
+  color: #dc2626 !important;
+  border-color: #fecaca !important;
+  background: #ffffff !important;
+}
+[data-theme="white"] .admin-empty-cell {
+  color: #64748b !important;
+}
+
+
 
 
 

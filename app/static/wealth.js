@@ -9492,7 +9492,7 @@ async function refreshAdminUserList() {
   const tbodyMain = document.getElementById('adminMainUserListTbody');
   const tbodyDialog = document.getElementById('adminUserListTbody');
 
-  const loadingHtml = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#91a0c1;">불러오는 중...</td></tr>';
+  const loadingHtml = '<tr><td colspan="5" class="admin-empty-cell">불러오는 중...</td></tr>';
   if (tbodyMain) tbodyMain.innerHTML = loadingHtml;
   if (tbodyDialog) tbodyDialog.innerHTML = loadingHtml;
 
@@ -9515,7 +9515,7 @@ async function refreshAdminUserList() {
     if (statPending) statPending.textContent = `${pendingCount}명`;
 
     if (!users.length) {
-      const emptyHtml = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#91a0c1;">등록된 사용자가 없습니다.</td></tr>';
+      const emptyHtml = '<tr><td colspan="5" class="admin-empty-cell">등록된 사용자가 없습니다.</td></tr>';
       if (tbodyMain) tbodyMain.innerHTML = emptyHtml;
       if (tbodyDialog) tbodyDialog.innerHTML = emptyHtml;
       return;
@@ -9525,30 +9525,30 @@ async function refreshAdminUserList() {
       const isSelf = currentUserProfile && currentUserProfile.username === u.username;
       const isAdminRoot = (u.username === 'admin');
       const statusBadge = u.must_change_password 
-        ? '<span style="color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600;">⚠️ 비번 변경 필요</span>'
-        : '<span style="color:#42d5a3;background:rgba(66,213,163,0.12);padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600;">정상 활성</span>';
+        ? '<span class="admin-status-badge pending">⚠️ 비번 변경 필요</span>'
+        : '<span class="admin-status-badge active">정상 활성</span>';
 
       const createdAtStr = u.created_at ? u.created_at.substring(0, 10) : '-';
 
       return `
-        <tr style="border-bottom:1px solid #1c2742;">
-          <td style="padding:12px 16px;font-weight:700;color:#f3f5ff;">
+        <tr class="admin-row">
+          <td class="admin-cell-user">
             👤 ${escapeHtml(u.username)}
-            ${isSelf ? '<span style="font-size:10px;color:#9d7bff;margin-left:4px;background:rgba(157,123,255,0.15);padding:1px 5px;border-radius:4px;">(나)</span>' : ''}
+            ${isSelf ? '<span class="admin-self-badge">(나)</span>' : ''}
           </td>
-          <td style="padding:12px 16px;color:#c3cbea;">
-            <span style="background:${u.role === 'admin' ? 'rgba(157,123,255,0.15)' : 'rgba(255,255,255,0.06)'};padding:2px 7px;border-radius:4px;font-size:11.5px;">
+          <td class="admin-cell-role">
+            <span class="admin-role-badge ${u.role === 'admin' ? 'admin' : 'user'}">
               ${escapeHtml(u.role)}
             </span>
           </td>
-          <td style="padding:12px 16px;">${statusBadge}</td>
-          <td style="padding:12px 16px;color:#8593b5;font-size:12px;">${createdAtStr}</td>
-          <td style="padding:12px 16px;text-align:center;">
+          <td class="admin-cell-status">${statusBadge}</td>
+          <td class="admin-cell-date">${createdAtStr}</td>
+          <td class="admin-cell-actions">
             <div style="display:inline-flex;gap:8px;">
-              <button type="button" class="button secondary compact" onclick="handleAdminResetUserPw('${escapeHtml(u.username)}')" style="font-size:11.5px;padding:4px 9px;border-radius:6px;color:#c4b5fd;" title="초기 4자리 비밀번호로 재설정">
+              <button type="button" class="button secondary compact admin-btn-reset" onclick="handleAdminResetUserPw('${escapeHtml(u.username)}')" title="초기 4자리 비밀번호로 재설정">
                 🔑 비번 초기화(4자리)
               </button>
-              ${isAdminRoot ? '' : `<button type="button" class="button secondary compact" onclick="handleAdminDeleteUser('${escapeHtml(u.username)}')" style="font-size:11.5px;padding:4px 9px;border-radius:6px;color:#ff718c;" title="계정 및 데이터 삭제">
+              ${isAdminRoot ? '' : `<button type="button" class="button secondary compact admin-btn-delete" onclick="handleAdminDeleteUser('${escapeHtml(u.username)}')" title="계정 및 데이터 삭제">
                 🗑️ 삭제
               </button>`}
             </div>
@@ -9561,7 +9561,7 @@ async function refreshAdminUserList() {
     if (tbodyDialog) tbodyDialog.innerHTML = rowsHtml;
   } catch (err) {
     console.error('[ADMIN] 사용자 목록 로드 실패:', err);
-    const errHtml = `<tr><td colspan="5" style="text-align:center;padding:16px;color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message || String(err))}</td></tr>`;
+    const errHtml = `<tr><td colspan="5" class="admin-empty-cell" style="color:#ff718c;">목록 로드 실패: ${escapeHtml(err.message || String(err))}</td></tr>`;
     if (tbodyMain) tbodyMain.innerHTML = errHtml;
     if (tbodyDialog) tbodyDialog.innerHTML = errHtml;
   }
