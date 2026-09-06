@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5538" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260907-v5547" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260907-v5548" />
   </head>
   <body>
     <main class="shell">
@@ -2328,9 +2328,17 @@
               <option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>
             </select>
           </label>
-          <label>
+          <label id="divDateWrap">
             입금일 (Date)
-            <input name="date" type="date" required />
+            <div class="split-date-wrap" id="divSplitDateWrap">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="divDateYear" placeholder="YYYY" aria-label="입금일 연도 4자리" autocomplete="off" />
+              <span class="date-part-sep">-</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="divDateMonth" placeholder="MM" aria-label="입금일 월 2자리" autocomplete="off" />
+              <span class="date-part-sep">-</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="divDateDay" placeholder="DD" aria-label="입금일 일 2자리" autocomplete="off" />
+              <button type="button" class="date-picker-trigger" id="divDatePickerTrigger" title="달력에서 선택" aria-label="달력에서 날짜 선택">📅</button>
+              <input name="date" id="divNativeDate" type="date" required tabindex="-1" class="sr-only-picker" />
+            </div>
           </label>
           <label>
             소유자
@@ -2407,9 +2415,17 @@
               <option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>
             </select>
           </label>
-          <label>
+          <label id="pnlDateWrap">
             매도일 (Date)
-            <input name="date" type="date" required />
+            <div class="split-date-wrap" id="pnlSplitDateWrap">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="pnlDateYear" placeholder="YYYY" aria-label="매도일 연도 4자리" autocomplete="off" />
+              <span class="date-part-sep">-</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="pnlDateMonth" placeholder="MM" aria-label="매도일 월 2자리" autocomplete="off" />
+              <span class="date-part-sep">-</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="pnlDateDay" placeholder="DD" aria-label="매도일 일 2자리" autocomplete="off" />
+              <button type="button" class="date-picker-trigger" id="pnlDatePickerTrigger" title="달력에서 선택" aria-label="달력에서 날짜 선택">📅</button>
+              <input name="date" id="pnlNativeDate" type="date" required tabindex="-1" class="sr-only-picker" />
+            </div>
           </label>
           <label>
             소유자
@@ -2754,7 +2770,7 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260907-v5547"></script>
+    <script src="/static/wealth.js?v=20260907-v5548"></script>
   </body>
 </html>
 

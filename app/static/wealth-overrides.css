@@ -5218,6 +5218,128 @@ dialog.dialog .dialog-actions {
   animation: inputAutofillPulse 1.2s ease-out !important;
 }
 
+/* ── 분할 날짜 입력 컴포넌트 (연도 4자리 자동 이동, YYYY-MM-DD) ── */
+.split-date-wrap {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 10px !important;
+  height: 38px !important;
+  border-radius: 7px !important;
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #f8fafc !important;
+  gap: 4px !important;
+  position: relative !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+
+.split-date-wrap:focus-within {
+  border-color: #818cf8 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.25) !important;
+}
+
+.split-date-wrap input.date-part {
+  width: auto !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #f8fafc !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  letter-spacing: 0.5px !important;
+}
+
+.split-date-wrap input.date-part-year {
+  width: 48px !important;
+}
+
+.split-date-wrap input.date-part-month,
+.split-date-wrap input.date-part-day {
+  width: 28px !important;
+}
+
+.split-date-wrap .date-part-sep {
+  color: #64748b !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  user-select: none !important;
+  padding: 0 1px !important;
+}
+
+.split-date-wrap .date-picker-trigger {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 2px 4px !important;
+  font-size: 14px !important;
+  margin-left: auto !important;
+  opacity: 0.75 !important;
+  transition: opacity 0.15s, transform 0.1s !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+.split-date-wrap .date-picker-trigger:hover {
+  opacity: 1 !important;
+  transform: scale(1.15) !important;
+}
+
+.split-date-wrap .sr-only-picker {
+  position: absolute !important;
+  right: 6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 20px !important;
+  height: 20px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* 화이트 테마 분할 날짜 스타일 */
+[data-theme="white"] .split-date-wrap {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .split-date-wrap:focus-within {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+[data-theme="white"] .split-date-wrap input.date-part {
+  color: #0f172a !important;
+}
+
+[data-theme="white"] .split-date-wrap .date-part-sep {
+  color: #94a3b8 !important;
+}
+
+/* OLED 테마 분할 날짜 스타일 */
+[data-theme="oled"] .split-date-wrap {
+  background: #000000 !important;
+  border: 1px solid #22222a !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="oled"] .split-date-wrap:focus-within {
+  border-color: #a78bfa !important;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.25) !important;
+}
+
+
 
 
 
