@@ -7486,6 +7486,8 @@ const POPULAR_STOCKS = [
 
 const POPULAR_IPO_STOCKS = [
   { code: "394420", name: "리센스메디컬", currency: "KRW" },
+  { code: "493280", name: "아이엠바이오로직스", currency: "KRW" },
+  { code: "408470", name: "한패스", currency: "KRW" },
   { code: "462870", name: "시프트업", currency: "KRW" },
   { code: "475560", name: "더본코리아", currency: "KRW" },
   { code: "278470", name: "에이피알", currency: "KRW" },
@@ -9079,7 +9081,7 @@ function togglePnlAssetTypeFields() {
   const nameInput = form.querySelector("[name='name']");
   const codeInput = form.querySelector("[name='code']");
   if (nameInput) {
-    nameInput.placeholder = isIpo ? "예: 리센스메디컬, 에이피알, 시프트업 (종목명 입력 시 자동 검색)" : "예: 삼성전자, 현대차, NVDA";
+    nameInput.placeholder = isIpo ? "예: 아이엠바이오로직스, 한패스, 리센스메디컬 (종목명 입력 시 자동 검색)" : "예: 삼성전자, 현대차, NVDA";
   }
   if (codeInput) {
     codeInput.placeholder = isIpo ? "예: 394420 (공모주명 입력 시 자동 완성)" : "예: 005930 (종목명 입력 시 자동 완성)";

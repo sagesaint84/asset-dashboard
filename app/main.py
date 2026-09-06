@@ -2163,8 +2163,8 @@ async def get_stock_chart(code: str, period: str = "1M") -> dict:
 
 @app.get("/api/stock-search")
 async def stock_search(q: str = "") -> dict:
-    from app.services.stock_master import search_stock_by_name
-    return search_stock_by_name(q)
+    from app.services.stock_master import async_search_stock_by_name
+    return await async_search_stock_by_name(q)
 
 
 @app.post("/api/sync/all")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import urllib.parse
 from pathlib import Path
 from typing import Any
 import httpx
@@ -211,6 +212,10 @@ KR_STOCK_ALIAS_MAP: dict[str, str] = {
     # 주요 공모주(IPO) 및 신규 상장주 별칭 매핑
     "리센스메디컬": "394420",
     "리센스": "394420",
+    "아이엠바이오로직스": "493280",
+    "아이엠바이오": "493280",
+    "한패스": "408470",
+    "한패": "408470",
     "시프트업": "462870",
     "더본코리아": "475560",
     "더본": "475560",
@@ -261,6 +266,8 @@ def load_stock_master_cache() -> None:
     for name, code in KR_STOCK_ALIAS_MAP.items():
         _NAME_TO_CODE_MAP[name] = code
         _NAME_TO_CODE_MAP[_normalize_key(name)] = code
+        if code not in _CODE_TO_NAME_MAP or len(name) > len(_CODE_TO_NAME_MAP.get(code, "")):
+            _CODE_TO_NAME_MAP[code] = name
 
     for name, ticker in US_STOCK_NAME_MAP.items():
         _NAME_TO_CODE_MAP[name] = ticker
@@ -392,8 +399,177 @@ async def sync_stock_master_online() -> None:
     save_stock_master_cache()
 
 
+def search_naver_finance(query: str) -> list[dict[str, str]]:
+    """네이버 증권에서 종목명 또는 코드로 실시간 검색하여 (code, name, currency) 목록을 반환한다."""
+    q = str(query or "").strip()
+    if not q or len(q) < 2:
+        return []
+
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    try:
+        try:
+            q_enc = urllib.parse.quote(q.encode("euc-kr"))
+        except Exception:
+            q_enc = urllib.parse.quote(q)
+
+        url = f"https://finance.naver.com/search/search.naver?query={q_enc}"
+        with httpx.Client(timeout=3.5, follow_redirects=True) as client:
+            resp = client.get(url, headers=headers)
+            html = resp.content.decode("cp949", errors="ignore")
+
+            # 1. 단일 종목 즉시 일치 스크립트 체크 (<SCRIPT>parent.location.href='/item/main.naver?code=XXXXXX';</SCRIPT>)
+            redirect_match = re.search(r"code=([0-9A-Za-z]+)", html)
+            if len(html) < 350 and redirect_match:
+                code = redirect_match.group(1).strip()
+                name = q
+                try:
+                    det_resp = client.get(f"https://finance.naver.com/item/main.naver?code={code}", headers=headers, timeout=2.0)
+                    det_html = det_resp.content.decode("utf-8", errors="ignore")
+                    m = re.search(r'<h2><a[^>]*>(.*?)</a></h2>', det_html) or re.search(r'<title>(.*?)\s*:', det_html)
+                    if m:
+                        name = m.group(1).strip()
+                except Exception:
+                    pass
+                curr = "KRW" if (code.isdigit() and len(code) == 6) or any("가" <= ch <= "힣" for ch in name) else "USD"
+                return [{"code": code, "name": name, "currency": curr}]
+
+            # 2. 검색 결과 테이블 파싱
+            matches = re.findall(r'href="/item/main\.(?:naver|nhn)\?code=([0-9A-Za-z]+)"[^>]*>(.*?)</a>', html)
+            for code, raw_name in matches:
+                clean_code = code.strip()
+                clean_name = re.sub(r'<[^>]+>', '', raw_name).strip()
+                if clean_code not in seen and clean_name:
+                    seen.add(clean_code)
+                    curr = "KRW" if (clean_code.isdigit() and len(clean_code) == 6) or any("가" <= ch <= "힣" for ch in clean_name) else "USD"
+                    results.append({"code": clean_code, "name": clean_name, "currency": curr})
+                    if len(results) >= 10:
+                        break
+    except Exception as e:
+        logger.debug(f"네이버 증권 검색 오류 ({q}): {e}")
+
+    return results
+
+
+async def search_naver_finance_async(query: str) -> list[dict[str, str]]:
+    """네이버 증권에서 종목명 또는 코드로 비동기 실시간 검색하여 (code, name, currency) 목록을 반환한다."""
+    q = str(query or "").strip()
+    if not q or len(q) < 2:
+        return []
+
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    try:
+        try:
+            q_enc = urllib.parse.quote(q.encode("euc-kr"))
+        except Exception:
+            q_enc = urllib.parse.quote(q)
+
+        url = f"https://finance.naver.com/search/search.naver?query={q_enc}"
+        async with httpx.AsyncClient(timeout=3.5, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            html = resp.content.decode("cp949", errors="ignore")
+
+            # 1. 단일 종목 즉시 일치 스크립트 체크 (<SCRIPT>parent.location.href='/item/main.naver?code=XXXXXX';</SCRIPT>)
+            redirect_match = re.search(r"code=([0-9A-Za-z]+)", html)
+            if len(html) < 350 and redirect_match:
+                code = redirect_match.group(1).strip()
+                name = q
+                try:
+                    det_resp = await client.get(f"https://finance.naver.com/item/main.naver?code={code}", headers=headers, timeout=2.0)
+                    det_html = det_resp.content.decode("utf-8", errors="ignore")
+                    m = re.search(r'<h2><a[^>]*>(.*?)</a></h2>', det_html) or re.search(r'<title>(.*?)\s*:', det_html)
+                    if m:
+                        name = m.group(1).strip()
+                except Exception:
+                    pass
+                curr = "KRW" if (code.isdigit() and len(code) == 6) or any("가" <= ch <= "힣" for ch in name) else "USD"
+                return [{"code": code, "name": name, "currency": curr}]
+
+            # 2. 검색 결과 테이블 파싱
+            matches = re.findall(r'href="/item/main\.(?:naver|nhn)\?code=([0-9A-Za-z]+)"[^>]*>(.*?)</a>', html)
+            for code, raw_name in matches:
+                clean_code = code.strip()
+                clean_name = re.sub(r'<[^>]+>', '', raw_name).strip()
+                if clean_code not in seen and clean_name:
+                    seen.add(clean_code)
+                    curr = "KRW" if (clean_code.isdigit() and len(clean_code) == 6) or any("가" <= ch <= "힣" for ch in clean_name) else "USD"
+                    results.append({"code": clean_code, "name": clean_name, "currency": curr})
+                    if len(results) >= 10:
+                        break
+    except Exception as e:
+        logger.debug(f"네이버 증권 비동기 검색 오류 ({q}): {e}")
+
+    return results
+
+
+def _merge_naver_results(
+    q: str,
+    norm_q: str,
+    naver_items: list[dict[str, str]],
+    suggestions: list[dict[str, str]],
+    is_found: bool,
+    code: str,
+    name: str,
+    curr: str,
+) -> tuple[bool, str, str, str, list[dict[str, str]]]:
+    if not naver_items:
+        best_code = code if is_found else (suggestions[0]["code"] if suggestions else "")
+        best_name = name if is_found else (suggestions[0]["name"] if suggestions else q)
+        best_curr = curr if is_found else (suggestions[0]["currency"] if suggestions else "KRW")
+        return (is_found, best_code, best_name, best_curr, suggestions)
+
+    cache_updated = False
+    seen_codes = {s["code"] for s in suggestions}
+
+    for item in naver_items:
+        c = item["code"]
+        n = item["name"]
+        item_curr = item.get("currency", "KRW")
+        if c not in seen_codes:
+            seen_codes.add(c)
+            suggestions.append({"code": c, "name": n, "currency": item_curr})
+
+        # 동적 로컬 캐시 확장
+        if c not in _CODE_TO_NAME_MAP:
+            _CODE_TO_NAME_MAP[c] = n
+            _NAME_TO_CODE_MAP[n] = c
+            _NAME_TO_CODE_MAP[_normalize_key(n)] = c
+            cache_updated = True
+
+    if cache_updated:
+        try:
+            save_stock_master_cache()
+        except Exception as e:
+            logger.debug(f"캐시 저장 실패: {e}")
+
+    if not is_found and suggestions:
+        matched_item = None
+        for item in suggestions:
+            if item["name"] == q or _normalize_key(item["name"]) == norm_q:
+                matched_item = item
+                break
+        if not matched_item:
+            matched_item = suggestions[0]
+
+        best_code = matched_item["code"]
+        best_name = matched_item["name"]
+        best_curr = matched_item["currency"]
+        is_found = bool(best_code)
+    else:
+        best_code = code if is_found else (suggestions[0]["code"] if suggestions else "")
+        best_name = name if is_found else (suggestions[0]["name"] if suggestions else q)
+        best_curr = curr if is_found else (suggestions[0]["currency"] if suggestions else "KRW")
+
+    return (is_found, best_code, best_name, best_curr, suggestions[:8])
+
+
 def search_stock_by_name(query: str) -> dict[str, Any]:
-    """종목명 또는 약칭으로 최적의 종목코드와 통화를 검색한다."""
+    """종목명 또는 약칭으로 최적의 종목코드와 통화를 검색한다 (네이버 증권 동기 Fallback 포함)."""
     if not _INITIALIZED:
         load_stock_master_cache()
 
@@ -463,7 +639,7 @@ def search_stock_by_name(query: str) -> dict[str, Any]:
     code, name, curr = resolve_stock_info(code="", name=q)
     is_found = bool(code and code != q)
 
-    # 부분 일치 후보 리스트 (최대 6개)
+    # 부분 일치 후보 리스트 (최대 8개)
     suggestions: list[dict[str, str]] = []
 
     # 1. 완전 일치 후보
@@ -498,9 +674,142 @@ def search_stock_by_name(query: str) -> dict[str, Any]:
         _, _, item_curr = resolve_stock_info(code=c, name=n)
         suggestions.append({"code": c, "name": n, "currency": item_curr})
 
-    best_code = code if is_found else (suggestions[0]["code"] if suggestions else "")
-    best_name = name if is_found else (suggestions[0]["name"] if suggestions else q)
-    best_curr = curr if is_found else (suggestions[0]["currency"] if suggestions else "KRW")
+    # 네이버 증권 실시간 검색 연동 (로컬에서 미발견되었거나 추천 수가 부족한 경우)
+    if not is_found or len(suggestions) < 3:
+        naver_items = search_naver_finance(q)
+        is_found, best_code, best_name, best_curr, suggestions = _merge_naver_results(
+            q, norm_q, naver_items, suggestions, is_found, code, name, curr
+        )
+    else:
+        best_code = code if is_found else (suggestions[0]["code"] if suggestions else "")
+        best_name = name if is_found else (suggestions[0]["name"] if suggestions else q)
+        best_curr = curr if is_found else (suggestions[0]["currency"] if suggestions else "KRW")
+
+    return {
+        "found": bool(best_code),
+        "code": best_code,
+        "name": best_name,
+        "currency": best_curr,
+        "suggestions": suggestions,
+    }
+
+
+async def async_search_stock_by_name(query: str) -> dict[str, Any]:
+    """종목명 또는 약칭으로 최적의 종목코드와 통화를 비동기로 검색한다 (네이버 증권 비동기 실시간 검색 포함)."""
+    if not _INITIALIZED:
+        load_stock_master_cache()
+
+    q = str(query or "").strip()
+    if not q:
+        return {"found": False, "code": "", "name": "", "currency": "KRW", "suggestions": []}
+
+    norm_q = _normalize_key(q)
+
+    # 0. 이자(원화이자, 달러이자, RP이자 등) 전용 처리 (화이자 주식 오매칭 방지)
+    is_interest_query = ("이자" in norm_q or "예탁금" in norm_q or norm_q.startswith("interest")) and norm_q != "화이자" and not norm_q.startswith("화이자")
+    if is_interest_query:
+        if "달러" in norm_q or "외화" in norm_q or "usd" in norm_q.lower() or norm_q == "interestusd":
+            return {
+                "found": True,
+                "code": "INTEREST_USD",
+                "name": "달러이자",
+                "currency": "USD",
+                "suggestions": [
+                    {"code": "INTEREST_USD", "name": "달러이자", "currency": "USD"},
+                    {"code": "INTEREST_KRW", "name": "원화이자", "currency": "KRW"},
+                ]
+            }
+        elif "rp" in norm_q.lower() or norm_q == "interestrp":
+            return {
+                "found": True,
+                "code": "INTEREST_RP",
+                "name": "RP이자",
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_RP", "name": "RP이자", "currency": "KRW"},
+                ]
+            }
+        elif "예탁금" in norm_q or norm_q == "interestcash":
+            return {
+                "found": True,
+                "code": "INTEREST_CASH",
+                "name": "예탁금이자",
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_CASH", "name": "예탁금이자", "currency": "KRW"},
+                ]
+            }
+        elif "원화" in norm_q or norm_q == "이자" or norm_q == "interestkrw":
+            return {
+                "found": True,
+                "code": "INTEREST_KRW",
+                "name": "원화이자",
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_KRW", "name": "원화이자", "currency": "KRW"},
+                    {"code": "INTEREST_USD", "name": "달러이자", "currency": "USD"},
+                ]
+            }
+        else:
+            return {
+                "found": True,
+                "code": "INTEREST_KRW",
+                "name": q,
+                "currency": "KRW",
+                "suggestions": [
+                    {"code": "INTEREST_KRW", "name": "원화이자", "currency": "KRW"},
+                    {"code": "INTEREST_USD", "name": "달러이자", "currency": "USD"},
+                ]
+            }
+
+    code, name, curr = resolve_stock_info(code="", name=q)
+    is_found = bool(code and code != q)
+
+    # 부분 일치 후보 리스트 (최대 8개)
+    suggestions: list[dict[str, str]] = []
+
+    # 1. 완전 일치 후보
+    if is_found:
+        suggestions.append({"code": code, "name": name, "currency": curr})
+
+    # 2. 접두사, 포함, 토큰 분리 일치 후보군 탐색
+    matches: list[tuple[int, int, str, str]] = []
+    seen_codes = {code} if is_found else set()
+    tokens = [re.sub(r'[^a-zA-Z0-9가-힣]', '', t).upper() for t in re.findall(r'[a-zA-Z0-9]+|[가-힣]+', q)]
+    tokens = [t for t in tokens if t]
+
+    for c, n in _CODE_TO_NAME_MAP.items():
+        if c in seen_codes:
+            continue
+        norm_n = _normalize_key(n)
+        norm_c = _normalize_key(c)
+        if norm_n.startswith(norm_q) or norm_c.startswith(norm_q):
+            matches.append((0, len(norm_n), c, n))
+            seen_codes.add(c)
+        elif norm_q in norm_n or norm_q in norm_c:
+            matches.append((1, len(norm_n), c, n))
+            seen_codes.add(c)
+        elif tokens and all(t in norm_n for t in tokens):
+            matches.append((2, len(norm_n), c, n))
+            seen_codes.add(c)
+        if len(matches) >= 30:
+            break
+
+    matches.sort()
+    for _, _, c, n in matches[:5]:
+        _, _, item_curr = resolve_stock_info(code=c, name=n)
+        suggestions.append({"code": c, "name": n, "currency": item_curr})
+
+    # 네이버 증권 비동기 실시간 검색 연동 (로컬에서 미발견되었거나 추천 수가 부족한 경우)
+    if not is_found or len(suggestions) < 3:
+        naver_items = await search_naver_finance_async(q)
+        is_found, best_code, best_name, best_curr, suggestions = _merge_naver_results(
+            q, norm_q, naver_items, suggestions, is_found, code, name, curr
+        )
+    else:
+        best_code = code if is_found else (suggestions[0]["code"] if suggestions else "")
+        best_name = name if is_found else (suggestions[0]["name"] if suggestions else q)
+        best_curr = curr if is_found else (suggestions[0]["currency"] if suggestions else "KRW")
 
     return {
         "found": bool(best_code),
@@ -594,7 +903,21 @@ def resolve_stock_info(code: str = "", name: str = "", currency: str = "") -> tu
                         code = token_matches[0][1]
                         name = token_matches[0][2]
                     else:
-                        code = name
+                        # D-2. 네이버 증권 실시간 검색 폴백
+                        naver_items = search_naver_finance(name)
+                        if naver_items:
+                            code = naver_items[0]["code"]
+                            name = naver_items[0]["name"]
+                            curr = naver_items[0].get("currency", "KRW")
+                            _NAME_TO_CODE_MAP[name] = code
+                            _NAME_TO_CODE_MAP[_normalize_key(name)] = code
+                            _CODE_TO_NAME_MAP[code] = name
+                            try:
+                                save_stock_master_cache()
+                            except Exception:
+                                pass
+                        else:
+                            code = name
 
     # 2. code가 있고 name이 없거나 보정이 필요한 경우
     if code and (not name or name == code):
@@ -606,7 +929,26 @@ def resolve_stock_info(code: str = "", name: str = "", currency: str = "") -> tu
                 name = US_STOCK_CODE_MAP[code.upper()]
             elif code.upper() in US_STOCK_NAME_MAP:
                 name = US_STOCK_NAME_MAP[code.upper()]
-            else:
+            elif code.isdigit() and len(code) == 6:
+                # 네이버 상세 페이지에서 종목명 실시간 조회 폴백
+                try:
+                    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                    with httpx.Client(timeout=2.0) as client:
+                        r = client.get(f"https://finance.naver.com/item/main.naver?code={code}", headers=headers)
+                        if r.status_code == 200:
+                            m = re.search(r'<h2><a[^>]*>(.*?)</a></h2>', r.content.decode("utf-8", errors="ignore")) or re.search(r'<title>(.*?)\s*:', r.content.decode("utf-8", errors="ignore"))
+                            if m:
+                                name = m.group(1).strip()
+                                _CODE_TO_NAME_MAP[code] = name
+                                _NAME_TO_CODE_MAP[name] = code
+                                _NAME_TO_CODE_MAP[_normalize_key(name)] = code
+                                try:
+                                    save_stock_master_cache()
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+            if not name or name == code:
                 name = code
 
     # 3. 통화(currency) 자동 결정
