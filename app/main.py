@@ -643,6 +643,7 @@ async def dashboard(request: Request) -> dict:
     from app.services.real_estate import get_real_estate_data
     re_info = get_real_estate_data(username=username)
     data["real_estates"] = re_info.get("real_estates", [])
+    data["sold_real_estates"] = re_info.get("sold_real_estates", [])
     data["real_estate_summary"] = re_info.get("summary", {})
 
     from app.services.pnl_records import get_pnl_summary, read_pnl_records
@@ -1147,7 +1148,7 @@ async def remove_real_estate(request: Request, re_id: str) -> dict:
 
 @app.post("/api/real-estates/{re_id}/sell")
 async def sell_real_estate_and_record_pnl(request: Request, re_id: str) -> dict:
-    """부동산 매각을 처리하고 실현손익(양도차익)을 기록합니다."""
+    """부동산 매각을 처리하고 실현손익(양도차익)을 기록합니다. 직접 매도(re_id='direct'/'new')도 지원."""
     username = get_current_username(request)
     body = await request.json()
     from app.services.portfolio import read_portfolio
@@ -1157,19 +1158,28 @@ async def sell_real_estate_and_record_pnl(request: Request, re_id: str) -> dict:
     pf = read_portfolio(username)
     re_list = pf.get("real_estates", [])
     target = next((r for r in re_list if r.get("id") == re_id), None)
-    if not target:
+    
+    is_direct = re_id in ("direct", "new") or not target
+    if not target and not is_direct:
         raise HTTPException(404, "해당 부동산 항목을 찾을 수 없습니다.")
 
     sell_price = float(body.get("sell_price") or 0.0)
     expenses = float(body.get("expenses") or 0.0)
     sell_date = str(body.get("sell_date") or datetime.now().strftime("%Y-%m-%d")).strip()
-    purchase_price = float(target.get("purchase_price") or 0.0)
+    purchase_price = float(body.get("purchase_price") or (target.get("purchase_price") if target else 0.0) or 0.0)
     pnl_krw = round(sell_price - purchase_price - expenses)
 
-    re_name = target.get("name") or "부동산"
+    re_name = str(body.get("name") or (target.get("name") if target else "부동산") or "부동산").strip()
     pnl_title = f"[부동산] {re_name}"
-    owner = target.get("owner") or "모두"
+    owner = str(body.get("owner") or (target.get("owner") if target else "모두") or "모두").strip()
     memo = str(body.get("memo") or f"매도가 ₩{sell_price:,.0f}, 매수가 ₩{purchase_price:,.0f}, 필요경비 ₩{expenses:,.0f}").strip()
+
+    address = str(target.get("address", "") if target else body.get("address", "")).strip()
+    original_property_type = str(target.get("property_type", "own") if target else body.get("property_type", "own")).strip()
+    exclusive_area = float(target.get("exclusive_area") or body.get("exclusive_area") or 0.0) if target else float(body.get("exclusive_area") or 0.0)
+    acquisition_date = str(target.get("contract_date", "") if target else body.get("acquisition_date", "")).strip()
+    is_joint = bool(target.get("is_joint_ownership", False) if target else body.get("is_joint_ownership", False))
+    ownerships = target.get("ownerships", []) if target else body.get("ownerships", [])
 
     pnl_payload = {
         "date": sell_date,
@@ -1181,11 +1191,22 @@ async def sell_real_estate_and_record_pnl(request: Request, re_id: str) -> dict:
         "pnl_krw": pnl_krw,
         "owner": owner,
         "memo": memo,
+        "re_id": re_id if not is_direct else "",
+        "real_estate_name": re_name,
+        "purchase_price": purchase_price,
+        "sell_price": sell_price,
+        "expenses": expenses,
+        "address": address,
+        "original_property_type": original_property_type,
+        "exclusive_area": exclusive_area,
+        "acquisition_date": acquisition_date,
+        "is_joint_ownership": is_joint,
+        "ownerships": ownerships,
     }
     pnl_rec = create_pnl_record(pnl_payload, username=username)
 
     removed = False
-    if body.get("remove_from_assets", True):
+    if target and body.get("remove_from_assets", True):
         delete_real_estate(re_id, username=username)
         removed = True
 

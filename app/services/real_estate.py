@@ -210,8 +210,65 @@ def get_real_estate_data(username: str | None = None) -> dict[str, Any]:
     total_unrealized_profit = (total_re_asset_val - total_re_purchase_val) if total_re_purchase_val > 0 else 0.0
     total_unrealized_rate = round((total_unrealized_profit / total_re_purchase_val) * 100, 2) if total_re_purchase_val > 0 else 0.0
 
+    # 5. 매도 완료된 부동산 실현손익 내역 취합
+    import re
+    from app.services.pnl_records import read_pnl_records
+    all_pnl = read_pnl_records(username)
+    sold_list = []
+    total_sold_pnl = 0.0
+    total_sold_purchase = 0.0
+    total_sold_sell = 0.0
+
+    for r in all_pnl:
+        asset_type = str(r.get("asset_type") or "").lower()
+        code = str(r.get("code") or "").upper()
+        name = str(r.get("name") or "")
+        if asset_type == "real_estate" or code == "REAL_ESTATE" or "[부동산]" in name or "부동산" in name:
+            sold_item = deepcopy(r)
+            purch = float(sold_item.get("purchase_price") or 0.0)
+            sell = float(sold_item.get("sell_price") or 0.0)
+            exp = float(sold_item.get("expenses") or 0.0)
+            pnl_krw = float(sold_item.get("pnl_krw") or sold_item.get("pnl") or 0.0)
+            memo_str = str(sold_item.get("memo") or "")
+
+            # 메모에서 누락된 매수가, 매도가, 필요경비 파싱 (하위 호환)
+            if purch <= 0.0 and memo_str:
+                m_p = re.search(r"매수가\s*[₩\$]?([\d,]+)", memo_str)
+                if m_p:
+                    purch = float(m_p.group(1).replace(",", ""))
+            if sell <= 0.0 and memo_str:
+                m_s = re.search(r"매도가\s*[₩\$]?([\d,]+)", memo_str)
+                if m_s:
+                    sell = float(m_s.group(1).replace(",", ""))
+            if exp <= 0.0 and memo_str:
+                m_e = re.search(r"필요경비\s*[₩\$]?([\d,]+)", memo_str)
+                if m_e:
+                    exp = float(m_e.group(1).replace(",", ""))
+
+            if sell <= 0.0 and purch > 0.0 and pnl_krw != 0.0:
+                sell = purch + pnl_krw + exp
+
+            return_rate = round((pnl_krw / purch * 100), 2) if purch > 0 else 0.0
+            clean_name = sold_item.get("real_estate_name") or name.replace("[부동산]", "").strip() or "부동산"
+
+            sold_item["clean_name"] = clean_name
+            sold_item["purchase_price"] = round(purch)
+            sold_item["sell_price"] = round(sell)
+            sold_item["expenses"] = round(exp)
+            sold_item["pnl_krw"] = round(pnl_krw)
+            sold_item["return_rate"] = return_rate
+
+            sold_list.append(sold_item)
+            total_sold_pnl += pnl_krw
+            total_sold_purchase += purch
+            total_sold_sell += sell
+
+    sold_list.sort(key=lambda x: str(x.get("date") or ""), reverse=True)
+    total_sold_rate = round((total_sold_pnl / total_sold_purchase) * 100, 2) if total_sold_purchase > 0 else 0.0
+
     return {
         "real_estates": enriched_list,
+        "sold_real_estates": sold_list,
         "summary": {
             "total_count": len(enriched_list),
             "own_count": sum(1 for r in enriched_list if r.get("property_type") == "own"),
@@ -226,5 +283,10 @@ def get_real_estate_data(username: str | None = None) -> dict[str, Any]:
             "total_linked_loan_debt": round(total_linked_loan_debt),
             "total_real_estate_debt": round(total_real_estate_debt),
             "net_real_estate_worth": round((total_re_asset_val + total_tenant_deposit) - total_real_estate_debt),
+            "sold_count": len(sold_list),
+            "total_sold_pnl": round(total_sold_pnl),
+            "total_sold_purchase": round(total_sold_purchase),
+            "total_sold_sell": round(total_sold_sell),
+            "total_sold_rate": total_sold_rate,
         },
     }

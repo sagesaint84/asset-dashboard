@@ -3441,6 +3441,63 @@ dialog.dialog .dialog-actions {
   background: #333;
 }
 
+/* ── 부동산 실현손익 요약 카드 및 매도 부동산 카드 스타일 ── */
+#cardRealEstateRealized {
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+#cardRealEstateRealized:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 158, 11, 0.7) !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15);
+}
+
+.real-estate-subtab[data-subtab="sold"] {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  color: #f59e0b !important;
+}
+.real-estate-subtab[data-subtab="sold"].active {
+  background: rgba(245, 158, 11, 0.2) !important;
+  border-color: #f59e0b !important;
+  color: #fbbf24 !important;
+  font-weight: 700;
+}
+
+.saving-card.real-estate-card.badge-sold {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.04), rgba(15, 23, 42, 0.8));
+}
+.saving-card.real-estate-card.badge-sold:hover {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+/* 화이트 테마 */
+[data-theme="white"] #cardRealEstateRealized {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+[data-theme="white"] #cardRealEstateRealized:hover {
+  border-color: #f59e0b !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.12);
+}
+[data-theme="white"] .saving-card.real-estate-card.badge-sold {
+  background: #fffdfa !important;
+  border-color: #fed7aa !important;
+}
+[data-theme="white"] .saving-card.real-estate-card.badge-sold:hover {
+  border-color: #f59e0b !important;
+}
+
+/* OLED 테마 */
+[data-theme="oled"] #cardRealEstateRealized {
+  background: #0f0b02 !important;
+  border-color: #3f2a08 !important;
+}
+[data-theme="oled"] .saving-card.real-estate-card.badge-sold {
+  background: #0a0802 !important;
+  border-color: #3f2a08 !important;
+}
+
+
 
 
 

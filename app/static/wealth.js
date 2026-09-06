@@ -2923,18 +2923,29 @@ function openInsuranceAccountDialog(item = null) {
   dialog.showModal();
 }
 
-// ── 4-3. 부동산 (자가 / 임대 / 임차) 자산 관리 ──────────────────────────────
+// ── 4-3. 부동산 (자가 / 임대 / 임차 / 매도) 자산 관리 ──────────────────────────────
 let rawRealEstates = [];
-let currentRealEstateSubtab = 'all'; // 'all' | 'own' | 'rental'
+let rawSoldRealEstates = [];
+let currentRealEstateSubtab = 'all'; // 'all' | 'own' | 'rental' | 'lease' | 'sold'
 
 const PROPERTY_TYPE_LABELS = {
   own: "🏠 자가",
   rental: "🏢 임대",
   lease: "🔑 임차",
+  sold: "🏷️ 매도",
 };
 
-function renderRealEstate(reList, owner = '모두') {
+function renderRealEstate(reList, owner = '모두', soldList = null) {
   rawRealEstates = reList || [];
+  if (soldList) {
+    rawSoldRealEstates = soldList;
+  } else if (rawDashboard && rawDashboard.sold_real_estates) {
+    rawSoldRealEstates = rawDashboard.sold_real_estates;
+  } else if (rawDashboard && rawDashboard.realized_pnl_records) {
+    rawSoldRealEstates = (rawDashboard.realized_pnl_records || []).filter(r => 
+      r.asset_type === 'real_estate' || r.code === 'REAL_ESTATE' || (r.name && r.name.includes('[부동산]')) || (r.name && r.name.includes('부동산'))
+    );
+  }
   renderRealEstateWithOwner(owner);
 }
 
@@ -2967,6 +2978,34 @@ function renderRealEstateWithOwner(owner = '모두') {
     filtered.push(clone);
   });
 
+  // 매도 부동산 목록 소유자 필터링
+  const filteredSold = [];
+  rawSoldRealEstates.forEach(s => {
+    let share = 1.0;
+    if (o !== '모두') {
+      const ownerships = (s.ownerships && s.ownerships.length)
+        ? s.ownerships
+        : [{ owner: s.owner || '모두', ratio: 100 }];
+      let matched = ownerships.find(x => x.owner === o);
+      if (!matched && s.owner && s.owner.includes(o)) {
+        const m = s.owner.match(new RegExp(`${o}\\s*([0-9.]+)%`));
+        if (m) {
+          share = parseFloat(m[1]) / 100;
+        } else {
+          share = 0.5;
+        }
+      } else if (matched && matched.ratio > 0) {
+        share = (matched.ratio || 100) / 100;
+      } else if (s.owner === o) {
+        share = 1.0;
+      } else {
+        return;
+      }
+    }
+    const clone = Object.assign({}, s, { _shareRatio: share });
+    filteredSold.push(clone);
+  });
+
   const ownList = filtered.filter(r => (r.property_type || 'own') === 'own');
   const rentalList = filtered.filter(r => r.property_type === 'rental');
   const leaseList = filtered.filter(r => r.property_type === 'lease');
@@ -2992,6 +3031,12 @@ function renderRealEstateWithOwner(owner = '모두') {
 
   const totalREDebt = totalLandlordDeposit + totalLinkedLoanBalance;
 
+  // 매도 부동산 총 실현손익, 양도가, 취득가 계산
+  const totalSoldPnl = filteredSold.reduce((sum, s) => sum + ((Number(s.pnl_krw != null ? s.pnl_krw : s.pnl) || 0) * (s._shareRatio || 1.0)), 0);
+  const totalSoldPurch = filteredSold.reduce((sum, s) => sum + ((Number(s.purchase_price) || 0) * (s._shareRatio || 1.0)), 0);
+  const totalSoldSell = filteredSold.reduce((sum, s) => sum + ((Number(s.sell_price) || 0) * (s._shareRatio || 1.0)), 0);
+  const soldProfitRate = totalSoldPurch > 0 ? ((totalSoldPnl / totalSoldPurch) * 100).toFixed(1) : "0.0";
+
   if ($("#totalRealEstateVal")) $("#totalRealEstateVal").textContent = `₩${number(totalREVal, 0)}`;
   if ($("#totalRealEstateCountSub")) {
     const isShare = o !== '모두' ? ` (${o} 지분 반영)` : '';
@@ -3015,12 +3060,30 @@ function renderRealEstateWithOwner(owner = '모두') {
     $("#totalRealEstateDebtSub").textContent = `담보·전세대출: ₩${number(totalLinkedLoanBalance, 0)} · 임대보증금: ₩${number(totalLandlordDeposit, 0)}`;
   }
 
-  // 4개 서브탭 카운트 업데이트
+  // 🏷️ 상단 5번째 요약 카드: 부동산 실현손익
+  if ($("#totalRealEstateRealizedVal")) {
+    const sSign = totalSoldPnl >= 0 ? "+" : "";
+    $("#totalRealEstateRealizedVal").textContent = `${sSign}₩${number(totalSoldPnl, 0)}`;
+    $("#totalRealEstateRealizedVal").style.color = totalSoldPnl > 0 ? "#42d5a3" : (totalSoldPnl < 0 ? "#f43f5e" : "#f59e0b");
+  }
+  if ($("#totalRealEstateRealizedSub")) {
+    const rSign = Number(soldProfitRate) >= 0 ? "+" : "";
+    $("#totalRealEstateRealizedSub").textContent = `매도: ${filteredSold.length}건 (수익률: ${rSign}${soldProfitRate}%)`;
+  }
+
+  // 5개 서브탭 카운트 업데이트
   if ($("#reAllCount")) $("#reAllCount").textContent = filtered.length;
   if ($("#reOwnCount")) $("#reOwnCount").textContent = ownList.length;
   if ($("#reRentalCount")) $("#reRentalCount").textContent = rentalList.length;
   if ($("#reLeaseCount")) $("#reLeaseCount").textContent = leaseList.length;
+  if ($("#reSoldCount")) $("#reSoldCount").textContent = filteredSold.length;
   if ($("#realEstateTabCount")) $("#realEstateTabCount").textContent = filtered.length;
+
+  // 매도 탭 활성화 시 [➕ 매도 기록 추가] 버튼 노출
+  const directBtn = $("#btnDirectAddSoldRe");
+  if (directBtn) {
+    directBtn.style.display = currentRealEstateSubtab === 'sold' ? 'inline-flex' : 'none';
+  }
 
   let displayList = filtered;
   if (currentRealEstateSubtab === 'own') {
@@ -3029,10 +3092,98 @@ function renderRealEstateWithOwner(owner = '모두') {
     displayList = rentalList;
   } else if (currentRealEstateSubtab === 'lease') {
     displayList = leaseList;
+  } else if (currentRealEstateSubtab === 'sold') {
+    displayList = filteredSold;
   }
 
   const grid = $("#realEstateGrid");
   if (!grid) return;
+
+  if (currentRealEstateSubtab === 'sold') {
+    if (!filteredSold.length) {
+      grid.innerHTML = `
+        <div class="empty" style="grid-column:1/-1;padding:32px 16px;text-align:center;">
+          <p style="font-size:15px;color:#f8fafc;font-weight:700;margin-bottom:6px;">🏷️ 기록된 부동산 매도 내역이 없습니다.</p>
+          <p style="font-size:12px;color:#94a3b8;margin-bottom:14px;">보유 부동산 카드의 [🏢] 버튼을 누르거나, 우측 상단의 [➕ 매도 기록 추가] 버튼으로 등록할 수 있습니다.</p>
+          <button type="button" class="button secondary compact" onclick="openDirectAddSoldReDialog()" style="font-size:12px;color:#f59e0b;border-color:rgba(245,158,11,0.4);">➕ 매도 기록 직접 추가</button>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = filteredSold.map(sold => {
+      const shareRatio = sold._shareRatio || 1.0;
+      const isPartial = shareRatio < 0.999;
+      const rawPurch = Number(sold.purchase_price) || 0;
+      const rawSell = Number(sold.sell_price) || 0;
+      const rawExp = Number(sold.expenses) || 0;
+      const rawPnl = Number(sold.pnl_krw != null ? sold.pnl_krw : sold.pnl) || 0;
+
+      const purch = isPartial ? rawPurch * shareRatio : rawPurch;
+      const sell = isPartial ? rawSell * shareRatio : rawSell;
+      const exp = isPartial ? rawExp * shareRatio : rawExp;
+      const pnl = isPartial ? rawPnl * shareRatio : rawPnl;
+
+      const profitSign = pnl >= 0 ? "+" : "";
+      const profitColor = pnl > 0 ? "#42d5a3" : (pnl < 0 ? "#f43f5e" : "#94a3b8");
+      const profitRate = purch > 0 ? ((pnl / purch) * 100).toFixed(1) : "0.0";
+
+      const titleName = sold.clean_name || (sold.name || '부동산').replace('[부동산]', '').trim() || '부동산 매도';
+      const ownerBadgeText = sold.is_joint_ownership
+        ? (isPartial ? `🤝 ${o} ${(shareRatio * 100).toFixed(0)}% (공동명의)` : `🤝 ${sold.owner}`)
+        : (sold.owner || '모두');
+
+      return `
+        <div class="saving-card real-estate-card badge-sold" style="border-color:rgba(245,158,11,0.3);background:linear-gradient(180deg,#131622,#0d111c);">
+          <div class="saving-card-header">
+            <div class="saving-card-title-group">
+              <div class="saving-badge-row">
+                <span class="saving-type-badge badge-sold" style="background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.35);font-weight:700;">🏷️ 매도 완료</span>
+                <span class="saving-owner-badge" title="${html(sold.owner || '')}">${html(ownerBadgeText)}</span>
+                <span class="d-day-badge" style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid rgba(148,163,184,0.25);">📅 매도일: ${html(sold.date || '-')}</span>
+              </div>
+              <h3 class="saving-product-name" style="color:#f8fafc;font-size:15px;margin-top:2px;">${html(titleName)}</h3>
+              <span class="saving-bank-name">${html(sold.address || sold.memo || '-')}</span>
+            </div>
+            <div class="account-row-actions saving-card-actions">
+              <button class="account-action-button" data-sold-re-edit="${sold.id}" title="매도 기록 수정" type="button" style="color:#38bdf8;font-size:13px;">✎</button>
+              <button class="mini-delete-button" data-sold-re-del="${sold.id}" title="매도 기록 삭제" type="button" style="color:#f43f5e;font-size:13px;">🗑️</button>
+            </div>
+          </div>
+
+          <div class="saving-card-details">
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">취득가 (매수가)</span>
+              <span class="saving-detail-val">₩${number(purch, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawPurch, 0)})</small>` : ''}</span>
+            </div>
+            <div class="saving-detail-row">
+              <span class="saving-detail-label">양도가 (매도가)</span>
+              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;font-weight:700;">₩${number(sell, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawSell, 0)})</small>` : ''}</span>
+            </div>
+            ${exp > 0 ? `
+              <div class="saving-detail-row">
+                <span class="saving-detail-label">필요경비 (공제)</span>
+                <span class="saving-detail-val" style="color:#fb7185;">-₩${number(exp, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawExp, 0)})</small>` : ''}</span>
+              </div>
+            ` : ''}
+            <div class="saving-detail-row" style="grid-column:1/-1;background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;margin-top:2px;">
+              <span class="saving-detail-label" style="font-weight:700;color:#cbd5e1;">실현손익 (양도차익)</span>
+              <span class="saving-detail-val" style="color:${profitColor};font-size:14px;font-weight:800;">
+                ${profitSign}₩${number(pnl, 0)} (${profitSign}${profitRate}%)
+              </span>
+            </div>
+            ${sold.memo ? `
+              <div class="saving-detail-row" style="grid-column:1/-1;">
+                <span class="saving-detail-label">비고 / 메모</span>
+                <span class="saving-detail-val" style="color:#94a3b8;font-size:11.5px;white-space:normal;word-break:break-word;">${html(sold.memo)}</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join("");
+    return;
+  }
 
   if (!displayList.length) {
     grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">등록된 부동산 자산이 없습니다. 상단 [🏠 부동산 추가] 버튼을 눌러보세요.</div>';
@@ -3470,13 +3621,15 @@ async function fetchKbMarketPrice() {
 }
 
 // ── 부동산 매각 및 실현손익 기록 다이얼로그 제어 ─────────────────────────
-function openRealEstateSellDialog(reItem) {
-  if (!reItem) return;
+function openRealEstateSellDialog(reItem, editPnlItem = null) {
   const dlg = document.getElementById("realEstateSellDialog");
   if (!dlg) return;
 
+  const titleEl = document.getElementById("reSellDialogTitle");
   const targetIdEl = document.getElementById("reSellTargetId");
+  const editPnlIdEl = document.getElementById("reSellEditPnlId");
   const nameEl = document.getElementById("reSellName");
+  const addressEl = document.getElementById("reSellAddress");
   const ownerEl = document.getElementById("reSellOwner");
   const dateEl = document.getElementById("reSellDate");
   const purchEl = document.getElementById("reSellPurchasePrice");
@@ -3484,21 +3637,108 @@ function openRealEstateSellDialog(reItem) {
   const expEl = document.getElementById("reSellExpenses");
   const memoEl = document.getElementById("reSellMemo");
   const removeEl = document.getElementById("reSellRemoveFromAssets");
+  const removeWrap = document.getElementById("reSellRemoveFromAssetsWrap");
+  const submitBtn = document.getElementById("reSellSubmitBtn");
 
-  if (targetIdEl) targetIdEl.value = reItem.id || "";
-  if (nameEl) nameEl.value = reItem.name || "부동산";
-  if (ownerEl) ownerEl.value = reItem.owner || "모두";
-  if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
-  if (purchEl) purchEl.value = reItem.purchase_price || 0;
-  if (priceEl) priceEl.value = reItem.current_price || reItem.purchase_price || "";
-  if (expEl) expEl.value = 0;
-  if (memoEl) memoEl.value = "";
-  if (removeEl) removeEl.checked = true;
+  // 가족 소유자 목록 옵션 갱신
+  if (ownerEl) {
+    const familyMembers = (rawDashboard && rawDashboard.family_members) || ['아빠', '엄마'];
+    const opts = ['모두', ...familyMembers];
+    ownerEl.innerHTML = Array.from(new Set(opts)).map(m => `<option value="${m}">${m}</option>`).join('');
+  }
+
+  if (editPnlItem) {
+    // 1) 기존 매도 기록 수정 모드
+    if (titleEl) titleEl.textContent = "🏢 부동산 매도 기록 수정";
+    if (submitBtn) submitBtn.textContent = "매도 기록 수정 완료";
+    if (targetIdEl) targetIdEl.value = "";
+    if (editPnlIdEl) editPnlIdEl.value = editPnlItem.id || "";
+    if (nameEl) {
+      nameEl.value = editPnlItem.clean_name || (editPnlItem.name || '').replace('[부동산]', '').trim() || "";
+      nameEl.readOnly = false;
+      nameEl.style.background = "";
+      nameEl.style.color = "";
+    }
+    if (addressEl) addressEl.value = editPnlItem.address || "";
+    if (ownerEl) ownerEl.value = editPnlItem.owner || "모두";
+    if (dateEl) dateEl.value = editPnlItem.date || new Date().toISOString().slice(0, 10);
+    if (purchEl) {
+      purchEl.value = editPnlItem.purchase_price || 0;
+      purchEl.readOnly = false;
+      purchEl.style.background = "";
+      purchEl.style.color = "";
+    }
+    if (priceEl) priceEl.value = editPnlItem.sell_price || 0;
+    if (expEl) expEl.value = editPnlItem.expenses || 0;
+    if (memoEl) memoEl.value = editPnlItem.memo || "";
+    if (removeWrap) removeWrap.style.display = "none";
+  } else if (reItem) {
+    // 2) 보유 부동산 매각 모드
+    if (titleEl) titleEl.textContent = "🏢 부동산 매각 및 실현손익 기록";
+    if (submitBtn) submitBtn.textContent = "실현손익에 기록";
+    if (targetIdEl) targetIdEl.value = reItem.id || "";
+    if (editPnlIdEl) editPnlIdEl.value = "";
+    if (nameEl) {
+      nameEl.value = reItem.name || "부동산";
+      nameEl.readOnly = true;
+      nameEl.style.background = "rgba(255,255,255,0.05)";
+      nameEl.style.color = "#94a3b8";
+    }
+    if (addressEl) addressEl.value = reItem.address || "";
+    if (ownerEl) ownerEl.value = reItem.owner || "모두";
+    if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+    if (purchEl) {
+      purchEl.value = reItem.purchase_price || 0;
+      purchEl.readOnly = true;
+      purchEl.style.background = "rgba(255,255,255,0.05)";
+      purchEl.style.color = "#94a3b8";
+    }
+    if (priceEl) priceEl.value = reItem.current_price || reItem.purchase_price || "";
+    if (expEl) expEl.value = 0;
+    if (memoEl) memoEl.value = "";
+    if (removeWrap) removeWrap.style.display = "block";
+    if (removeEl) removeEl.checked = true;
+  } else {
+    // 3) 직접 매도 기록 추가 모드
+    if (titleEl) titleEl.textContent = "🏢 부동산 매도 기록 직접 추가";
+    if (submitBtn) submitBtn.textContent = "매도 기록 등록";
+    if (targetIdEl) targetIdEl.value = "direct";
+    if (editPnlIdEl) editPnlIdEl.value = "";
+    if (nameEl) {
+      nameEl.value = "";
+      nameEl.readOnly = false;
+      nameEl.style.background = "";
+      nameEl.style.color = "";
+    }
+    if (addressEl) addressEl.value = "";
+    if (ownerEl) ownerEl.value = currentOwner || "모두";
+    if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+    if (purchEl) {
+      purchEl.value = "";
+      purchEl.readOnly = false;
+      purchEl.style.background = "";
+      purchEl.style.color = "";
+    }
+    if (priceEl) priceEl.value = "";
+    if (expEl) expEl.value = 0;
+    if (memoEl) memoEl.value = "";
+    if (removeWrap) removeWrap.style.display = "none";
+  }
+
+  // 한글 통화 힌트 업데이트
+  if (purchEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(purchEl);
+  if (priceEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(priceEl);
+  if (expEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(expEl);
 
   calcRealEstateSellProfit();
   dlg.showModal();
 }
 window.openRealEstateSellDialog = openRealEstateSellDialog;
+
+function openDirectAddSoldReDialog() {
+  openRealEstateSellDialog(null, null);
+}
+window.openDirectAddSoldReDialog = openDirectAddSoldReDialog;
 
 function calcRealEstateSellProfit() {
   const purch = Number(document.getElementById("reSellPurchasePrice")?.value || 0);
@@ -3512,7 +3752,7 @@ function calcRealEstateSellProfit() {
   if (pnlEl) {
     const sign = pnl >= 0 ? "+" : "";
     pnlEl.textContent = `${sign}₩${number(pnl, 0)}`;
-    pnlEl.style.color = pnl >= 0 ? "#38bdf8" : "#f43f5e";
+    pnlEl.style.color = pnl > 0 ? "#42d5a3" : (pnl < 0 ? "#f43f5e" : "#38bdf8");
   }
   if (formulaEl) {
     formulaEl.textContent = `양도가 ₩${number(sell, 0)} - 취득가 ₩${number(purch, 0)} - 필요경비 ₩${number(exp, 0)}`;
@@ -3522,12 +3762,16 @@ window.calcRealEstateSellProfit = calcRealEstateSellProfit;
 
 async function submitRealEstateSell() {
   const reId = document.getElementById("reSellTargetId")?.value;
-  if (!reId) return;
+  const editPnlId = document.getElementById("reSellEditPnlId")?.value;
 
+  const name = document.getElementById("reSellName")?.value?.trim() || "부동산";
+  const address = document.getElementById("reSellAddress")?.value?.trim() || "";
+  const owner = document.getElementById("reSellOwner")?.value || "모두";
   const sellPrice = Number(document.getElementById("reSellPrice")?.value || 0);
+  const purchPrice = Number(document.getElementById("reSellPurchasePrice")?.value || 0);
   const sellDate = document.getElementById("reSellDate")?.value;
   const expenses = Number(document.getElementById("reSellExpenses")?.value || 0);
-  const memo = document.getElementById("reSellMemo")?.value || "";
+  const memo = document.getElementById("reSellMemo")?.value?.trim() || "";
   const removeFromAssets = document.getElementById("reSellRemoveFromAssets")?.checked ?? true;
 
   if (sellPrice <= 0) {
@@ -3536,19 +3780,51 @@ async function submitRealEstateSell() {
   }
 
   try {
-    const res = await api(`/api/real-estates/${reId}/sell`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sell_price: sellPrice,
-        sell_date: sellDate,
-        expenses: expenses,
-        remove_from_assets: removeFromAssets,
-        memo: memo,
-      }),
-    });
+    if (editPnlId) {
+      // 1) 기존 매도 기록 수정
+      const pnlKrw = Math.round(sellPrice - purchPrice - expenses);
+      await api(`/api/realized-pnl/${editPnlId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `[부동산] ${name}`,
+          code: "REAL_ESTATE",
+          asset_type: "real_estate",
+          date: sellDate,
+          currency: "KRW",
+          pnl: pnlKrw,
+          pnl_krw: pnlKrw,
+          owner: owner,
+          memo: memo || `매도가 ₩${number(sellPrice, 0)}, 매수가 ₩${number(purchPrice, 0)}, 필요경비 ₩${number(expenses, 0)}`,
+          real_estate_name: name,
+          purchase_price: purchPrice,
+          sell_price: sellPrice,
+          expenses: expenses,
+          address: address,
+        }),
+      });
+      toast("부동산 매도 기록이 수정되었습니다.");
+    } else {
+      // 2) 신규 매각 기록 (보유 부동산 매각 or 직접 매도 추가)
+      const targetEndpoint = (reId && reId !== "direct") ? `/api/real-estates/${reId}/sell` : `/api/real-estates/direct/sell`;
+      const res = await api(targetEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          owner: owner,
+          purchase_price: purchPrice,
+          sell_price: sellPrice,
+          sell_date: sellDate,
+          expenses: expenses,
+          address: address,
+          remove_from_assets: (reId && reId !== "direct") ? removeFromAssets : false,
+          memo: memo,
+        }),
+      });
+      toast(res.message || "부동산 매각 실현손익이 기록되었습니다.");
+    }
 
-    toast(res.message || "부동산 매각 실현손익이 기록되었습니다.");
     document.getElementById("realEstateSellDialog")?.close();
     await loadDashboard();
     await loadRealizedPnl(currentOwner);
@@ -5200,7 +5476,7 @@ function render(data) {
   renderAccounts(data.accounts);
   renderSavings(data.savings_accounts || [], data.bank_accounts || [], data.loan_accounts || [], currentOwner);
   renderInsurance(data.insurance_accounts || [], currentOwner);
-  renderRealEstate(data.real_estates || [], currentOwner);
+  renderRealEstate(data.real_estates || [], currentOwner, data.sold_real_estates);
   renderHeatmaps(data);
   renderHoldings(data);
 }
@@ -5859,13 +6135,49 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // 🗂️ 부동산 서브 탭 전환 (전체 / 자가보유 / 임대임차)
+  // 🏷️ 상단 부동산 실현손익 카드 클릭 시 [매도] 서브탭으로 즉시 전환
+  if (e.target.closest('#cardRealEstateRealized')) {
+    currentRealEstateSubtab = 'sold';
+    document.querySelectorAll('.real-estate-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === 'sold'));
+    renderRealEstateWithOwner(currentOwner);
+    return;
+  }
+
+  // 🗂️ 부동산 서브 탭 전환 (전체 / 자가보유 / 임대 / 임차 / 매도)
   const reSubtabBtn = e.target.closest('.real-estate-subtab');
   if (reSubtabBtn) {
     const subtab = reSubtabBtn.dataset.subtab;
     currentRealEstateSubtab = subtab;
     document.querySelectorAll('.real-estate-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === subtab));
     renderRealEstateWithOwner(currentOwner);
+    return;
+  }
+
+  // 매도 부동산 기록 수정
+  const soldEditBtn = e.target.closest('[data-sold-re-edit]');
+  if (soldEditBtn) {
+    const sid = soldEditBtn.dataset.soldReEdit;
+    const soldItem = rawSoldRealEstates.find(s => s.id === sid);
+    if (soldItem) openRealEstateSellDialog(null, soldItem);
+    return;
+  }
+
+  // 매도 부동산 기록 삭제
+  const soldDelBtn = e.target.closest('[data-sold-re-del]');
+  if (soldDelBtn) {
+    const sid = soldDelBtn.dataset.soldReDel;
+    const soldItem = rawSoldRealEstates.find(s => s.id === sid);
+    const sName = soldItem ? (soldItem.clean_name || soldItem.name || '부동산') : '이 부동산 매도';
+    if (confirm(`'${sName}'의 매도 실현손익 기록을 삭제하시겠습니까?`)) {
+      try {
+        await api(`/api/realized-pnl/${sid}`, { method: 'DELETE' });
+        toast('부동산 매도 실현손익 기록이 삭제되었습니다.');
+        await loadDashboard();
+        await loadRealizedPnl(currentOwner);
+      } catch (err) {
+        toast(err.message || '삭제 실패', true);
+      }
+    }
     return;
   }
 

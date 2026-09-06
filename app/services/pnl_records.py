@@ -114,6 +114,17 @@ def create_pnl_record(payload: dict[str, Any], username: str | None = None) -> d
         "created_at": now_iso,
         "updated_at": now_iso,
     }
+
+    # 부동산 전용 상세 필드 보존
+    re_fields = [
+        "purchase_price", "sell_price", "expenses", "address", "real_estate_name",
+        "original_property_type", "exclusive_area", "acquisition_date",
+        "is_joint_ownership", "ownerships", "re_id"
+    ]
+    for field in re_fields:
+        if field in payload:
+            record[field] = payload[field]
+
     records.append(record)
     write_pnl_records(records, username)
     return record
@@ -170,6 +181,16 @@ def update_pnl_record(record_id: str, payload: dict[str, Any], username: str | N
     target["account_name"] = str(payload.get("account_name", target.get("account_name", ""))).strip()
     target["memo"] = str(payload.get("memo", target.get("memo", ""))).strip()
     target["updated_at"] = datetime.now().astimezone().isoformat()
+
+    # 부동산 전용 상세 필드 갱신
+    re_fields = [
+        "purchase_price", "sell_price", "expenses", "address", "real_estate_name",
+        "original_property_type", "exclusive_area", "acquisition_date",
+        "is_joint_ownership", "ownerships", "re_id"
+    ]
+    for field in re_fields:
+        if field in payload:
+            target[field] = payload[field]
 
     write_pnl_records(records, username)
     return target

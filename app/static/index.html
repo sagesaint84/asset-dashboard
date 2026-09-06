@@ -14,8 +14,8 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5537" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260906-v5537" />
+    <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5538" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260906-v5538" />
   </head>
   <body>
     <main class="shell">
@@ -577,13 +577,23 @@
                 <strong id="totalRealEstateDebtVal" style="color:#fb7185;">₩0</strong>
                 <small id="totalRealEstateDebtSub" style="font-size:11px;color:#94a3b8;margin-top:2px;">담보대출: ₩0 · 전세보증금: ₩0</small>
               </div>
+              <div class="saving-stat-card highlight-sold" id="cardRealEstateRealized" style="border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.06);cursor:pointer;" title="클릭하여 매도 부동산 내역 보기">
+                <span class="saving-stat-label" style="color:#f59e0b;display:flex;align-items:center;justify-content:space-between;">
+                  <span>🏷️ 부동산 실현손익</span>
+                  <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.2);color:#fbbf24;font-weight:700;">매도</span>
+                </span>
+                <strong id="totalRealEstateRealizedVal" style="color:#f59e0b;">+₩0</strong>
+                <small id="totalRealEstateRealizedSub" style="font-size:11px;color:#94a3b8;margin-top:2px;">매도: 0건 (수익률: 0.0%)</small>
+              </div>
             </div>
 
-            <div class="savings-subtabs real-estate-subtabs" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+            <div class="savings-subtabs real-estate-subtabs" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center;">
               <button type="button" class="real-estate-subtab active" data-subtab="all">전체 (<span id="reAllCount">0</span>)</button>
               <button type="button" class="real-estate-subtab" data-subtab="own">자가 (<span id="reOwnCount">0</span>)</button>
               <button type="button" class="real-estate-subtab" data-subtab="rental">임대 (<span id="reRentalCount">0</span>)</button>
               <button type="button" class="real-estate-subtab" data-subtab="lease">임차 (<span id="reLeaseCount">0</span>)</button>
+              <button type="button" class="real-estate-subtab" data-subtab="sold" style="border-color:rgba(245,158,11,0.4);color:#f59e0b;">🏷️ 매도 (<span id="reSoldCount">0</span>)</button>
+              <button type="button" class="button secondary compact" id="btnDirectAddSoldRe" onclick="openDirectAddSoldReDialog()" style="margin-left:auto;display:none;font-size:11.5px;color:#f59e0b;border-color:rgba(245,158,11,0.4);padding:4px 9px;border-radius:7px;">➕ 매도 기록 추가</button>
             </div>
 
             <div id="realEstateGrid" class="savings-card-grid" style="margin-top:12px;"></div>
@@ -1809,23 +1819,29 @@
     <!-- 부동산 매각 및 실현손익 기록 다이얼로그 -->
     <dialog id="realEstateSellDialog" class="dialog" style="max-width:540px;width:95vw;">
       <div class="dialog-head">
-        <h2>🏢 부동산 매각 및 실현손익 기록</h2>
+        <h2 id="reSellDialogTitle">🏢 부동산 매각 및 실현손익 기록</h2>
         <button value="cancel" class="close" aria-label="닫기">×</button>
       </div>
       <form id="realEstateSellForm" onsubmit="return false;">
         <input type="hidden" id="reSellTargetId" />
+        <input type="hidden" id="reSellEditPnlId" />
         <div class="form-grid">
           <label style="grid-column: 1 / -1;">부동산 이름
-            <input id="reSellName" readonly style="background:rgba(255,255,255,0.05);color:#94a3b8;" />
+            <input id="reSellName" placeholder="예: 상계주공4단지" required />
+          </label>
+          <label style="grid-column: 1 / -1;">소재지 / 주소 (선택)
+            <input id="reSellAddress" placeholder="예: 서울시 노원구 상계동 123" />
           </label>
           <label>소유자
-            <input id="reSellOwner" readonly style="background:rgba(255,255,255,0.05);color:#94a3b8;" />
+            <select id="reSellOwner">
+              <option value="모두">모두</option>
+            </select>
           </label>
           <label>매도일자
             <input id="reSellDate" type="date" required />
           </label>
           <label>취득가 (매수가, KRW)
-            <input id="reSellPurchasePrice" type="number" step="any" readonly style="background:rgba(255,255,255,0.05);color:#94a3b8;" />
+            <input id="reSellPurchasePrice" type="number" step="any" placeholder="0" required data-korean-currency oninput="calcRealEstateSellProfit()" />
           </label>
           <label>양도가 (매도가, KRW)
             <input id="reSellPrice" type="number" step="any" placeholder="예: 1450000000" required data-korean-currency oninput="calcRealEstateSellProfit()" />
@@ -1845,10 +1861,12 @@
             </div>
           </div>
 
-          <label style="grid-column: 1 / -1; display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:#cbd5e1; cursor:pointer;">
-            <input type="checkbox" id="reSellRemoveFromAssets" checked />
-            <span>매각 완료 후 보유 자산 목록에서 <strong>해당 부동산 제외(정리)</strong></span>
-          </label>
+          <div id="reSellRemoveFromAssetsWrap" style="grid-column: 1 / -1;">
+            <label style="display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:#cbd5e1; cursor:pointer;">
+              <input type="checkbox" id="reSellRemoveFromAssets" checked />
+              <span>매각 완료 후 보유 자산 목록에서 <strong>해당 부동산 제외(정리)</strong></span>
+            </label>
+          </div>
 
           <label style="grid-column: 1 / -1;">메모 / 비고
             <input id="reSellMemo" placeholder="예: 매각 완료 및 잔금 수령" />
@@ -1857,7 +1875,7 @@
 
         <div class="dialog-actions" style="margin-top:16px;">
           <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">취소</button>
-          <button class="button primary" type="button" onclick="submitRealEstateSell()" style="background:linear-gradient(135deg,#f59e0b,#d97706);">실현손익에 기록</button>
+          <button id="reSellSubmitBtn" class="button primary" type="button" onclick="submitRealEstateSell()" style="background:linear-gradient(135deg,#f59e0b,#d97706);">실현손익에 기록</button>
         </div>
       </form>
     </dialog>
