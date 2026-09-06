@@ -8647,6 +8647,9 @@ function renderRealizedPnl(data) {
 }
 
 function renderPnlMonthlyDetail(month = null) {
+  const container = $("#pnlMonthlyDetail");
+  if (!container || !pnlData) return;
+
   const allRecords = pnlData.records || [];
   const records = allRecords.filter(r => {
     const at = String(r.asset_type || '').toLowerCase();
