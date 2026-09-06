@@ -86,8 +86,20 @@ def create_pnl_record(payload: dict[str, Any], username: str | None = None) -> d
     raw_broker = str(payload.get("broker", "")).strip()
     raw_memo = str(payload.get("memo", "")).strip()
 
-    re_kw = bool(re.search(r"부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발", raw_name)) or raw_broker == "부동산"
-    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or re_kw:
+    re_fields = [
+        "purchase_price", "sell_price", "expenses", "address", "real_estate_name",
+        "original_property_type", "exclusive_area", "acquisition_date",
+        "is_joint_ownership", "ownerships", "re_id"
+    ]
+    is_explicit_re = (
+        asset_type == "real_estate"
+        or raw_code == "REAL_ESTATE"
+        or raw_broker == "부동산"
+        or raw_name.startswith("[부동산]")
+        or bool(payload.get("real_estate_name"))
+        or bool(payload.get("re_id"))
+    )
+    if is_explicit_re:
         asset_type = "real_estate"
         code = raw_code or "REAL_ESTATE"
         name = raw_name or "부동산 매매"
@@ -95,7 +107,7 @@ def create_pnl_record(payload: dict[str, Any], username: str | None = None) -> d
         fx_rate = 1.0
         pnl_krw = pnl
     else:
-        asset_type = asset_type or "stock"
+        asset_type = "ipo" if is_ipo else "stock"
         code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
 
     record = {
@@ -157,8 +169,17 @@ def update_pnl_record(record_id: str, payload: dict[str, Any], username: str | N
     raw_broker = str(payload.get("broker", target.get("broker", ""))).strip()
     asset_type = str(payload.get("asset_type", target.get("asset_type", ""))).strip().lower()
 
-    re_kw = bool(re.search(r"부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발", raw_name)) or raw_broker == "부동산"
-    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or re_kw:
+    is_explicit_re = (
+        asset_type == "real_estate"
+        or raw_code == "REAL_ESTATE"
+        or raw_broker == "부동산"
+        or raw_name.startswith("[부동산]")
+        or bool(payload.get("real_estate_name"))
+        or bool(payload.get("re_id"))
+        or bool(target.get("real_estate_name"))
+        or bool(target.get("re_id"))
+    )
+    if is_explicit_re:
         asset_type = "real_estate"
         code = raw_code or "REAL_ESTATE"
         name = raw_name or "부동산 매매"
@@ -166,7 +187,8 @@ def update_pnl_record(record_id: str, payload: dict[str, Any], username: str | N
         fx_rate = 1.0
         pnl_krw = pnl
     else:
-        asset_type = asset_type or "stock"
+        is_ipo = bool(payload.get("is_ipo", target.get("is_ipo", False)))
+        asset_type = "ipo" if is_ipo else "stock"
         code, name, currency = resolve_stock_info(raw_code, raw_name, currency)
 
     target["asset_type"] = asset_type
@@ -211,13 +233,32 @@ def delete_pnl_record(record_id: str, username: str | None = None) -> bool:
     return False
 
 
+def is_real_estate_pnl_record(r: dict[str, Any]) -> bool:
+    """부동산 매각 실현손익 레코드 여부 판별 (주식/공모주와 명확히 분리)"""
+    asset_type = str(r.get("asset_type") or "").strip().lower()
+    code = str(r.get("code") or "").strip().upper()
+    broker = str(r.get("broker") or "").strip()
+    name = str(r.get("name") or "").strip()
+    if asset_type == "real_estate" or code == "REAL_ESTATE" or broker == "부동산":
+        return True
+    if name.startswith("[부동산]") or bool(r.get("real_estate_name")) or bool(r.get("re_id")):
+        return True
+    return False
+
+
 def clear_pnl_records(username: str | None = None) -> None:
-    write_pnl_records([], username)
+    """주식/공모주 실현손익만 초기화하고, 부동산 매도 기록은 안전하게 보존합니다."""
+    records = read_pnl_records(username)
+    preserved = [r for r in records if is_real_estate_pnl_record(r)]
+    write_pnl_records(preserved, username)
 
 
 def get_pnl_summary(owner: str = "모두", year: int | str | None = None, trade_type: str = "all", username: str | None = None) -> dict[str, Any]:
     records = read_pnl_records(username)
     
+    # 실현손익 탭 및 요약은 주식/공모주 전용이므로 부동산 실현손익은 완전 제외
+    records = [r for r in records if not is_real_estate_pnl_record(r)]
+
     # 가용 연도 목록 추출
     available_years = sorted(list({str(r.get("date", ""))[:4] for r in records if len(str(r.get("date", ""))) >= 4}), reverse=True)
     if not available_years:

@@ -44,21 +44,25 @@ function selectOwner(owner) {
 
 // ── 핵심 요약 패널의 실현손익 및 실제 배당금 전체 기간(All-Time) 갱신 ─────────
 async function updateOverviewCardsAllTime(owner = currentOwner) {
+  let totalPnl = 0;
   try {
     const pnlRes = await api(`/api/realized-pnl?owner=${encodeURIComponent(owner)}&year=all&trade_type=all`);
     if (pnlRes) {
-      const totalPnl = Number(pnlRes.total_pnl_krw || 0);
+      totalPnl = Number(pnlRes.total_pnl_krw || 0);
       const winRate = Number(pnlRes.win_rate || 0);
       const recordCount = Number(pnlRes.record_count || 0);
 
-      const summaryPnlEl = $("#summaryRealizedPnl");
-      if (summaryPnlEl) {
-        summaryPnlEl.textContent = `${totalPnl > 0 ? '+' : ''}${money(totalPnl)}`;
-        summaryPnlEl.className = `${totalPnl > 0 ? 'gain up' : (totalPnl < 0 ? 'loss down' : '')}`;
-      }
-      const subEl = $("#summaryRealizedPnlSub");
-      if (subEl) {
-        subEl.textContent = `승률 ${number(winRate, 1)}% · 총 ${recordCount}건 실현`;
+      const isStockTab = (currentAllocTab === 'sector');
+      if (isStockTab) {
+        const summaryPnlEl = $("#summaryRealizedPnl");
+        if (summaryPnlEl) {
+          summaryPnlEl.textContent = `${totalPnl > 0 ? '+' : ''}${money(totalPnl)}`;
+          summaryPnlEl.className = `${totalPnl > 0 ? 'gain up' : (totalPnl < 0 ? 'loss down' : '')}`;
+        }
+        const subEl = $("#summaryRealizedPnlSub");
+        if (subEl) {
+          subEl.textContent = `승률 ${number(winRate, 1)}% · 총 ${recordCount}건 실현`;
+        }
       }
     }
   } catch (err) {
@@ -72,6 +76,15 @@ async function updateOverviewCardsAllTime(owner = currentOwner) {
       const actualEl = $("#summaryActualDividend");
       if (actualEl) {
         actualEl.textContent = money(totalActual);
+      }
+      const isStockTab = (currentAllocTab === 'sector');
+      if (!isStockTab) {
+        const combined = totalPnl + totalActual;
+        const summaryPnlEl = $("#summaryRealizedPnl");
+        if (summaryPnlEl) {
+          summaryPnlEl.textContent = `${combined >= 0 ? '+' : ''}${money(combined)}`;
+          summaryPnlEl.className = `${combined > 0 ? 'gain up' : (combined < 0 ? 'loss down' : '')}`;
+        }
       }
     }
   } catch (err) {
@@ -997,9 +1010,19 @@ function renderSummary(data) {
   const totalSafeAssets = totalAllCash + totalTenantDepositVal + insuranceTotal;
   const netWorth = (totalInvestAssets + totalSafeAssets) - totalAllDebt;
 
-  // 4. 총 실현손익 (연도별/월별 실시간 집계)
+  // 4. 총 실현손익 (연도별/월별 실시간 집계 - 주식/공모주 순수 실현손익)
   const curRealized = data.realized_pnl_summary || rawDashboard?.realized_pnl_summary || {};
-  const pnlRecords = filterByOwner(data.realized_pnl_records || rawDashboard?.realized_pnl_records || pnlData?.records || []);
+  const rawPnlList = data.realized_pnl_records || rawDashboard?.realized_pnl_records || pnlData?.records || [];
+  // 부동산 매도 기록 완전 배제 (주식/공모주 실현손익만 엄격 집계)
+  const isReRec = (r) => {
+    const at = String(r.asset_type || '').toLowerCase();
+    const c = String(r.code || '').toUpperCase();
+    const b = String(r.broker || '').trim();
+    const n = String(r.name || '');
+    return at === 'real_estate' || c === 'REAL_ESTATE' || b === '부동산' || n.startsWith('[부동산]') || Boolean(r.re_id) || Boolean(r.real_estate_name);
+  };
+  const stockPnlRecords = rawPnlList.filter(r => !isReRec(r));
+  const pnlRecords = filterByOwner(stockPnlRecords);
 
   const now = new Date();
   const currFullYear = now.getFullYear().toString();
@@ -1019,9 +1042,7 @@ function renderSummary(data) {
       if (d.startsWith(currFullYear)) yearRealizedKrw += p;
       if (d.startsWith(currYearMonthPrefix)) monthRealizedKrw += p;
     });
-    if (o !== '모두') {
-      totalRealizedKrw = pnlRecords.reduce((sum, r) => sum + Number(r.pnl_krw || 0), 0);
-    }
+    totalRealizedKrw = pnlRecords.reduce((sum, r) => sum + Number(r.pnl_krw || 0), 0);
   }
 
   // 5. 총 배당금 및 이자 (연도별/월별 실시간 집계)
@@ -8626,10 +8647,14 @@ function renderRealizedPnl(data) {
 }
 
 function renderPnlMonthlyDetail(month = null) {
-  const container = $("#pnlMonthlyDetail");
-  if (!container || !pnlData) return;
-
-  const records = pnlData.records || [];
+  const allRecords = pnlData.records || [];
+  const records = allRecords.filter(r => {
+    const at = String(r.asset_type || '').toLowerCase();
+    const c = String(r.code || '').toUpperCase();
+    const b = String(r.broker || '').trim();
+    const n = String(r.name || '');
+    return at !== 'real_estate' && c !== 'REAL_ESTATE' && b !== '부동산' && !n.startsWith('[부동산]') && !r.re_id && !r.real_estate_name;
+  });
   let title = "전체 매도 실현손익 내역";
   let items = [];
 
@@ -8804,40 +8829,26 @@ function togglePnlAssetTypeFields() {
   const form = document.getElementById("pnlRecordForm");
   if (!form) return;
   const assetType = document.getElementById("pnlAssetTypeSelect")?.value || "stock";
-  const isRE = (assetType === "real_estate");
+  const isIpo = (assetType === "ipo");
 
   const brokerWrap = document.getElementById("pnlBrokerWrap");
   const acctNameWrap = document.getElementById("pnlAccountNameWrap");
   const codeWrap = document.getElementById("pnlCodeWrap");
   const acctSelWrap = document.getElementById("pnlAccountSelectWrap");
-  const reSelWrap = document.getElementById("pnlRealEstateSelectWrap");
-  const reFields = document.getElementById("pnlRealEstateFields");
   const ipoWrap = document.getElementById("pnlIpoWrap");
   const currWrap = document.getElementById("pnlCurrencyWrap");
   const nameLabel = document.getElementById("pnlNameLabelText");
-  const currSelect = document.getElementById("pnlFormCurrency");
 
-  if (brokerWrap) brokerWrap.style.display = isRE ? "none" : "block";
-  if (acctNameWrap) acctNameWrap.style.display = isRE ? "none" : "block";
-  if (codeWrap) codeWrap.style.display = isRE ? "none" : "block";
-  if (acctSelWrap) acctSelWrap.style.display = isRE ? "none" : "block";
-  if (ipoWrap) ipoWrap.style.display = isRE ? "none" : "block";
-  if (currWrap) currWrap.style.display = isRE ? "none" : "block";
+  if (brokerWrap) brokerWrap.style.display = "block";
+  if (acctNameWrap) acctNameWrap.style.display = "block";
+  if (codeWrap) codeWrap.style.display = "block";
+  if (acctSelWrap) acctSelWrap.style.display = "block";
+  if (currWrap) currWrap.style.display = "block";
+  if (ipoWrap) ipoWrap.style.display = isIpo ? "none" : "block";
+  if (nameLabel) nameLabel.textContent = isIpo ? "공모주 종목명" : "종목명";
 
-  if (reSelWrap) reSelWrap.style.display = isRE ? "block" : "none";
-  if (reFields) reFields.style.display = isRE ? "grid" : "none";
-
-  if (nameLabel) nameLabel.textContent = isRE ? "부동산 명칭 (단지명/평형)" : "종목명";
-  if (isRE && currSelect) currSelect.value = "KRW";
-
-  if (isRE) {
-    const reSel = document.getElementById("pnlRealEstateSelect");
-    if (reSel) {
-      const list = rawRealEstates || rawDashboard?.real_estates || [];
-      reSel.innerHTML = '<option value="">-- 직접 입력 또는 등록된 부동산 선택 --</option>' +
-        list.map(r => `<option value="${html(r.id)}">${html(r.name)} (${PROPERTY_TYPE_LABELS[r.property_type] || r.property_type || '부동산'} · ₩${number(r.current_price || r.purchase_price || 0, 0)})</option>`).join('');
-    }
-  }
+  const isIpoEl = form.querySelector("[name='is_ipo']");
+  if (isIpoEl) isIpoEl.value = isIpo ? "true" : "false";
 }
 window.togglePnlAssetTypeFields = togglePnlAssetTypeFields;
 
@@ -8899,9 +8910,6 @@ async function openPnlRecordDialog(record = null) {
   const pnlKrwEl = form.querySelector("[name='pnl_krw']");
   const isIpoEl = form.querySelector("[name='is_ipo']");
   const memoEl = form.querySelector("[name='memo']");
-  const rePurchEl = form.querySelector("[name='re_purchase_price']");
-  const reSellEl = form.querySelector("[name='re_sell_price']");
-  const reExpEl = form.querySelector("[name='re_expenses']");
 
   if (dateEl) dateEl.value = targetDate;
   if (ownerEl) ownerEl.value = record ? (record.owner || "모두") : (currentOwner !== "모두" ? currentOwner : "모두");
@@ -8920,13 +8928,6 @@ async function openPnlRecordDialog(record = null) {
     }
   }
   if (memoEl) memoEl.value = record ? (record.memo || "") : "";
-
-  if (rePurchEl) rePurchEl.value = record?.purchase_price || "";
-  if (reSellEl) reSellEl.value = record?.sell_price || "";
-  if (reExpEl) reExpEl.value = record?.expenses || 0;
-  if (rePurchEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(rePurchEl);
-  if (reSellEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(reSellEl);
-  if (reExpEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(reExpEl);
 
   if (record && record.fx_rate) {
     if (fxEl) fxEl.value = record.fx_rate;
@@ -8993,14 +8994,8 @@ async function saveRealizedPnlRecord() {
   }
 
   let assetTypeVal = form.querySelector("[name='asset_type']")?.value || "stock";
-  const reKwPat = /부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발/i;
-  const registeredNames = (rawRealEstates || []).map(r => (r.name || '').trim()).filter(n => n.length >= 2);
-  const isKwRe = reKwPat.test(nameVal) || registeredNames.some(rn => nameVal.includes(rn)) || brokerVal === "부동산";
-  if (isKwRe && assetTypeVal === "stock") {
-    assetTypeVal = "real_estate";
-  }
-  const isRealEstate = (assetTypeVal === "real_estate");
   const isIpoVal = (assetTypeVal === "ipo") || (form.querySelector("[name='is_ipo']")?.value === "true");
+  const isRealEstate = (assetTypeVal === "real_estate");
   const memoVal = (form.querySelector("[name='memo']")?.value || "").trim();
 
   let purchVal = Number(form.querySelector("[name='re_purchase_price']")?.value || 0);
