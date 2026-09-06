@@ -7893,24 +7893,33 @@ function setupAutoAdvancingDateInput(wrapSelector) {
   if (!yearInput || !monthInput || !dayInput || !nativeInput) return;
 
   const origValDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  let isSyncingToNative = false;
 
   function syncToNative() {
     const y = (yearInput.value || "").trim();
-    const m = (monthInput.value || "").trim().padStart(2, "0");
-    const d = (dayInput.value || "").trim().padStart(2, "0");
+    const m = (monthInput.value || "").trim();
+    const d = (dayInput.value || "").trim();
+    // 연도 4자리, 월 2자리, 일 2자리가 모두 완전하게 입력되었을 때만 네이티브로 동기화
+    // (타이핑 도중 1자리 미완성 상태에서 padStart로 덮어씌워지는 순환 오류 원천 방지)
     if (y.length === 4 && m.length === 2 && d.length === 2) {
       const iso = `${y}-${m}-${d}`;
-      if (origValDesc) {
-        origValDesc.set.call(nativeInput, iso);
-      } else {
-        nativeInput.value = iso;
+      isSyncingToNative = true;
+      try {
+        if (origValDesc) {
+          origValDesc.set.call(nativeInput, iso);
+        } else {
+          nativeInput.value = iso;
+        }
+        nativeInput.dispatchEvent(new Event("input", { bubbles: true }));
+        nativeInput.dispatchEvent(new Event("change", { bubbles: true }));
+      } finally {
+        isSyncingToNative = false;
       }
-      nativeInput.dispatchEvent(new Event("input", { bubbles: true }));
-      nativeInput.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
 
   function syncFromNative() {
+    if (isSyncingToNative) return;
     const val = origValDesc ? origValDesc.get.call(nativeInput) : nativeInput.value;
     if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
       const [y, m, d] = val.split("-");
@@ -7929,7 +7938,9 @@ function setupAutoAdvancingDateInput(wrapSelector) {
         },
         set(newVal) {
           origValDesc.set.call(this, newVal);
-          syncFromNative();
+          if (!isSyncingToNative) {
+            syncFromNative();
+          }
         },
         configurable: true
       });
@@ -7983,16 +7994,28 @@ function setupAutoAdvancingDateInput(wrapSelector) {
     } else {
       yearInput.value = raw;
     }
-    syncToNative();
     if (yearInput.value.length === 4) {
+      syncToNative();
       monthInput.focus();
       monthInput.select();
+    }
+  });
+
+  yearInput.addEventListener("blur", () => {
+    let raw = yearInput.value.replace(/\D/g, "");
+    if (raw.length === 2) {
+      yearInput.value = String(2000 + parseInt(raw, 10));
+      syncToNative();
     }
   });
 
   yearInput.addEventListener("keydown", (e) => {
     if (["ArrowRight", "Enter", "/", "-", "."].includes(e.key)) {
       if (yearInput.value.length >= 2) {
+        if (yearInput.value.length === 2) {
+          yearInput.value = String(2000 + parseInt(yearInput.value, 10));
+          syncToNative();
+        }
         e.preventDefault();
         monthInput.focus();
         monthInput.select();
@@ -8020,7 +8043,7 @@ function setupAutoAdvancingDateInput(wrapSelector) {
       return;
     }
     monthInput.value = raw;
-    syncToNative();
+    // 0 또는 1 입력 시에는 두 번째 자리 입력을 위해 즉시 sync하지 않고 대기
     if (raw.length === 2) {
       let num = parseInt(raw, 10);
       if (num > 12) num = 12;
@@ -8029,6 +8052,17 @@ function setupAutoAdvancingDateInput(wrapSelector) {
       syncToNative();
       dayInput.focus();
       dayInput.select();
+    }
+  });
+
+  monthInput.addEventListener("blur", () => {
+    let raw = monthInput.value.replace(/\D/g, "");
+    if (raw.length === 1) {
+      let num = parseInt(raw, 10);
+      if (num >= 1 && num <= 12) {
+        monthInput.value = String(num).padStart(2, "0");
+        syncToNative();
+      }
     }
   });
 
@@ -8057,6 +8091,7 @@ function setupAutoAdvancingDateInput(wrapSelector) {
   // 일(Day): 2자리 입력 시 유효 범위 보정 및 동기화
   dayInput.addEventListener("input", () => {
     let raw = dayInput.value.replace(/\D/g, "").slice(0, 2);
+    // 4~9는 어떤 월에도 10자리 수가 될 수 없으므로(31일까지 존재) 04~09로 즉시 패딩
     if (raw.length === 1 && parseInt(raw, 10) >= 4) {
       raw = "0" + raw;
       dayInput.value = raw;
@@ -8064,13 +8099,27 @@ function setupAutoAdvancingDateInput(wrapSelector) {
       return;
     }
     dayInput.value = raw;
-    syncToNative();
+    // 0, 1, 2, 3 입력 시에는 10~31 등 두 번째 자리(예: 25일) 입력을 온전히 받기 위해 대기
     if (raw.length === 2) {
       let num = parseInt(raw, 10);
-      if (num > 31) num = 31;
+      const y = parseInt(yearInput.value, 10) || new Date().getFullYear();
+      const m = parseInt(monthInput.value, 10) || (new Date().getMonth() + 1);
+      const maxDays = new Date(y, m, 0).getDate();
+      if (num > maxDays) num = maxDays;
       if (num < 1) num = 1;
       dayInput.value = String(num).padStart(2, "0");
       syncToNative();
+    }
+  });
+
+  dayInput.addEventListener("blur", () => {
+    let raw = dayInput.value.replace(/\D/g, "");
+    if (raw.length === 1) {
+      let num = parseInt(raw, 10);
+      if (num >= 1 && num <= 31) {
+        dayInput.value = String(num).padStart(2, "0");
+        syncToNative();
+      }
     }
   });
 
@@ -8083,6 +8132,15 @@ function setupAutoAdvancingDateInput(wrapSelector) {
       e.preventDefault();
       monthInput.focus();
       monthInput.setSelectionRange(monthInput.value.length, monthInput.value.length);
+    } else if (e.key === "Enter") {
+      let raw = dayInput.value.replace(/\D/g, "");
+      if (raw.length === 1) {
+        let num = parseInt(raw, 10);
+        if (num >= 1 && num <= 31) {
+          dayInput.value = String(num).padStart(2, "0");
+          syncToNative();
+        }
+      }
     }
   });
 
@@ -8187,7 +8245,9 @@ function setupAutoAdvancingDateInput(wrapSelector) {
   }
 
   nativeInput.addEventListener("change", () => {
-    syncFromNative();
+    if (!isSyncingToNative) {
+      syncFromNative();
+    }
   });
 
   // 초기 로컬 동기화
