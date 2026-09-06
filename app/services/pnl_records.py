@@ -83,8 +83,11 @@ def create_pnl_record(payload: dict[str, Any], username: str | None = None) -> d
     asset_type = str(payload.get("asset_type") or "").strip().lower()
     raw_code = str(payload.get("code", "")).strip()
     raw_name = str(payload.get("name", "")).strip()
+    raw_broker = str(payload.get("broker", "")).strip()
+    raw_memo = str(payload.get("memo", "")).strip()
 
-    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or "부동산" in raw_name:
+    re_kw = bool(re.search(r"부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발", raw_name)) or raw_broker == "부동산"
+    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or re_kw:
         asset_type = "real_estate"
         code = raw_code or "REAL_ESTATE"
         name = raw_name or "부동산 매매"
@@ -151,9 +154,11 @@ def update_pnl_record(record_id: str, payload: dict[str, Any], username: str | N
 
     raw_code = str(payload.get("code", target.get("code", ""))).strip()
     raw_name = str(payload.get("name", target.get("name", ""))).strip()
+    raw_broker = str(payload.get("broker", target.get("broker", ""))).strip()
     asset_type = str(payload.get("asset_type", target.get("asset_type", ""))).strip().lower()
 
-    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or "부동산" in raw_name:
+    re_kw = bool(re.search(r"부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발", raw_name)) or raw_broker == "부동산"
+    if asset_type == "real_estate" or raw_code == "REAL_ESTATE" or re_kw:
         asset_type = "real_estate"
         code = raw_code or "REAL_ESTATE"
         name = raw_name or "부동산 매매"

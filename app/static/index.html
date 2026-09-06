@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5538" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260906-v5538" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260906-v5539" />
   </head>
   <body>
     <main class="shell">
@@ -2414,6 +2414,30 @@
               <option value="">-- 직접 입력 또는 등록된 계좌 선택 --</option>
             </select>
           </label>
+          <label style="grid-column: 1 / -1; display:none;" id="pnlRealEstateSelectWrap">
+            등록된 보유 부동산 선택 (선택 시 부동산명·취득가·소유자 자동 채움)
+            <select id="pnlRealEstateSelect" onchange="onSelectPnlRealEstate()">
+              <option value="">-- 직접 입력 또는 등록된 부동산 선택 --</option>
+            </select>
+          </label>
+          <div id="pnlRealEstateFields" style="display:none; grid-column: 1 / -1; grid-template-columns: repeat(3, 1fr); gap: 10px; background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.25); border-radius: 8px; padding: 12px;">
+            <label style="margin:0;">
+              취득가 (매수가, ₩)
+              <input name="re_purchase_price" id="pnlRePurchasePrice" type="number" step="any" placeholder="0" data-korean-currency oninput="calcPnlReProfit()" />
+            </label>
+            <label style="margin:0;">
+              양도가 (매도가, ₩)
+              <input name="re_sell_price" id="pnlReSellPrice" type="number" step="any" placeholder="0" data-korean-currency oninput="calcPnlReProfit()" />
+            </label>
+            <label style="margin:0;">
+              필요경비 (공제액, ₩)
+              <input name="re_expenses" id="pnlReExpenses" type="number" step="any" value="0" placeholder="0" data-korean-currency oninput="calcPnlReProfit()" />
+            </label>
+            <div style="grid-column: 1 / -1; font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between; align-items: center; margin-top: 2px;">
+              <span id="pnlReCalcFormula">매도가 - 취득가 - 필요경비 = 실현손익</span>
+              <span style="color:#f59e0b; font-weight:600;">* 입력 시 실현손익이 자동 계산됩니다.</span>
+            </div>
+          </div>
           <label>
             매도일 (Date)
             <input name="date" type="date" required />
@@ -2441,7 +2465,7 @@
             <span id="pnlNameLabelText">종목명</span>
             <input name="name" list="holdingNameList" placeholder="예: 삼성전자, 현대차, NVDA" autocomplete="off" required />
           </label>
-          <label>
+          <label id="pnlCurrencyWrap">
             통화
             <select name="currency" id="pnlFormCurrency">
               <option value="KRW">KRW (원화 ₩)</option>
@@ -2460,7 +2484,7 @@
             원화 환산손익 (₩)
             <input name="pnl_krw" id="pnlFormAmountKrw" type="number" step="any" readonly style="opacity:0.85;background:#131c33;" />
           </label>
-          <label>
+          <label id="pnlIpoWrap">
             거래 유형 (공모주 여부)
             <select name="is_ipo" id="pnlFormIsIpo">
               <option value="false">일반 주식거래</option>
@@ -2763,7 +2787,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260906-v5536"></script>
+    <script src="/static/wealth.js?v=20260906-v5539"></script>
   </body>
 </html>
 

@@ -13,6 +13,10 @@ let holdingSortField = 'market_value_krw';
 let holdingSortOrder = 'desc'; // 'asc' | 'desc'
 let taxHoldingSortField = 'market_value_krw';
 let taxHoldingSortOrder = 'desc'; // 'asc' | 'desc'
+let currentPnlSortField = 'date';
+let currentPnlSortOrder = 'desc'; // 'asc' | 'desc'
+let currentDivSortField = 'date';
+let currentDivSortOrder = 'desc'; // 'asc' | 'desc'
 let heatmapViewMode = localStorage.getItem("heatmap_view_mode") || "treemap"; // 'treemap' | 'cards'
 let heatmapPeriod = localStorage.getItem("heatmap_period") || "1D";
 let heatmapTheme = localStorage.getItem("heatmap_theme") || "kr";
@@ -2937,15 +2941,31 @@ const PROPERTY_TYPE_LABELS = {
 
 function renderRealEstate(reList, owner = '모두', soldList = null) {
   rawRealEstates = reList || [];
-  if (soldList) {
-    rawSoldRealEstates = soldList;
-  } else if (rawDashboard && rawDashboard.sold_real_estates) {
-    rawSoldRealEstates = rawDashboard.sold_real_estates;
-  } else if (rawDashboard && rawDashboard.realized_pnl_records) {
-    rawSoldRealEstates = (rawDashboard.realized_pnl_records || []).filter(r => 
-      r.asset_type === 'real_estate' || r.code === 'REAL_ESTATE' || (r.name && r.name.includes('[부동산]')) || (r.name && r.name.includes('부동산'))
-    );
-  }
+  
+  // 모든 가용 원천에서 매도 부동산 후보군 통합 수집 및 정밀 감지
+  const allCandidateRecords = [
+    ...(soldList || []),
+    ...((rawDashboard && rawDashboard.sold_real_estates) || []),
+    ...((rawDashboard && rawDashboard.realized_pnl_records) || []),
+    ...((pnlData && pnlData.records) || [])
+  ];
+  const registeredNames = (rawRealEstates || []).map(r => (r.name || '').trim()).filter(n => n.length >= 2);
+  const reKw = /부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발/i;
+
+  const map = new Map();
+  allCandidateRecords.forEach(r => {
+    if (!r || !r.id) return;
+    const name = r.name || '';
+    const memo = r.memo || '';
+    const isRe = r.asset_type === 'real_estate' || r.code === 'REAL_ESTATE' || r.broker === '부동산' ||
+      name.includes('[부동산]') || name.includes('부동산') ||
+      registeredNames.some(rn => name.includes(rn)) ||
+      reKw.test(name) || (memo && reKw.test(memo) && r.asset_type !== 'stock');
+    if (isRe) {
+      map.set(r.id, r);
+    }
+  });
+  rawSoldRealEstates = Array.from(map.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   renderRealEstateWithOwner(owner);
 }
 
@@ -3067,8 +3087,8 @@ function renderRealEstateWithOwner(owner = '모두') {
     $("#totalRealEstateRealizedVal").style.color = totalSoldPnl > 0 ? "#42d5a3" : (totalSoldPnl < 0 ? "#f43f5e" : "#f59e0b");
   }
   if ($("#totalRealEstateRealizedSub")) {
-    const rSign = Number(soldProfitRate) >= 0 ? "+" : "";
-    $("#totalRealEstateRealizedSub").textContent = `매도: ${filteredSold.length}건 (수익률: ${rSign}${soldProfitRate}%)`;
+    const rateText = totalSoldPurch > 0 ? ` (수익률: ${Number(soldProfitRate) >= 0 ? '+' : ''}${soldProfitRate}%)` : '';
+    $("#totalRealEstateRealizedSub").textContent = `매도: ${filteredSold.length}건${rateText}`;
   }
 
   // 5개 서브탭 카운트 업데이트
@@ -3126,7 +3146,7 @@ function renderRealEstateWithOwner(owner = '모두') {
 
       const profitSign = pnl >= 0 ? "+" : "";
       const profitColor = pnl > 0 ? "#42d5a3" : (pnl < 0 ? "#f43f5e" : "#94a3b8");
-      const profitRate = purch > 0 ? ((pnl / purch) * 100).toFixed(1) : "0.0";
+      const profitRate = purch > 0 ? ((pnl / purch) * 100).toFixed(1) : null;
 
       const titleName = sold.clean_name || (sold.name || '부동산').replace('[부동산]', '').trim() || '부동산 매도';
       const ownerBadgeText = sold.is_joint_ownership
@@ -3154,11 +3174,11 @@ function renderRealEstateWithOwner(owner = '모두') {
           <div class="saving-card-details">
             <div class="saving-detail-row">
               <span class="saving-detail-label">취득가 (매수가)</span>
-              <span class="saving-detail-val">₩${number(purch, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawPurch, 0)})</small>` : ''}</span>
+              <span class="saving-detail-val">${purch > 0 ? `₩${number(purch, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawPurch, 0)})</small>` : ''}` : '-'}</span>
             </div>
             <div class="saving-detail-row">
               <span class="saving-detail-label">양도가 (매도가)</span>
-              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;font-weight:700;">₩${number(sell, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawSell, 0)})</small>` : ''}</span>
+              <span class="saving-detail-val" style="color:#38bdf8;font-size:13px;font-weight:700;">${sell > 0 ? `₩${number(sell, 0)} ${isPartial ? `<small style="font-size:10px;color:#94a3b8;">(전체 ₩${number(rawSell, 0)})</small>` : ''}` : '-'}</span>
             </div>
             ${exp > 0 ? `
               <div class="saving-detail-row">
@@ -3169,7 +3189,7 @@ function renderRealEstateWithOwner(owner = '모두') {
             <div class="saving-detail-row" style="grid-column:1/-1;background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;margin-top:2px;">
               <span class="saving-detail-label" style="font-weight:700;color:#cbd5e1;">실현손익 (양도차익)</span>
               <span class="saving-detail-val" style="color:${profitColor};font-size:14px;font-weight:800;">
-                ${profitSign}₩${number(pnl, 0)} (${profitSign}${profitRate}%)
+                ${profitSign}₩${number(pnl, 0)} ${profitRate != null ? `(${profitSign}${profitRate}%)` : ''}
               </span>
             </div>
             ${sold.memo ? `
@@ -6373,6 +6393,34 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 실현손익 테이블 정렬 헤더 클릭
+  const pnlTh = e.target.closest('#pnlMonthlyDetail [data-pnl-sort]');
+  if (pnlTh) {
+    const sortField = pnlTh.dataset.pnlSort;
+    if (currentPnlSortField === sortField) {
+      currentPnlSortOrder = currentPnlSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      currentPnlSortField = sortField;
+      currentPnlSortOrder = (sortField === 'name' || sortField === 'owner') ? 'asc' : 'desc';
+    }
+    renderPnlMonthlyDetail(selectedPnlMonth);
+    return;
+  }
+
+  // 배당금 테이블 정렬 헤더 클릭
+  const divTh = e.target.closest('#dividendMonthlyDetail [data-div-sort]');
+  if (divTh) {
+    const sortField = divTh.dataset.divSort;
+    if (currentDivSortField === sortField) {
+      currentDivSortOrder = currentDivSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      currentDivSortField = sortField;
+      currentDivSortOrder = (sortField === 'name' || sortField === 'owner') ? 'asc' : 'desc';
+    }
+    renderActualDividendDetail(selectedDividendMonth);
+    return;
+  }
+
   // 보유종목 정렬 헤더 클릭
   const th = e.target.closest('.sortable-th');
   if (th && th.dataset.sort) {
@@ -6675,7 +6723,9 @@ document.addEventListener('click', async (e) => {
     try {
       const res = await api(`/api/realized-pnl/${rId}`, { method: 'DELETE' });
       toast(res.message || '삭제되었습니다.');
+      await loadDashboard();
       await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+      renderRealEstateWithOwner(currentOwner);
       await updateOverviewCardsAllTime(currentOwner);
       window.scrollTo({ top: savedScrollY, behavior: "instant" });
       requestAnimationFrame(() => {
@@ -8146,7 +8196,7 @@ function renderActualDividendDetail(month = null) {
     const sumKrw = items.reduce((acc, cur) => acc + Number(cur.amount_krw || 0), 0);
     title = `📅 ${month}월 실제 배당금 입금 내역 (${items.length}건 · 합계 <span style="color:#f43f5e;">${money(sumKrw)}</span>)`;
   } else {
-    items = records;
+    items = [...records];
     const sumKrw = items.reduce((acc, cur) => acc + Number(cur.amount_krw || 0), 0);
     title = `📅 전체 실제 배당금 입금 내역 (${items.length}건 · 합계 <span style="color:#f43f5e;">${money(sumKrw)}</span>)`;
   }
@@ -8163,6 +8213,33 @@ function renderActualDividendDetail(month = null) {
     `;
     return;
   }
+
+  // 배당금 내역 컬럼 정렬 (보유종목과 동일 UX)
+  items.sort((a, b) => {
+    let valA, valB;
+    if (currentDivSortField === 'date') {
+      valA = a.date || '';
+      valB = b.date || '';
+      return currentDivSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentDivSortField === 'owner') {
+      valA = a.owner || '모두';
+      valB = b.owner || '모두';
+      return currentDivSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentDivSortField === 'name') {
+      valA = a.name || a.code || '';
+      valB = b.name || b.code || '';
+      return currentDivSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentDivSortField === 'amount') {
+      valA = Number(a.amount || 0);
+      valB = Number(b.amount || 0);
+      return currentDivSortOrder === 'asc' ? valA - valB : valB - valA;
+    } else if (currentDivSortField === 'amount_krw') {
+      valA = Number(a.amount_krw || 0);
+      valB = Number(b.amount_krw || 0);
+      return currentDivSortOrder === 'asc' ? valA - valB : valB - valA;
+    }
+    return 0;
+  });
 
   const rowsHtml = items.map(item => {
     const isUsd = item.currency === 'USD';
@@ -8200,12 +8277,12 @@ function renderActualDividendDetail(month = null) {
       <table class="detail-table">
         <thead>
           <tr>
-            <th class="center" style="width:90px;">입금일</th>
-            <th class="center" style="width:70px;">소유자</th>
-            <th>종목명 (코드)</th>
+            <th class="center sortable-th ${currentDivSortField === 'date' ? (currentDivSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-div-sort="date" style="width:95px;">입금일 <span class="sort-icon"></span></th>
+            <th class="center sortable-th ${currentDivSortField === 'owner' ? (currentDivSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-div-sort="owner" style="width:75px;">소유자 <span class="sort-icon"></span></th>
+            <th class="sortable-th ${currentDivSortField === 'name' ? (currentDivSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-div-sort="name">종목명 (코드) <span class="sort-icon"></span></th>
             <th class="center" style="width:60px;">통화</th>
-            <th style="text-align:right;width:110px;">입금액</th>
-            <th style="text-align:right;width:120px;">원화 환산금액</th>
+            <th class="sortable-th ${currentDivSortField === 'amount' ? (currentDivSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-div-sort="amount" style="text-align:right;width:115px;">입금액 <span class="sort-icon"></span></th>
+            <th class="sortable-th ${currentDivSortField === 'amount_krw' ? (currentDivSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-div-sort="amount_krw" style="text-align:right;width:125px;">원화 환산금액 <span class="sort-icon"></span></th>
             <th>메모 / 계좌</th>
             <th class="center" style="width:65px;">관리</th>
           </tr>
@@ -8340,6 +8417,19 @@ async function loadRealizedPnl(owner = currentOwner, year = selectedPnlYear, tra
     pnlData = res;
     renderRealizedPnl(res);
     updatePnlYearOptions(res?.available_years || []);
+
+    // 실현손익 내 부동산 매도 기록을 부동산 탭 원장과 즉시 연동
+    if (res?.records) {
+      const registeredNames = (rawRealEstates || []).map(r => (r.name || '').trim()).filter(n => n.length >= 2);
+      const reKw = /부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발/i;
+      const reRecords = res.records.filter(r => 
+        r.asset_type === 'real_estate' || r.code === 'REAL_ESTATE' || r.broker === '부동산' ||
+        (r.name && (r.name.includes('[부동산]') || r.name.includes('부동산') || registeredNames.some(rn => r.name.includes(rn)) || reKw.test(r.name)))
+      );
+      if (reRecords.length > 0) {
+        renderRealEstate(rawRealEstates, currentOwner, null);
+      }
+    }
   } catch (err) {
     console.error("매도 실현손익을 불러오지 못했습니다.", err);
   }
@@ -8549,7 +8639,7 @@ function renderPnlMonthlyDetail(month = null) {
     const sumKrw = items.reduce((acc, cur) => acc + Number(cur.pnl_krw || 0), 0);
     title = `📅 ${month}월 매도 실현손익 내역 (${items.length}건 · 합계 ${sumKrw > 0 ? '+' : ''}${money(sumKrw)})`;
   } else {
-    items = records;
+    items = [...records];
     const sumKrw = items.reduce((acc, cur) => acc + Number(cur.pnl_krw || 0), 0);
     title = `📅 전체 매도 실현손익 내역 (${items.length}건 · 총합 ${sumKrw > 0 ? '+' : ''}${money(sumKrw)})`;
   }
@@ -8567,6 +8657,37 @@ function renderPnlMonthlyDetail(month = null) {
     return;
   }
 
+  // 매도 실현손익 내역 컬럼 정렬 (보유종목과 동일 UX)
+  items.sort((a, b) => {
+    let valA, valB;
+    if (currentPnlSortField === 'date') {
+      valA = a.date || '';
+      valB = b.date || '';
+      return currentPnlSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentPnlSortField === 'owner') {
+      valA = a.owner || '모두';
+      valB = b.owner || '모두';
+      return currentPnlSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentPnlSortField === 'name') {
+      valA = a.name || a.code || '';
+      valB = b.name || b.code || '';
+      return currentPnlSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentPnlSortField === 'is_ipo') {
+      valA = a.is_ipo ? '1' : (a.asset_type === 'real_estate' ? '2' : '0');
+      valB = b.is_ipo ? '1' : (b.asset_type === 'real_estate' ? '2' : '0');
+      return currentPnlSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else if (currentPnlSortField === 'pnl') {
+      valA = Number(a.pnl || 0);
+      valB = Number(b.pnl || 0);
+      return currentPnlSortOrder === 'asc' ? valA - valB : valB - valA;
+    } else if (currentPnlSortField === 'pnl_krw') {
+      valA = Number(a.pnl_krw || 0);
+      valB = Number(b.pnl_krw || 0);
+      return currentPnlSortOrder === 'asc' ? valA - valB : valB - valA;
+    }
+    return 0;
+  });
+
   const rowsHtml = items.map(item => {
     const isUsd = item.currency === 'USD';
     const pnlVal = Number(item.pnl_krw || 0);
@@ -8577,6 +8698,13 @@ function renderPnlMonthlyDetail(month = null) {
     const fxPnlInfo = (isUsd && fxPnlVal !== 0) ? `<br><small style="color:#c4b5fd;">환차손익 ${fxPnlVal > 0 ? '+' : ''}${money(fxPnlVal)}</small>` : '';
     const fxInfo = isUsd ? `<br><small style="color:#8da0c7;">환율 ${number(item.fx_rate, 1)}원</small>${fxPnlInfo}` : '';
 
+    let typeBadge = '<span class="td-normal-badge">일반거래</span>';
+    if (item.asset_type === 'real_estate' || item.code === 'REAL_ESTATE') {
+      typeBadge = '<span class="saving-type-badge badge-sold" style="background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.35);font-size:11px;padding:2px 6px;border-radius:4px;font-weight:700;">🏷️ 부동산</span>';
+    } else if (item.is_ipo) {
+      typeBadge = '<span class="td-ipo-badge">📦 공모주</span>';
+    }
+
     return `
       <tr>
         <td class="center td-date">${html(item.date)}</td>
@@ -8586,7 +8714,7 @@ function renderPnlMonthlyDetail(month = null) {
           <div class="td-stock-code">${html(item.code || '')}</div>
         </td>
         <td class="center">
-          ${item.is_ipo ? '<span class="td-ipo-badge">📦 공모주</span>' : '<span class="td-normal-badge">일반거래</span>'}
+          ${typeBadge}
         </td>
         <td class="center"><span class="td-currency">${html(item.currency || 'KRW')}</span></td>
         <td class="num td-orig-amt">${isUsd ? origText : sign + money(item.pnl_krw)}${fxInfo}</td>
@@ -8611,13 +8739,13 @@ function renderPnlMonthlyDetail(month = null) {
       <table class="detail-table">
         <thead>
           <tr>
-            <th class="center" style="width:90px;">매도일</th>
-            <th class="center" style="width:70px;">소유자</th>
-            <th>종목명 (코드)</th>
-            <th class="center" style="width:80px;">유형</th>
+            <th class="center sortable-th ${currentPnlSortField === 'date' ? (currentPnlSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-pnl-sort="date" style="width:95px;">매도일 <span class="sort-icon"></span></th>
+            <th class="center sortable-th ${currentPnlSortField === 'owner' ? (currentPnlSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-pnl-sort="owner" style="width:75px;">소유자 <span class="sort-icon"></span></th>
+            <th class="sortable-th ${currentPnlSortField === 'name' ? (currentPnlSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-pnl-sort="name">종목명 (코드) <span class="sort-icon"></span></th>
+            <th class="center sortable-th ${currentPnlSortField === 'is_ipo' ? (currentPnlSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-pnl-sort="is_ipo" style="width:85px;">유형 <span class="sort-icon"></span></th>
             <th class="center" style="width:60px;">통화</th>
-            <th style="text-align:right;width:110px;">실현손익</th>
-            <th style="text-align:right;width:120px;">원화 환산손익</th>
+            <th class="sortable-th ${currentPnlSortField === 'pnl' ? (currentPnlSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-pnl-sort="pnl" style="text-align:right;width:115px;">실현손익 <span class="sort-icon"></span></th>
+            <th class="sortable-th ${currentPnlSortField === 'pnl_krw' ? (currentPnlSortOrder === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-pnl-sort="pnl_krw" style="text-align:right;width:125px;">원화 환산손익 <span class="sort-icon"></span></th>
             <th>메모 / 계좌</th>
             <th class="center" style="width:65px;">관리</th>
           </tr>
@@ -8630,6 +8758,48 @@ function renderPnlMonthlyDetail(month = null) {
   `;
 }
 
+function calcPnlReProfit() {
+  const form = document.getElementById("pnlRecordForm");
+  if (!form) return;
+  const purch = Number(form.re_purchase_price?.value || 0);
+  const sell = Number(form.re_sell_price?.value || 0);
+  const exp = Number(form.re_expenses?.value || 0);
+  const pnl = sell - purch - exp;
+
+  const pnlInput = form.pnl;
+  const pnlKrwInput = form.pnl_krw;
+  if (pnlInput && (sell > 0 || purch > 0)) pnlInput.value = pnl;
+  if (pnlKrwInput && (sell > 0 || purch > 0)) pnlKrwInput.value = pnl;
+
+  const formulaEl = document.getElementById("pnlReCalcFormula");
+  if (formulaEl) {
+    formulaEl.textContent = `양도가 ₩${number(sell, 0)} - 취득가 ₩${number(purch, 0)} - 필요경비 ₩${number(exp, 0)} = ₩${number(pnl, 0)}`;
+  }
+}
+window.calcPnlReProfit = calcPnlReProfit;
+
+function onSelectPnlRealEstate() {
+  const form = document.getElementById("pnlRecordForm");
+  const sel = document.getElementById("pnlRealEstateSelect");
+  if (!form || !sel) return;
+  const reId = sel.value;
+  if (!reId) return;
+
+  const list = rawRealEstates || rawDashboard?.real_estates || [];
+  const target = list.find(r => r.id === reId);
+  if (!target) return;
+
+  if (form.name) form.name.value = target.name || "";
+  if (form.owner && target.owner) form.owner.value = target.owner;
+  const purchPrice = Number(target.purchase_price || target.acquisition_price || target.current_price || 0);
+  if (form.re_purchase_price) {
+    form.re_purchase_price.value = purchPrice;
+    if (typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(form.re_purchase_price);
+  }
+  calcPnlReProfit();
+}
+window.onSelectPnlRealEstate = onSelectPnlRealEstate;
+
 function togglePnlAssetTypeFields() {
   const form = document.getElementById("pnlRecordForm");
   if (!form) return;
@@ -8640,6 +8810,10 @@ function togglePnlAssetTypeFields() {
   const acctNameWrap = document.getElementById("pnlAccountNameWrap");
   const codeWrap = document.getElementById("pnlCodeWrap");
   const acctSelWrap = document.getElementById("pnlAccountSelectWrap");
+  const reSelWrap = document.getElementById("pnlRealEstateSelectWrap");
+  const reFields = document.getElementById("pnlRealEstateFields");
+  const ipoWrap = document.getElementById("pnlIpoWrap");
+  const currWrap = document.getElementById("pnlCurrencyWrap");
   const nameLabel = document.getElementById("pnlNameLabelText");
   const currSelect = document.getElementById("pnlFormCurrency");
 
@@ -8647,9 +8821,23 @@ function togglePnlAssetTypeFields() {
   if (acctNameWrap) acctNameWrap.style.display = isRE ? "none" : "block";
   if (codeWrap) codeWrap.style.display = isRE ? "none" : "block";
   if (acctSelWrap) acctSelWrap.style.display = isRE ? "none" : "block";
+  if (ipoWrap) ipoWrap.style.display = isRE ? "none" : "block";
+  if (currWrap) currWrap.style.display = isRE ? "none" : "block";
+
+  if (reSelWrap) reSelWrap.style.display = isRE ? "block" : "none";
+  if (reFields) reFields.style.display = isRE ? "grid" : "none";
 
   if (nameLabel) nameLabel.textContent = isRE ? "부동산 명칭 (단지명/평형)" : "종목명";
   if (isRE && currSelect) currSelect.value = "KRW";
+
+  if (isRE) {
+    const reSel = document.getElementById("pnlRealEstateSelect");
+    if (reSel) {
+      const list = rawRealEstates || rawDashboard?.real_estates || [];
+      reSel.innerHTML = '<option value="">-- 직접 입력 또는 등록된 부동산 선택 --</option>' +
+        list.map(r => `<option value="${html(r.id)}">${html(r.name)} (${PROPERTY_TYPE_LABELS[r.property_type] || r.property_type || '부동산'} · ₩${number(r.current_price || r.purchase_price || 0, 0)})</option>`).join('');
+    }
+  }
 }
 window.togglePnlAssetTypeFields = togglePnlAssetTypeFields;
 
@@ -8711,6 +8899,9 @@ async function openPnlRecordDialog(record = null) {
   const pnlKrwEl = form.querySelector("[name='pnl_krw']");
   const isIpoEl = form.querySelector("[name='is_ipo']");
   const memoEl = form.querySelector("[name='memo']");
+  const rePurchEl = form.querySelector("[name='re_purchase_price']");
+  const reSellEl = form.querySelector("[name='re_sell_price']");
+  const reExpEl = form.querySelector("[name='re_expenses']");
 
   if (dateEl) dateEl.value = targetDate;
   if (ownerEl) ownerEl.value = record ? (record.owner || "모두") : (currentOwner !== "모두" ? currentOwner : "모두");
@@ -8729,6 +8920,13 @@ async function openPnlRecordDialog(record = null) {
     }
   }
   if (memoEl) memoEl.value = record ? (record.memo || "") : "";
+
+  if (rePurchEl) rePurchEl.value = record?.purchase_price || "";
+  if (reSellEl) reSellEl.value = record?.sell_price || "";
+  if (reExpEl) reExpEl.value = record?.expenses || 0;
+  if (rePurchEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(rePurchEl);
+  if (reSellEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(reSellEl);
+  if (reExpEl && typeof updateKoreanCurrencyHint === 'function') updateKoreanCurrencyHint(reExpEl);
 
   if (record && record.fx_rate) {
     if (fxEl) fxEl.value = record.fx_rate;
@@ -8750,6 +8948,7 @@ async function openPnlRecordDialog(record = null) {
   }
 
   updatePnlFormFields();
+  calcPnlReProfit();
   dlg.showModal();
 }
 
@@ -8786,16 +8985,32 @@ async function saveRealizedPnlRecord() {
   const nameVal = (form.querySelector("[name='name']")?.value || "").trim();
   let currVal = (form.querySelector("[name='currency']")?.value || "KRW").toUpperCase();
   const pnlInputStr = form.querySelector("[name='pnl']")?.value;
-  const pnlVal = Number(pnlInputStr || 0);
+  let pnlVal = Number(pnlInputStr || 0);
   const fxVal = Number(form.querySelector("[name='fx_rate']")?.value || 1385.0);
   let pnlKrwVal = Number(form.querySelector("[name='pnl_krw']")?.value || 0);
   if (!pnlKrwVal && pnlVal) {
     pnlKrwVal = currVal === "USD" ? Math.round(pnlVal * fxVal) : Math.round(pnlVal);
   }
-  const assetTypeVal = form.querySelector("[name='asset_type']")?.value || "stock";
+
+  let assetTypeVal = form.querySelector("[name='asset_type']")?.value || "stock";
+  const reKwPat = /부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발/i;
+  const registeredNames = (rawRealEstates || []).map(r => (r.name || '').trim()).filter(n => n.length >= 2);
+  const isKwRe = reKwPat.test(nameVal) || registeredNames.some(rn => nameVal.includes(rn)) || brokerVal === "부동산";
+  if (isKwRe && assetTypeVal === "stock") {
+    assetTypeVal = "real_estate";
+  }
   const isRealEstate = (assetTypeVal === "real_estate");
   const isIpoVal = (assetTypeVal === "ipo") || (form.querySelector("[name='is_ipo']")?.value === "true");
   const memoVal = (form.querySelector("[name='memo']")?.value || "").trim();
+
+  let purchVal = Number(form.querySelector("[name='re_purchase_price']")?.value || 0);
+  let sellVal = Number(form.querySelector("[name='re_sell_price']")?.value || 0);
+  let expVal = Number(form.querySelector("[name='re_expenses']")?.value || 0);
+
+  if (isRealEstate && sellVal > 0 && purchVal > 0 && (!pnlVal || pnlVal === 0)) {
+    pnlVal = Math.round(sellVal - purchVal - expVal);
+    pnlKrwVal = pnlVal;
+  }
 
   if (!dateVal) {
     toast("매도일을 선택해 주세요.", true);
@@ -8850,6 +9065,13 @@ async function saveRealizedPnlRecord() {
     memo: memoVal,
   };
 
+  if (isRealEstate) {
+    payload.purchase_price = purchVal;
+    payload.sell_price = sellVal;
+    payload.expenses = expVal;
+    payload.real_estate_name = nameVal;
+  }
+
   // 현재 스크롤 위치 저장 (윈도우 스크롤 및 세부 테이블 스크롤)
   const savedScrollY = window.scrollY || window.pageYOffset || 0;
   const pnlDetailWrap = document.querySelector("#pnlMonthlyDetail .detail-table-wrap");
@@ -8866,7 +9088,9 @@ async function saveRealizedPnlRecord() {
     });
     document.getElementById("pnlRecordDialog")?.close();
     toast(res.message || "매도 실현손익이 저장되었습니다.");
+    await loadDashboard();
     await loadRealizedPnl(currentOwner, selectedPnlYear, currentPnlTradeType);
+    renderRealEstateWithOwner(currentOwner);
     await updateOverviewCardsAllTime(currentOwner);
 
     // 스크롤 위치 완벽 복원

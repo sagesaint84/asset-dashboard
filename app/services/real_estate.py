@@ -219,17 +219,34 @@ def get_real_estate_data(username: str | None = None) -> dict[str, Any]:
     total_sold_purchase = 0.0
     total_sold_sell = 0.0
 
+    # 등록된 부동산 명칭 목록 추출 (지능형 매칭용)
+    registered_re_names = [str(item.get("name") or "").strip() for item in enriched_list if item.get("name")]
+    re_keyword_pat = re.compile(r"부동산|아파트|오피스텔|빌라|주택|단지|상가|토지|건물|원룸|분양권|재개발", re.IGNORECASE)
+
     for r in all_pnl:
         asset_type = str(r.get("asset_type") or "").lower()
         code = str(r.get("code") or "").upper()
         name = str(r.get("name") or "")
-        if asset_type == "real_estate" or code == "REAL_ESTATE" or "[부동산]" in name or "부동산" in name:
+        broker = str(r.get("broker") or "")
+        memo_str = str(r.get("memo") or "")
+
+        is_re = (
+            asset_type == "real_estate"
+            or code == "REAL_ESTATE"
+            or broker == "부동산"
+            or "[부동산]" in name
+            or "부동산" in name
+            or (name and any(rn in name for rn in registered_re_names if len(rn) >= 2))
+            or bool(re_keyword_pat.search(name))
+            or (bool(re_keyword_pat.search(memo_str)) and asset_type != "stock")
+        )
+        if is_re:
             sold_item = deepcopy(r)
+            sold_item["asset_type"] = "real_estate"
             purch = float(sold_item.get("purchase_price") or 0.0)
             sell = float(sold_item.get("sell_price") or 0.0)
             exp = float(sold_item.get("expenses") or 0.0)
             pnl_krw = float(sold_item.get("pnl_krw") or sold_item.get("pnl") or 0.0)
-            memo_str = str(sold_item.get("memo") or "")
 
             # 메모에서 누락된 매수가, 매도가, 필요경비 파싱 (하위 호환)
             if purch <= 0.0 and memo_str:
