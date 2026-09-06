@@ -5247,13 +5247,20 @@ dialog.dialog .dialog-actions {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
-  padding: 0 !important;
+  padding: 0 2px !important;
   margin: 0 !important;
   color: #f8fafc !important;
   font-size: 13.5px !important;
   font-weight: 600 !important;
   text-align: center !important;
   letter-spacing: 0.5px !important;
+  border-radius: 4px !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+  cursor: text;
+}
+
+.split-date-wrap input.date-part:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 .split-date-wrap input.date-part-year {
@@ -5323,6 +5330,10 @@ dialog.dialog .dialog-actions {
   color: #0f172a !important;
 }
 
+[data-theme="white"] .split-date-wrap input.date-part:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
 [data-theme="white"] .split-date-wrap .date-part-sep {
   color: #94a3b8 !important;
 }
@@ -5337,6 +5348,10 @@ dialog.dialog .dialog-actions {
 [data-theme="oled"] .split-date-wrap:focus-within {
   border-color: #a78bfa !important;
   box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.25) !important;
+}
+
+[data-theme="oled"] .split-date-wrap input.date-part:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
 }
 
 

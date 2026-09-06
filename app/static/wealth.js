@@ -8086,6 +8086,90 @@ function setupAutoAdvancingDateInput(wrapSelector) {
     }
   });
 
+  // 마우스오버 툴팁 안내 (미설정 시 기본 주입)
+  if (!yearInput.getAttribute("title")) yearInput.setAttribute("title", "마우스 휠로 연도 조절 가능");
+  if (!monthInput.getAttribute("title")) monthInput.setAttribute("title", "마우스 휠로 월 조절 가능");
+  if (!dayInput.getAttribute("title")) dayInput.setAttribute("title", "마우스 휠로 일 조절 가능");
+
+  // [핵심] 마우스오버 상태에서 휠 회전 시 연도/월/일 실시간 증감 (모달/페이지 스크롤 방지: passive: false)
+  yearInput.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    let y = parseInt(yearInput.value, 10);
+    if (isNaN(y) || y < 1900 || y > 2100) {
+      y = new Date().getFullYear();
+    }
+    const step = e.deltaY < 0 ? 1 : -1;
+    y = Math.min(2100, Math.max(1900, y + step));
+    yearInput.value = String(y);
+
+    if (!monthInput.value) {
+      monthInput.value = String(new Date().getMonth() + 1).padStart(2, "0");
+    }
+    if (!dayInput.value) {
+      dayInput.value = String(new Date().getDate()).padStart(2, "0");
+    } else {
+      const m = parseInt(monthInput.value, 10) || (new Date().getMonth() + 1);
+      const maxDays = new Date(y, m, 0).getDate();
+      let d = parseInt(dayInput.value, 10) || 1;
+      if (d > maxDays) {
+        dayInput.value = String(maxDays).padStart(2, "0");
+      }
+    }
+    syncToNative();
+  }, { passive: false });
+
+  monthInput.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    let m = parseInt(monthInput.value, 10);
+    if (isNaN(m) || m < 1 || m > 12) {
+      m = new Date().getMonth() + 1;
+    }
+    const step = e.deltaY < 0 ? 1 : -1;
+    m = m + step;
+    if (m > 12) m = 1;
+    if (m < 1) m = 12;
+    monthInput.value = String(m).padStart(2, "0");
+
+    if (!yearInput.value) {
+      yearInput.value = String(new Date().getFullYear());
+    }
+    if (!dayInput.value) {
+      dayInput.value = String(new Date().getDate()).padStart(2, "0");
+    } else {
+      const y = parseInt(yearInput.value, 10) || new Date().getFullYear();
+      const maxDays = new Date(y, m, 0).getDate();
+      let d = parseInt(dayInput.value, 10) || 1;
+      if (d > maxDays) {
+        dayInput.value = String(maxDays).padStart(2, "0");
+      }
+    }
+    syncToNative();
+  }, { passive: false });
+
+  dayInput.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    if (!yearInput.value) {
+      yearInput.value = String(new Date().getFullYear());
+    }
+    if (!monthInput.value) {
+      monthInput.value = String(new Date().getMonth() + 1).padStart(2, "0");
+    }
+    const y = parseInt(yearInput.value, 10) || new Date().getFullYear();
+    const m = parseInt(monthInput.value, 10) || (new Date().getMonth() + 1);
+    const maxDays = new Date(y, m, 0).getDate();
+
+    let d = parseInt(dayInput.value, 10);
+    if (isNaN(d) || d < 1 || d > maxDays) {
+      d = new Date().getDate();
+    }
+    const step = e.deltaY < 0 ? 1 : -1;
+    d = d + step;
+    if (d > maxDays) d = 1;
+    if (d < 1) d = maxDays;
+    dayInput.value = String(d).padStart(2, "0");
+    syncToNative();
+  }, { passive: false });
+
   // 캘린더 피커 버튼 클릭 시 네이티브 날짜 선택 팝업 오픈
   if (triggerBtn) {
     triggerBtn.addEventListener("click", (e) => {
@@ -11312,6 +11396,8 @@ function openLedgerTxModal(txId = null) {
   const title = document.getElementById("ledgerTxDialogTitle");
   if (!dialog || !form) return;
 
+  setupAutoAdvancingDateInput("#ledgerTxSplitDateWrap");
+
   form.dataset.txId = txId || "";
 
   // 입력 변경 시 실시간 잔액 미리보기 이벤트 연결
@@ -11326,6 +11412,7 @@ function openLedgerTxModal(txId = null) {
     if (tx) {
       if (title) title.textContent = "수입 / 지출 내역 수정";
       form.querySelector("[name='date']").value = tx.date || new Date().toISOString().slice(0, 10);
+      document.getElementById("ledgerTxSplitDateWrap")?._syncFromNative?.();
       form.querySelector("[name='type']").value = tx.type || "expense";
       form.querySelector("[name='owner']").value = tx.owner || "모두";
       form.querySelector("[name='amount']").value = tx.amount || "";
@@ -11352,6 +11439,7 @@ function openLedgerTxModal(txId = null) {
   if (title) title.textContent = "수입 / 지출 내역 등록";
   form.reset();
   form.querySelector("[name='date']").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("ledgerTxSplitDateWrap")?._syncFromNative?.();
   form.querySelector("[name='owner']").value = currentOwner || "모두";
   form.querySelector("[name='type']").value = "expense";
   const payMethodTypeSelect = form.querySelector("[name='pay_method_type']");
@@ -11662,6 +11750,8 @@ function openLedgerCardPayModal(cardId) {
   const card = cards.find(c => c.id === cardId);
   if (!card) return;
 
+  setupAutoAdvancingDateInput("#ledgerPaySplitDateWrap");
+
   activePayTargetCard = card;
   const dialog = document.getElementById("ledgerCardPayDialog");
   const nameEl = document.getElementById("ledgerPayCardName");
@@ -11674,6 +11764,7 @@ function openLedgerCardPayModal(cardId) {
   if (unpaidEl) unpaidEl.textContent = `₩${number(card.unpaid_amount || 0, 0)}`;
   if (accEl) accEl.textContent = card.linked_account_name || "(연결된 결제계좌 없음)";
   if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+  document.getElementById("ledgerPaySplitDateWrap")?._syncFromNative?.();
   if (amountInput) amountInput.value = card.unpaid_amount || 0;
 
   if (dialog) dialog.showModal();
@@ -12176,6 +12267,26 @@ function initLedgerListeners() {
   }
   const monthText = document.getElementById("ledgerCurrentMonthText");
   if (monthText && monthPicker) {
+    monthText.setAttribute("title", "클릭하여 월 선택 또는 마우스 휠로 월 이동");
+    monthText.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        currentLedgerMonth++;
+        if (currentLedgerMonth > 12) {
+          currentLedgerMonth = 1;
+          currentLedgerYear++;
+        }
+        loadLedger();
+      } else if (e.deltaY > 0) {
+        currentLedgerMonth--;
+        if (currentLedgerMonth < 1) {
+          currentLedgerMonth = 12;
+          currentLedgerYear--;
+        }
+        loadLedger();
+      }
+    }, { passive: false });
+
     monthText.addEventListener("click", () => {
       try {
         if (typeof monthPicker.showPicker === "function") {
@@ -12199,6 +12310,8 @@ async function bootstrap() {
   initLedgerListeners();
   setupAutoAdvancingDateInput("#pnlSplitDateWrap");
   setupAutoAdvancingDateInput("#divSplitDateWrap");
+  setupAutoAdvancingDateInput("#ledgerTxSplitDateWrap");
+  setupAutoAdvancingDateInput("#ledgerPaySplitDateWrap");
   await initAuthSession();
 }
 

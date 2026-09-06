@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5538" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260907-v5548" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260907-v5549" />
   </head>
   <body>
     <main class="shell">
@@ -1911,8 +1911,16 @@
         <button value="cancel" class="close" aria-label="닫기" onclick="this.closest('dialog')?.close()">×</button>
       </div>
       <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin-top:14px;">
-        <label>거래 일자
-          <input type="date" name="date" required />
+        <label id="ledgerTxDateWrap">거래 일자
+          <div class="split-date-wrap" id="ledgerTxSplitDateWrap">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="ledgerTxDateYear" placeholder="YYYY" aria-label="거래일자 연도 4자리" autocomplete="off" title="마우스 휠로 연도 조절 가능" />
+            <span class="date-part-sep">-</span>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="ledgerTxDateMonth" placeholder="MM" aria-label="거래일자 월 2자리" autocomplete="off" title="마우스 휠로 월 조절 가능" />
+            <span class="date-part-sep">-</span>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="ledgerTxDateDay" placeholder="DD" aria-label="거래일자 일 2자리" autocomplete="off" title="마우스 휠로 일 조절 가능" />
+            <button type="button" class="date-picker-trigger" id="ledgerTxDatePickerTrigger" title="달력에서 선택" aria-label="달력에서 날짜 선택">📅</button>
+            <input type="date" name="date" id="ledgerTxNativeDate" required tabindex="-1" class="sr-only-picker" />
+          </div>
         </label>
         <label>구분
           <select name="type" id="ledgerTxTypeSelect" onchange="onLedgerTxTypeChanged()">
@@ -2105,8 +2113,16 @@
       </div>
 
       <div class="form-grid" style="grid-template-columns:1fr;">
-        <label>실제 결제(출금) 일자
-          <input type="date" name="pay_date" id="ledgerPayDateInput" required />
+        <label id="ledgerPayDateWrap">실제 결제(출금) 일자
+          <div class="split-date-wrap" id="ledgerPaySplitDateWrap">
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="ledgerPayDateYear" placeholder="YYYY" aria-label="결제일자 연도 4자리" autocomplete="off" title="마우스 휠로 연도 조절 가능" />
+            <span class="date-part-sep">-</span>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="ledgerPayDateMonth" placeholder="MM" aria-label="결제일자 월 2자리" autocomplete="off" title="마우스 휠로 월 조절 가능" />
+            <span class="date-part-sep">-</span>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="ledgerPayDateDay" placeholder="DD" aria-label="결제일자 일 2자리" autocomplete="off" title="마우스 휠로 일 조절 가능" />
+            <button type="button" class="date-picker-trigger" id="ledgerPayDatePickerTrigger" title="달력에서 선택" aria-label="달력에서 날짜 선택">📅</button>
+            <input type="date" name="pay_date" id="ledgerPayDateInput" required tabindex="-1" class="sr-only-picker" />
+          </div>
         </label>
         <label>결제 금액 (KRW)
           <input type="number" name="pay_amount" id="ledgerPayAmountInput" placeholder="0" min="0" step="any" required data-korean-currency />
@@ -2331,11 +2347,11 @@
           <label id="divDateWrap">
             입금일 (Date)
             <div class="split-date-wrap" id="divSplitDateWrap">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="divDateYear" placeholder="YYYY" aria-label="입금일 연도 4자리" autocomplete="off" />
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="divDateYear" placeholder="YYYY" aria-label="입금일 연도 4자리" autocomplete="off" title="마우스 휠로 연도 조절 가능" />
               <span class="date-part-sep">-</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="divDateMonth" placeholder="MM" aria-label="입금일 월 2자리" autocomplete="off" />
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="divDateMonth" placeholder="MM" aria-label="입금일 월 2자리" autocomplete="off" title="마우스 휠로 월 조절 가능" />
               <span class="date-part-sep">-</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="divDateDay" placeholder="DD" aria-label="입금일 일 2자리" autocomplete="off" />
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="divDateDay" placeholder="DD" aria-label="입금일 일 2자리" autocomplete="off" title="마우스 휠로 일 조절 가능" />
               <button type="button" class="date-picker-trigger" id="divDatePickerTrigger" title="달력에서 선택" aria-label="달력에서 날짜 선택">📅</button>
               <input name="date" id="divNativeDate" type="date" required tabindex="-1" class="sr-only-picker" />
             </div>
@@ -2418,11 +2434,11 @@
           <label id="pnlDateWrap">
             매도일 (Date)
             <div class="split-date-wrap" id="pnlSplitDateWrap">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="pnlDateYear" placeholder="YYYY" aria-label="매도일 연도 4자리" autocomplete="off" />
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="date-part date-part-year" id="pnlDateYear" placeholder="YYYY" aria-label="매도일 연도 4자리" autocomplete="off" title="마우스 휠로 연도 조절 가능" />
               <span class="date-part-sep">-</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="pnlDateMonth" placeholder="MM" aria-label="매도일 월 2자리" autocomplete="off" />
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-month" id="pnlDateMonth" placeholder="MM" aria-label="매도일 월 2자리" autocomplete="off" title="마우스 휠로 월 조절 가능" />
               <span class="date-part-sep">-</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="pnlDateDay" placeholder="DD" aria-label="매도일 일 2자리" autocomplete="off" />
+              <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" class="date-part date-part-day" id="pnlDateDay" placeholder="DD" aria-label="매도일 일 2자리" autocomplete="off" title="마우스 휠로 일 조절 가능" />
               <button type="button" class="date-picker-trigger" id="pnlDatePickerTrigger" title="달력에서 선택" aria-label="달력에서 날짜 선택">📅</button>
               <input name="date" id="pnlNativeDate" type="date" required tabindex="-1" class="sr-only-picker" />
             </div>
@@ -2770,7 +2786,7 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260907-v5548"></script>
+    <script src="/static/wealth.js?v=20260907-v5549"></script>
   </body>
 </html>
 
