@@ -3223,6 +3223,95 @@ dialog.dialog .dialog-actions {
 /* ==========================================================================
    스마트 가족 가계부 (HOUSEHOLD LEDGER) 전용 스타일링
    ========================================================================== */
+/* 1. 월 컨트롤러 */
+.ledger-month-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #0d1527;
+  border: 1px solid #23314f;
+  border-radius: 10px;
+  padding: 3px 6px;
+  position: relative;
+}
+.ledger-month-text {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #f8fafc;
+  padding: 2px 8px;
+  min-width: 105px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+.ledger-month-text:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ledger-month-btn {
+  padding: 4px 8px !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+  min-height: unset !important;
+}
+
+/* 2. 4대 요약 카드 (기본 테마) */
+.ledger-stat-income {
+  background: linear-gradient(145deg, rgba(34, 197, 94, 0.08), #0d1424) !important;
+  border-color: rgba(34, 197, 94, 0.35) !important;
+}
+.ledger-stat-income .saving-stat-label {
+  color: #86efac;
+}
+.ledger-stat-income strong {
+  color: #4ade80 !important;
+  font-size: 20px !important;
+}
+
+.ledger-stat-expense {
+  background: linear-gradient(145deg, rgba(244, 63, 94, 0.08), #0d1424) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+.ledger-stat-expense .saving-stat-label {
+  color: #fda4af;
+}
+.ledger-stat-expense strong {
+  color: #f43f5e !important;
+  font-size: 20px !important;
+}
+
+.ledger-stat-savings {
+  background: linear-gradient(145deg, rgba(56, 189, 248, 0.1), #0d1424) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+.ledger-stat-savings .saving-stat-label {
+  color: #7dd3fc;
+}
+.ledger-stat-savings strong {
+  color: #38bdf8 !important;
+  font-size: 20px !important;
+}
+.ledger-stat-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  display: block;
+  margin-top: 2px;
+}
+
+.ledger-stat-recurring {
+  background: linear-gradient(145deg, rgba(168, 85, 247, 0.08), #0d1424) !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
+}
+.ledger-stat-recurring .saving-stat-label {
+  color: #d8b4fe;
+}
+.ledger-stat-recurring strong {
+  color: #c084fc !important;
+  font-size: 20px !important;
+}
+
+/* 3. 카테고리 지출 분석 */
 .ledger-cat-row {
   display: flex;
   flex-direction: column;
@@ -3238,6 +3327,18 @@ dialog.dialog .dialog-actions {
   align-items: center;
   font-size: 12.5px;
 }
+.ledger-cat-name {
+  font-weight: 600;
+  color: #f1f5f9;
+}
+.ledger-cat-amt {
+  font-weight: 700;
+  color: #38bdf8;
+}
+.ledger-cat-pct {
+  color: #94a3b8;
+  font-weight: normal;
+}
 .ledger-cat-bar-track {
   height: 6px;
   background: #1e293b;
@@ -3251,6 +3352,7 @@ dialog.dialog .dialog-actions {
   transition: width 0.3s ease;
 }
 
+/* 4. 현금흐름 추이 */
 .ledger-trend-chart {
   display: flex;
   align-items: flex-end;
@@ -3291,7 +3393,20 @@ dialog.dialog .dialog-actions {
   border-radius: 3px 3px 0 0;
   min-height: 2px;
 }
+.ledger-trend-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+.ledger-trend-label.current {
+  font-weight: 800;
+  color: #38bdf8;
+}
+.ledger-trend-legend {
+  color: #94a3b8;
+}
 
+/* 5. 상세 거래 내역 테이블 */
 .ledger-tx-table {
   width: 100%;
   border-collapse: collapse;
@@ -3313,6 +3428,73 @@ dialog.dialog .dialog-actions {
 }
 .ledger-tx-row:hover td {
   background: rgba(255, 255, 255, 0.02);
+}
+.ledger-tx-cell-date {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ledger-cat-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+.ledger-tx-cell-merchant strong {
+  font-weight: 600;
+  color: #f8fafc;
+}
+.ledger-tx-memo {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: normal;
+}
+.ledger-tx-cell-pay {
+  color: #94a3b8;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.ledger-status-pill {
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+.ledger-status-pill.unsettled {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+}
+.ledger-status-pill.settled {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+.ledger-tx-count-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #94a3b8;
+}
+.ledger-filter-select,
+.ledger-search-input {
+  font-size: 12px;
+  padding: 5px 9px;
+  background: #090e1c;
+  border: 1px solid #23314f;
+  border-radius: 8px;
+  color: #cbd5e1;
+}
+.ledger-search-input {
+  width: 170px;
+  color: #fff;
 }
 
 .ledger-badge {
@@ -3338,30 +3520,303 @@ dialog.dialog .dialog-actions {
   border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
+/* 6. 다이얼로그 내부 서브박스 및 리스트 항목 */
+.ledger-dialog-subbox {
+  background: #090e1c;
+  border: 1px solid #23314f;
+}
+.ledger-credit-card-item {
+  background: linear-gradient(135deg, #0d1527, #131f37);
+  border: 1px solid #23314f;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ledger-card-company-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.ledger-card-owner-tag {
+  font-size: 11px;
+  color: #cbd5e1;
+  margin-left: 4px;
+}
+.ledger-card-name {
+  margin: 6px 0 2px 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+.ledger-card-meta {
+  margin: 0;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+.ledger-card-meta strong {
+  color: #f1f5f9;
+}
+.ledger-card-memo {
+  margin: 4px 0 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+.ledger-card-foot {
+  border-top: 1px dashed #23314f;
+  padding-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ledger-card-unpaid-label {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.ledger-card-unpaid-val {
+  font-size: 14px;
+  font-weight: 800;
+}
+.ledger-card-unpaid-count {
+  font-size: 11px;
+  font-weight: normal;
+  color: #64748b;
+}
+
+.ledger-recurring-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #090e1c;
+  border: 1px solid #23314f;
+  border-radius: 8px;
+}
+.ledger-recurring-title {
+  font-weight: 700;
+  color: #f8fafc;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ledger-recurring-meta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ledger-recurring-amt {
+  color: #c084fc;
+  font-size: 14px;
+  margin-right: 2px;
+}
+
+.account-yearly-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+.account-yearly-dep {
+  color: #f8fafc;
+}
+.account-yearly-edit-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cbd5e1;
+}
+.pension-input-subbox {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.ledger-sample-box {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.ledger-sample-title {
+  color: #38bdf8;
+}
+.ledger-upload-box {
+  border: 2px dashed #334155;
+  background: #081022;
+}
+.ledger-upload-title {
+  color: #f1f5f9;
+}
+.ledger-upload-sub {
+  color: #94a3b8;
+}
+.ledger-details-box {
+  background: #090e1c;
+  border: 1px solid #1e293b;
+}
+.ledger-dialog-textarea {
+  background: #081022;
+  border: 1px solid #31415f;
+  color: #fff;
+}
+.ledger-dialog-select {
+  background: #081022;
+  border: 1px solid #31415f;
+  color: #fff;
+}
+
+.ledger-tip-box {
+  background: rgba(56, 189, 248, 0.05);
+  border: 1px dashed rgba(56, 189, 248, 0.2);
+  color: #94a3b8;
+}
+.ledger-balance-preview-box {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.ledger-preview-label {
+  color: #94a3b8;
+}
+#ledgerPrevBalanceText {
+  color: #f1f5f9;
+}
+#ledgerNextBalanceLabel,
+#ledgerNextBalanceText {
+  color: #38bdf8;
+}
+
 @media (max-width: 900px) {
   .ledger-analytics-grid {
     grid-template-columns: 1fr !important;
   }
 }
 
-/* 화이트 테마 오버라이드: 가계부 */
+/* ==========================================================================
+   화이트 테마 오버라이드: 가계부 & 카드 배경색 & 컴포넌트
+   ========================================================================== */
 [data-theme="white"] .sub-panel,
 [data-theme="white"] #ledgerSectionPanel .sub-panel,
-[data-theme="white"] #ledgerSectionPanel div[style*="background:rgba(15,23,42"] {
+[data-theme="white"] .ledger-sub-panel,
+[data-theme="white"] .ledger-history-panel {
   background: #ffffff !important;
   border-color: #e2e8f0 !important;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
 }
+
+/* 1. 월 컨트롤러 */
+[data-theme="white"] .ledger-month-control {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
+}
+[data-theme="white"] .ledger-month-text {
+  color: #0f172a !important;
+}
+[data-theme="white"] .ledger-month-text:hover {
+  background: #f1f5f9 !important;
+}
+[data-theme="white"] .ledger-month-btn {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+[data-theme="white"] .ledger-month-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* 2. 가계부 4대 요약 카드 특성화 배경색 (화이트 테마) */
+[data-theme="white"] .ledger-stat-income {
+  background: linear-gradient(145deg, #f0fdf4, #ffffff) !important;
+  border-color: #86efac !important;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.08) !important;
+}
+[data-theme="white"] .ledger-stat-income .saving-stat-label {
+  color: #15803d !important;
+}
+[data-theme="white"] .ledger-stat-income strong {
+  color: #16a34a !important;
+}
+
+[data-theme="white"] .ledger-stat-expense {
+  background: linear-gradient(145deg, #fff1f2, #ffffff) !important;
+  border-color: #fecdd3 !important;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.08) !important;
+}
+[data-theme="white"] .ledger-stat-expense .saving-stat-label {
+  color: #be123c !important;
+}
+[data-theme="white"] .ledger-stat-expense strong {
+  color: #e11d48 !important;
+}
+
+[data-theme="white"] .ledger-stat-savings {
+  background: linear-gradient(145deg, #f0f9ff, #ffffff) !important;
+  border-color: #bae6fd !important;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.08) !important;
+}
+[data-theme="white"] .ledger-stat-savings .saving-stat-label {
+  color: #0369a1 !important;
+}
+[data-theme="white"] .ledger-stat-savings strong {
+  color: #0284c7 !important;
+}
+[data-theme="white"] .ledger-stat-savings .ledger-stat-sub {
+  color: #64748b !important;
+}
+
+[data-theme="white"] .ledger-stat-recurring {
+  background: linear-gradient(145deg, #faf5ff, #ffffff) !important;
+  border-color: #e9d5ff !important;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.08) !important;
+}
+[data-theme="white"] .ledger-stat-recurring .saving-stat-label {
+  color: #7e22ce !important;
+}
+[data-theme="white"] .ledger-stat-recurring strong {
+  color: #9333ea !important;
+}
+
+/* 3. 카테고리 지출 분석 */
 [data-theme="white"] .ledger-cat-row {
   background: #f8fafc !important;
   border-color: #e2e8f0 !important;
 }
+[data-theme="white"] .ledger-cat-name {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+[data-theme="white"] .ledger-cat-amt {
+  color: #0284c7 !important;
+}
+[data-theme="white"] .ledger-cat-pct {
+  color: #64748b !important;
+}
 [data-theme="white"] .ledger-cat-bar-track {
   background: #e2e8f0 !important;
 }
+
+/* 4. 현금흐름 추이 */
 [data-theme="white"] .ledger-trend-bars {
   background: #f1f5f9 !important;
 }
+[data-theme="white"] .ledger-trend-label {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-trend-label.current {
+  color: #0284c7 !important;
+  font-weight: 800 !important;
+}
+[data-theme="white"] .ledger-trend-legend {
+  color: #475569 !important;
+}
+
+/* 5. 상세 거래 내역 테이블 및 뱃지 */
 [data-theme="white"] .ledger-tx-table th {
   background: #f8fafc !important;
   color: #475569 !important;
@@ -3374,33 +3829,270 @@ dialog.dialog .dialog-actions {
 [data-theme="white"] .ledger-tx-row:hover td {
   background: #f8fafc !important;
 }
+[data-theme="white"] .ledger-tx-cell-date {
+  color: #475569 !important;
+}
+[data-theme="white"] .ledger-cat-badge {
+  background: #f1f5f9 !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+  font-weight: 700 !important;
+}
+[data-theme="white"] .ledger-tx-cell-merchant strong {
+  color: #0f172a !important;
+}
+[data-theme="white"] .ledger-tx-memo {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-tx-cell-pay span {
+  color: #334155 !important;
+}
+[data-theme="white"] .ledger-status-pill.unsettled {
+  color: #be123c !important;
+  background: #ffe4e6 !important;
+  border: 1px solid #fecdd3 !important;
+}
+[data-theme="white"] .ledger-status-pill.settled {
+  color: #0369a1 !important;
+  background: #e0f2fe !important;
+  border: 1px solid #bae6fd !important;
+}
+[data-theme="white"] .saving-owner-badge {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="white"] .saving-stat-label {
+  color: #475569 !important;
+}
 [data-theme="white"] #ledgerTxCountBadge {
   background: #e2e8f0 !important;
   color: #334155 !important;
 }
-[data-theme="white"] #ledgerFilterType,
-[data-theme="white"] #ledgerSearchInput {
+[data-theme="white"] .ledger-filter-select,
+[data-theme="white"] .ledger-search-input {
   background: #f1f5f9 !important;
   border-color: #cbd5e1 !important;
   color: #0f172a !important;
 }
-[data-theme="white"] #ledgerSectionPanel div[style*="border:2px dashed"] {
+
+/* 6. 다이얼로그 내부 요소 */
+[data-theme="white"] .ledger-dialog-subbox {
   background: #f8fafc !important;
-  border-color: #cbd5e1 !important;
+  border-color: #e2e8f0 !important;
 }
-[data-theme="white"] #ledgerImportText {
+[data-theme="white"] .ledger-dialog-label {
+  color: #334155 !important;
+}
+[data-theme="white"] .ledger-tip-box {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
+}
+[data-theme="white"] .ledger-balance-preview-box {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+}
+[data-theme="white"] .ledger-preview-label {
+  color: #64748b !important;
+}
+[data-theme="white"] #ledgerPrevBalanceText {
+  color: #0f172a !important;
+}
+[data-theme="white"] #ledgerNextBalanceLabel,
+[data-theme="white"] #ledgerNextBalanceText {
+  color: #0284c7 !important;
+}
+[data-theme="white"] .ledger-credit-card-item {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+}
+[data-theme="white"] .ledger-card-company-tag {
+  background: #e0f2fe !important;
+  color: #0284c7 !important;
+}
+[data-theme="white"] .ledger-card-owner-tag {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-card-name {
+  color: #0f172a !important;
+}
+[data-theme="white"] .ledger-card-meta {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-card-meta strong {
+  color: #0f172a !important;
+}
+[data-theme="white"] .ledger-card-memo {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-card-foot {
+  border-top-color: #f1f5f9 !important;
+}
+[data-theme="white"] .ledger-card-unpaid-label {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-recurring-item {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .ledger-recurring-title span {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+[data-theme="white"] .ledger-recurring-meta {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-recurring-amt {
+  color: #7e22ce !important;
+}
+[data-theme="white"] .account-yearly-card {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+[data-theme="white"] .account-yearly-dep {
+  color: #0f172a !important;
+}
+[data-theme="white"] .account-yearly-edit-btn {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+[data-theme="white"] .pension-input-subbox {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="white"] .ledger-sample-box {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+}
+[data-theme="white"] .ledger-sample-title {
+  color: #0284c7 !important;
+}
+[data-theme="white"] .ledger-upload-box {
+  background: #f8fafc !important;
+  border: 2px dashed #cbd5e1 !important;
+}
+[data-theme="white"] .ledger-upload-title {
+  color: #0f172a !important;
+}
+[data-theme="white"] .ledger-upload-sub {
+  color: #64748b !important;
+}
+[data-theme="white"] .ledger-details-box {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="white"] .ledger-details-box summary {
+  color: #334155 !important;
+}
+[data-theme="white"] .ledger-dialog-select,
+[data-theme="white"] .ledger-dialog-textarea {
   background: #ffffff !important;
   border-color: #cbd5e1 !important;
   color: #0f172a !important;
 }
 
-/* OLED 테마 오버라이드: 가계부 */
+/* 7. 탑바 및 유저 박스 */
+[data-theme="white"] .topbar {
+  border-bottom-color: #e2e8f0 !important;
+}
+[data-theme="white"] .user-pill {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
+}
+[data-theme="white"] .user-pill strong {
+  color: #0f172a !important;
+}
+[data-theme="white"] #topbarFamilyBtn,
+[data-theme="white"] #changePwBtn {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+/* ==========================================================================
+   OLED 테마 오버라이드: 가계부 & 카드 배경색
+   ========================================================================== */
 [data-theme="oled"] .sub-panel,
 [data-theme="oled"] #ledgerSectionPanel .sub-panel,
-[data-theme="oled"] #ledgerSectionPanel div[style*="background:rgba(15,23,42"] {
+[data-theme="oled"] .ledger-sub-panel,
+[data-theme="oled"] .ledger-history-panel {
   background: #070709 !important;
   border-color: #1a1a24 !important;
 }
+
+/* 1. 월 컨트롤러 */
+[data-theme="oled"] .ledger-month-control {
+  background: #08080c !important;
+  border-color: #1a1a26 !important;
+}
+[data-theme="oled"] .ledger-month-text {
+  color: #f1f5f9 !important;
+}
+[data-theme="oled"] .ledger-month-text:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+[data-theme="oled"] .ledger-month-btn {
+  background: #111118 !important;
+  border-color: #222233 !important;
+  color: #cbd5e1 !important;
+}
+
+/* 2. 가계부 4대 요약 카드 특성화 배경색 (OLED) */
+[data-theme="oled"] .ledger-stat-income {
+  background: linear-gradient(145deg, rgba(34, 197, 94, 0.12), #070709) !important;
+  border-color: rgba(34, 197, 94, 0.45) !important;
+}
+[data-theme="oled"] .ledger-stat-income .saving-stat-label {
+  color: #86efac !important;
+}
+[data-theme="oled"] .ledger-stat-income strong {
+  color: #4ade80 !important;
+}
+
+[data-theme="oled"] .ledger-stat-expense {
+  background: linear-gradient(145deg, rgba(244, 63, 94, 0.12), #070709) !important;
+  border-color: rgba(244, 63, 94, 0.45) !important;
+}
+[data-theme="oled"] .ledger-stat-expense .saving-stat-label {
+  color: #fda4af !important;
+}
+[data-theme="oled"] .ledger-stat-expense strong {
+  color: #f43f5e !important;
+}
+
+[data-theme="oled"] .ledger-stat-savings {
+  background: linear-gradient(145deg, rgba(56, 189, 248, 0.14), #070709) !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+}
+[data-theme="oled"] .ledger-stat-savings .saving-stat-label {
+  color: #7dd3fc !important;
+}
+[data-theme="oled"] .ledger-stat-savings strong {
+  color: #38bdf8 !important;
+}
+[data-theme="oled"] .ledger-stat-savings .ledger-stat-sub {
+  color: #808b9e !important;
+}
+
+[data-theme="oled"] .ledger-stat-recurring {
+  background: linear-gradient(145deg, rgba(168, 85, 247, 0.12), #070709) !important;
+  border-color: rgba(168, 85, 247, 0.45) !important;
+}
+[data-theme="oled"] .ledger-stat-recurring .saving-stat-label {
+  color: #d8b4fe !important;
+}
+[data-theme="oled"] .ledger-stat-recurring strong {
+  color: #c084fc !important;
+}
+
+/* 3. 카테고리 & 트렌드 & 내역 */
 [data-theme="oled"] .ledger-cat-row {
   background: #0d0d12 !important;
   border-color: #1a1a24 !important;
@@ -3423,12 +4115,33 @@ dialog.dialog .dialog-actions {
 [data-theme="oled"] .ledger-tx-row:hover td {
   background: #12121a !important;
 }
-[data-theme="oled"] #ledgerFilterType,
-[data-theme="oled"] #ledgerSearchInput,
-[data-theme="oled"] #ledgerImportText {
+[data-theme="oled"] .ledger-cat-badge {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #cbd5e1 !important;
+  border-color: #222233 !important;
+}
+[data-theme="oled"] .saving-owner-badge {
+  background: #111118 !important;
+  color: #cbd5e1 !important;
+  border-color: #222233 !important;
+}
+[data-theme="oled"] .ledger-filter-select,
+[data-theme="oled"] .ledger-search-input,
+[data-theme="oled"] .ledger-dialog-textarea,
+[data-theme="oled"] .ledger-dialog-select {
   background: #0d0d12 !important;
   border-color: #1a1a26 !important;
   color: #f1f5f9 !important;
+}
+[data-theme="oled"] .ledger-dialog-subbox,
+[data-theme="oled"] .ledger-credit-card-item,
+[data-theme="oled"] .ledger-recurring-item,
+[data-theme="oled"] .account-yearly-card,
+[data-theme="oled"] .pension-input-subbox,
+[data-theme="oled"] .ledger-upload-box,
+[data-theme="oled"] .ledger-details-box {
+  background: #08080c !important;
+  border-color: #1a1a26 !important;
 }
 
 /* 절세계좌 필터 카드 */

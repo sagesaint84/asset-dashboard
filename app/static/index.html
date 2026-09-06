@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5538" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260906-v5542" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260906-v5543" />
   </head>
   <body>
     <main class="shell">
@@ -792,55 +792,49 @@
             <!-- 가족 구성원 선택 탭 (모두 아빠 엄마 자녀) -->
             <div class="family-tabs" id="ledgerFamilyTabs" style="margin-left:4px;"></div>
             <!-- 월 컨트롤러 -->
-            <div style="display:flex;align-items:center;gap:4px;background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:3px 6px;">
-              <button id="ledgerPrevMonthBtn" class="button secondary compact" style="padding:4px 9px;font-size:12px;" type="button" title="이전 달">◀</button>
-              <strong id="ledgerCurrentMonthText" style="font-size:15px;font-weight:800;color:#f8fafc;padding:0 6px;min-width:110px;text-align:center;">2026년 8월</strong>
-              <button id="ledgerNextMonthBtn" class="button secondary compact" style="padding:4px 9px;font-size:12px;" type="button" title="다음 달">▶</button>
+            <div class="ledger-month-control">
+              <button id="ledgerPrevMonthBtn" class="button secondary compact ledger-month-btn" type="button" title="이전 달">◀</button>
+              <strong id="ledgerCurrentMonthText" class="ledger-month-text" title="클릭하여 원하는 년/월 직접 선택">2026년 8월</strong>
+              <input type="month" id="ledgerMonthPicker" class="ledger-month-picker" aria-label="가계부 년/월 선택" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" />
+              <button id="ledgerNextMonthBtn" class="button secondary compact ledger-month-btn" type="button" title="다음 달">▶</button>
+              <button id="ledgerTodayMonthBtn" class="button secondary compact ledger-month-btn" type="button" title="이번 달로 이동">이번달</button>
             </div>
           </div>
 
-          <div class="toolbar" style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button id="ledgerOpenCardsBtn" class="button secondary compact" type="button" onclick="openLedgerCardsModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#38bdf8;border-color:rgba(56,189,248,0.4);">
-              💳 카드 관리
-            </button>
-            <button id="ledgerOpenRecurringBtn" class="button secondary compact" type="button" onclick="openLedgerRecurringModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#c084fc;border-color:rgba(192,132,252,0.4);">
-              🛡️ 고정지출 관리
-            </button>
-            <button id="ledgerOpenExcelBtn" class="button secondary compact" type="button" onclick="openLedgerExcelModal()" style="font-size:12px;padding:6px 12px;border-radius:8px;color:#94a3b8;border-color:rgba(148,163,184,0.3);">
-              📤 엑셀 업로드
-            </button>
-            <button id="ledgerAddTxBtn" class="button primary compact" type="button" onclick="openLedgerTxModal()" style="font-size:12.5px;padding:6px 14px;border-radius:8px;background:linear-gradient(135deg,#38bdf8,#2563eb);color:#fff;font-weight:700;">
-              ➕ 내역 등록
-            </button>
+          <div class="toolbar" style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <button id="ledgerOpenCardsBtn" class="button secondary compact" type="button" onclick="openLedgerCardsModal()">💳 카드 관리</button>
+            <button id="ledgerOpenRecurringBtn" class="button secondary compact" type="button" onclick="openLedgerRecurringModal()">🛡️ 고정지출</button>
+            <button id="ledgerOpenExcelBtn" class="button secondary compact" type="button" onclick="openLedgerExcelModal()">📂 가져오기</button>
+            <button id="ledgerAddTxBtn" class="button primary compact" type="button" onclick="openLedgerTxModal()">➕ 내역 추가</button>
           </div>
         </div>
 
         <div id="ledgerSectionContent" class="section-collapsible-content">
           <!-- 1. 월간 현금흐름 요약 카드 4종 -->
-          <div class="savings-summary-grid loan-summary-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
-            <div class="saving-stat-card" style="border-color:rgba(34,197,94,0.3);background:linear-gradient(145deg,rgba(34,197,94,0.06),#0d1424);">
-              <span class="saving-stat-label" style="color:#86efac;">💰 이번 달 총 수입</span>
-              <strong id="ledgerTotalIncomeVal" style="color:#4ade80;font-size:20px;">₩0</strong>
+          <div class="savings-summary-grid loan-summary-grid ledger-summary-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
+            <div class="saving-stat-card ledger-stat-income">
+              <span class="saving-stat-label">💰 이번 달 총 수입</span>
+              <strong id="ledgerTotalIncomeVal">₩0</strong>
             </div>
-            <div class="saving-stat-card" style="border-color:rgba(244,63,94,0.3);background:linear-gradient(145deg,rgba(244,63,94,0.06),#0d1424);">
-              <span class="saving-stat-label" style="color:#fda4af;">💳 이번 달 총 지출</span>
-              <strong id="ledgerTotalExpenseVal" style="color:#f43f5e;font-size:20px;">₩0</strong>
+            <div class="saving-stat-card ledger-stat-expense">
+              <span class="saving-stat-label">💳 이번 달 총 지출</span>
+              <strong id="ledgerTotalExpenseVal">₩0</strong>
             </div>
-            <div class="saving-stat-card highlight" style="border-color:rgba(56,189,248,0.35);background:linear-gradient(145deg,rgba(56,189,248,0.08),#0d1424);">
-              <span class="saving-stat-label" style="color:#7dd3fc;">📈 순저축 / 잉여자금</span>
-              <strong id="ledgerNetSavingsVal" style="color:#38bdf8;font-size:20px;">₩0</strong>
-              <small id="ledgerSavingsRateVal" style="font-size:11px;color:#94a3b8;display:block;margin-top:2px;">저축률 0%</small>
+            <div class="saving-stat-card highlight ledger-stat-savings">
+              <span class="saving-stat-label">📈 순저축 / 잉여자금</span>
+              <strong id="ledgerNetSavingsVal">₩0</strong>
+              <small id="ledgerSavingsRateVal" class="ledger-stat-sub" style="font-size:11px;display:block;margin-top:2px;">저축률 0%</small>
             </div>
-            <div class="saving-stat-card" style="border-color:rgba(168,85,247,0.3);background:linear-gradient(145deg,rgba(168,85,247,0.06),#0d1424);">
-              <span class="saving-stat-label" style="color:#d8b4fe;">🛡️ 등록된 고정지출</span>
-              <strong id="ledgerRecurringTotalVal" style="color:#c084fc;font-size:20px;">₩0</strong>
+            <div class="saving-stat-card ledger-stat-recurring">
+              <span class="saving-stat-label">🛡️ 등록된 고정지출</span>
+              <strong id="ledgerRecurringTotalVal">₩0</strong>
             </div>
           </div>
 
           <!-- 2. 차트 & 분석 섹션 (카테고리 도넛 vs 6개월 추이) -->
           <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:14px;margin-top:14px;" class="ledger-analytics-grid">
             <!-- 1) 카테고리별 지출 비중 -->
-            <div class="sub-panel" style="padding:16px 18px;background:rgba(15,23,42,0.6);border:1px solid #1e293b;border-radius:12px;">
+            <div class="sub-panel ledger-sub-panel" style="padding:16px 18px;border-radius:12px;">
               <div class="panel-head" style="margin-bottom:10px;padding:0;">
                 <div>
                   <p class="eyebrow" style="color:#38bdf8;margin:0 0 2px 0;">EXPENSE BREAKDOWN</p>
@@ -851,7 +845,7 @@
             </div>
 
             <!-- 2) 최근 6개월 수입/지출 추이 -->
-            <div class="sub-panel" style="padding:16px 18px;background:rgba(15,23,42,0.6);border:1px solid #1e293b;border-radius:12px;">
+            <div class="sub-panel ledger-sub-panel" style="padding:16px 18px;border-radius:12px;">
               <div class="panel-head" style="margin-bottom:10px;padding:0;">
                 <div>
                   <p class="eyebrow" style="color:#4ade80;margin:0 0 2px 0;">6-MONTH CASHFLOW TREND</p>
@@ -863,23 +857,23 @@
           </div>
 
           <!-- 3. 상세 거래 내역 타임라인 -->
-          <div style="margin-top:14px;background:rgba(15,23,42,0.6);border:1px solid #1e293b;border-radius:12px;padding:16px 18px;">
+          <div class="sub-panel ledger-history-panel" style="margin-top:14px;border-radius:12px;padding:16px 18px;">
             <div class="panel-head" style="flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0;">
               <div>
-                <p class="eyebrow" style="color:#cbd5e1;margin:0 0 2px 0;">TRANSACTION HISTORY</p>
+                <p class="eyebrow" style="margin:0 0 2px 0;">TRANSACTION HISTORY</p>
                 <h3 style="font-size:15px;display:flex;align-items:center;gap:8px;margin:0;">
                   상세 거래 내역
-                  <span id="ledgerTxCountBadge" style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px;background:#1e293b;color:#94a3b8;">0건</span>
+                  <span id="ledgerTxCountBadge" class="ledger-tx-count-badge">0건</span>
                 </h3>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <select id="ledgerFilterType" onchange="filterLedgerList()" style="font-size:12px;padding:5px 9px;background:#090e1c;border:1px solid #23314f;border-radius:8px;color:#cbd5e1;">
+                <select id="ledgerFilterType" onchange="filterLedgerList()" class="ledger-filter-select">
                   <option value="all">전체 내역</option>
                   <option value="expense">지출만</option>
                   <option value="income">수입만</option>
                   <option value="transfer">이체만</option>
                 </select>
-                <input id="ledgerSearchInput" oninput="filterLedgerList()" type="text" placeholder="내용/가맹점/메모 검색" style="font-size:12px;padding:5px 9px;width:170px;background:#090e1c;border:1px solid #23314f;border-radius:8px;color:#fff;" />
+                <input id="ledgerSearchInput" oninput="filterLedgerList()" type="text" placeholder="내용/가맹점/메모 검색" class="ledger-search-input" />
               </div>
             </div>
 
@@ -1070,7 +1064,7 @@
           </div>
 
           <!-- 상단: 연도별 납입 정보 입력 구역 -->
-          <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(56,189,248,0.25);border-radius:8px;padding:10px;margin-bottom:10px;">
+          <div class="pension-input-subbox" style="border-radius:8px;padding:10px;margin-bottom:10px;">
             <div style="font-size:11.5px;font-weight:700;color:#93c5fd;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
               <span>📝</span> <span>납입 연도 및 공제 설정 입력</span>
             </div>
@@ -1956,20 +1950,20 @@
         <!-- 신용카드 선택 박스 (지출 - 신용카드일 때) -->
         <div id="ledgerTxCardSelectBox" style="grid-column:1/-1;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <label style="margin:0;font-weight:700;font-size:12.5px;color:#cbd5e1;">💳 신용카드 선택</label>
-            <button type="button" class="button secondary compact" onclick="openLedgerCardsModal()" style="font-size:11px;padding:2px 8px;border-radius:6px;color:#38bdf8;">⚙️ 카드 등록·관리</button>
+            <label style="margin:0;font-weight:700;font-size:12.5px;" class="ledger-dialog-label">💳 신용카드 선택</label>
+            <button type="button" class="button secondary compact" onclick="openLedgerCardsModal()" style="font-size:11px;padding:2px 8px;border-radius:6px;">⚙️ 카드 등록·관리</button>
           </div>
           <select name="card_id" id="ledgerTxCardSelect" onchange="onLedgerCardSelectChanged()">
             <option value="">-- 등록된 신용카드 선택 --</option>
           </select>
-          <div style="margin-top:6px;font-size:11.5px;color:#94a3b8;background:rgba(56,189,248,0.05);padding:6px 10px;border-radius:6px;border:1px dashed rgba(56,189,248,0.2);">
+          <div class="ledger-tip-box" style="margin-top:6px;font-size:11.5px;padding:6px 10px;border-radius:6px;">
             💡 신용카드로 지출 시 당월 카드값으로 누적되며, 결제일에 연결 결제계좌에서 일괄 출금(정산)됩니다.
           </div>
         </div>
 
         <!-- 연동 계좌 선택 박스 (수입 또는 계좌/체크카드 지출 시) -->
         <div id="ledgerTxAccountSelectBox" style="grid-column:1/-1;display:none;">
-          <label style="margin:0 0 6px 0;font-weight:700;font-size:12.5px;color:#cbd5e1;" id="ledgerTxAccountSelectLabel">
+          <label style="margin:0 0 6px 0;font-weight:700;font-size:12.5px;" id="ledgerTxAccountSelectLabel" class="ledger-dialog-label">
             🏦 연동 계좌 선택 (선택 시 출금/입금 잔액 자동 변동)
           </label>
           <select name="account_id" id="ledgerTxAccountSelect" onchange="updateLedgerBalancePreview()">
@@ -1978,14 +1972,14 @@
         </div>
 
         <!-- 실시간 계좌 잔액 변동 인포 바 -->
-        <div id="ledgerBalancePreviewBox" style="display:none;grid-column:1/-1;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:10px 14px;font-size:12.5px;">
+        <div id="ledgerBalancePreviewBox" class="ledger-balance-preview-box" style="display:none;grid-column:1/-1;border-radius:8px;padding:10px 14px;font-size:12.5px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <span style="color:#94a3b8;">기존 계좌 잔액:</span>
-            <strong id="ledgerPrevBalanceText" style="color:#f1f5f9;">₩0</strong>
+            <span class="ledger-preview-label">기존 계좌 잔액:</span>
+            <strong id="ledgerPrevBalanceText">₩0</strong>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:#38bdf8;font-weight:700;" id="ledgerNextBalanceLabel">적용 후 예상 잔액:</span>
-            <strong id="ledgerNextBalanceText" style="color:#38bdf8;font-size:14px;font-weight:800;">₩0</strong>
+            <span id="ledgerNextBalanceLabel" style="font-weight:700;">적용 후 예상 잔액:</span>
+            <strong id="ledgerNextBalanceText" style="font-size:14px;font-weight:800;">₩0</strong>
           </div>
         </div>
 
@@ -2020,7 +2014,7 @@
     </div>
 
     <!-- 신규 카드 등록 / 수정 폼 -->
-    <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:14px;margin-top:12px;">
+    <div class="ledger-dialog-subbox" style="border-radius:10px;padding:14px;margin-top:12px;">
       <h3 id="ledgerCardFormTitle" style="font-size:13.5px;font-weight:700;color:#38bdf8;margin:0 0 10px 0;">➕ 신규 카드 등록</h3>
       <form id="ledgerCardForm" onsubmit="return false;">
         <div class="form-grid" style="grid-template-columns:repeat(2,1fr);">
@@ -2095,7 +2089,7 @@
       </div>
       <p class="dialog-description">연결된 은행 계좌에서 누적 카드값을 출금하고 가계부에 결제 내역을 등록하여 카드값을 0원으로 정산합니다.</p>
 
-      <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:14px;margin:12px 0;">
+      <div class="ledger-dialog-subbox" style="border-radius:10px;padding:14px;margin:12px 0;">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
           <span style="color:#94a3b8;">결제 대상 카드:</span>
           <strong id="ledgerPayCardName" style="color:#f8fafc;">-</strong>
@@ -2142,7 +2136,7 @@
 
       <div id="ledgerRecurringList" style="display:flex;flex-direction:column;gap:8px;margin:10px 0;max-height:260px;overflow-y:auto;"></div>
 
-      <div style="background:#090e1c;border:1px solid #23314f;border-radius:10px;padding:12px;margin-top:10px;">
+      <div class="ledger-dialog-subbox" style="border-radius:10px;padding:12px;margin-top:10px;">
         <input type="hidden" id="recEditId" value="" />
         <h4 id="recurringFormTitle" style="margin:0 0 10px;font-size:13px;color:#c084fc;">➕ 새 고정지출 추가</h4>
         <div class="form-grid" style="grid-template-columns:repeat(2,1fr);margin:0;gap:8px;">
@@ -2221,22 +2215,22 @@
       <p class="dialog-description">카드사 또는 은행에서 다운로드받은 엑셀(.xlsx, .xls) 또는 CSV 파일을 일괄 등록합니다.</p>
       
       <!-- 샘플 엑셀 다운로드 링크 영역 -->
-      <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:12px 14px;margin:12px 0;">
-        <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:6px;">📋 표준 샘플 엑셀 서식 다운로드</div>
+      <div class="ledger-sample-box" style="border-radius:10px;padding:12px 14px;margin:12px 0;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;" class="ledger-sample-title">📋 표준 샘플 엑셀 서식 다운로드</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href="/api/sample/card-statement" download="샘플_카드내역.xlsx" class="button text compact" style="color:#38bdf8;font-size:12px;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;padding:2px 0;">
+          <a href="/api/sample/card-statement" download="샘플_카드내역.xlsx" class="button text compact" style="font-size:12px;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;padding:2px 0;">
             <span>📥 샘플_카드내역.xlsx 다운로드</span>
           </a>
           <span style="color:#64748b;">·</span>
-          <a href="/api/sample/ledger-transactions" download="샘플_거래내역.xlsx" class="button text compact" style="color:#4ade80;font-size:12px;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;padding:2px 0;">
+          <a href="/api/sample/ledger-transactions" download="샘플_거래내역.xlsx" class="button text compact" style="font-size:12px;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;padding:2px 0;">
             <span>📥 샘플_거래내역.xlsx 다운로드</span>
           </a>
         </div>
       </div>
 
       <div style="margin:12px 0;">
-        <label style="display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;">소유자 지정 (엑셀에 소유자 열이 없을 때 기본 적용)</label>
-        <select id="ledgerImportOwner" style="width:100%;padding:9px;background:#081022;border:1px solid #31415f;border-radius:7px;color:#fff;">
+        <label style="display:block;font-size:12px;margin-bottom:6px;">소유자 지정 (엑셀에 소유자 열이 없을 때 기본 적용)</label>
+        <select id="ledgerImportOwner" class="ledger-dialog-select" style="width:100%;padding:9px;border-radius:7px;">
           <option value="아빠">아빠</option>
           <option value="엄마">엄마</option>
           <option value="자녀">자녀</option>
@@ -2245,10 +2239,10 @@
       </div>
 
       <!-- 1. 엑셀 파일 업로드 영역 -->
-      <div style="border:2px dashed #334155;border-radius:10px;padding:20px;text-align:center;background:#081022;margin:14px 0;">
+      <div class="ledger-upload-box" style="border-radius:10px;padding:20px;text-align:center;margin:14px 0;">
         <span style="font-size:32px;display:block;margin-bottom:6px;">📂</span>
-        <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:4px;">엑셀(.xlsx, .xls) 또는 CSV 파일 선택</div>
-        <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;">카드사/은행 거래내역 원본 파일을 그대로 업로드할 수 있습니다.</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;" class="ledger-upload-title">엑셀(.xlsx, .xls) 또는 CSV 파일 선택</div>
+        <div style="font-size:11px;margin-bottom:12px;" class="ledger-upload-sub">카드사/은행 거래내역 원본 파일을 그대로 업로드할 수 있습니다.</div>
         <input type="file" id="ledgerFileInput" accept=".xlsx, .xls, .csv" style="display:none;" onchange="handleLedgerFileSelect(this)" />
         <button class="button primary compact" type="button" onclick="document.getElementById('ledgerFileInput').click()" style="padding:8px 18px;font-size:12.5px;">
           파일 선택하기
@@ -2257,10 +2251,10 @@
       </div>
 
       <!-- 2. 간편 텍스트 붙여넣기 (접기/펼치기) -->
-      <details style="margin:12px 0;background:#090e1c;border:1px solid #1e293b;border-radius:8px;padding:8px 12px;">
-        <summary style="font-size:12px;color:#94a3b8;cursor:pointer;font-weight:600;">또는 텍스트 직접 복사·붙여넣기로 가져오기</summary>
+      <details class="ledger-details-box" style="margin:12px 0;border-radius:8px;padding:8px 12px;">
+        <summary style="font-size:12px;cursor:pointer;font-weight:600;">또는 텍스트 직접 복사·붙여넣기로 가져오기</summary>
         <div style="margin-top:10px;">
-          <textarea id="ledgerImportText" placeholder="예:&#10;2026-08-15 이마트 45000&#10;2026-08-16 스타벅스 6500&#10;2026-08-20 급여입금 5000000" rows="5" style="width:100%;box-sizing:border-box;background:#081022;border:1px solid #31415f;border-radius:8px;padding:8px;color:#fff;font-family:monospace;font-size:12px;"></textarea>
+          <textarea id="ledgerImportText" class="ledger-dialog-textarea" placeholder="예:&#10;2026-08-15 이마트 45000&#10;2026-08-16 스타벅스 6500&#10;2026-08-20 급여입금 5000000" rows="5" style="width:100%;box-sizing:border-box;border-radius:8px;padding:8px;font-family:monospace;font-size:12px;"></textarea>
           <button class="button secondary compact" type="button" onclick="processLedgerTextImport()" style="margin-top:6px;width:100%;">
             텍스트 내역 등록
           </button>
@@ -2269,7 +2263,7 @@
 
       <div class="dialog-actions" style="margin-top:14px;">
         <button class="button secondary" type="button" onclick="this.closest('dialog')?.close()">닫기</button>
-        <button id="ledgerFileUploadBtn" class="button primary" type="button" onclick="uploadLedgerFile()" style="display:none;background:linear-gradient(135deg,#38bdf8,#2563eb);">
+        <button id="ledgerFileUploadBtn" class="button primary" type="button" onclick="uploadLedgerFile()" style="display:none;">
           📂 엑셀 파일 등록하기
         </button>
       </div>
@@ -2762,7 +2756,7 @@
       </div>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260906-v5542"></script>
+    <script src="/static/wealth.js?v=20260906-v5543"></script>
   </body>
 </html>
 

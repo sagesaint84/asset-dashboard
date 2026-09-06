@@ -5674,10 +5674,10 @@ function renderAccountYearlyFormRows(form = document.getElementById("accountEdit
       if (isDed) cumulativeSaved += saved;
 
       return `
-        <div class="account-yearly-card" data-index="${idx}" data-year="${yr}" style="display:flex;align-items:center;justify-content:space-between;background:rgba(15,23,42,0.7);border:1px solid ${isDed ? 'rgba(56,189,248,0.25)' : 'rgba(52,211,153,0.25)'};padding:7px 10px;border-radius:6px;gap:8px;">
+        <div class="account-yearly-card" data-index="${idx}" data-year="${yr}" style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;gap:8px;">
           <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;">
             <span style="font-weight:700;font-size:13px;color:#38bdf8;min-width:55px;">${yr}년</span>
-            <span style="font-size:12.5px;color:#f8fafc;font-weight:600;min-width:90px;">₩${number(dep, 0)}</span>
+            <span class="account-yearly-dep" style="font-size:12.5px;font-weight:600;min-width:90px;">₩${number(dep, 0)}</span>
             <span style="font-size:11px;padding:2px 7px;border-radius:4px;background:${isDed ? 'rgba(56,189,248,0.15)' : 'rgba(52,211,153,0.15)'};color:${isDed ? '#38bdf8' : '#34d399'};font-weight:600;">
               ${isDed ? `🎯 공제 (${rate}%)` : '🌿 비공제'}
             </span>
@@ -5686,8 +5686,8 @@ function renderAccountYearlyFormRows(form = document.getElementById("accountEdit
             <span style="font-size:12px;font-weight:700;color:${isDed ? '#4ade80' : '#94a3b8'};min-width:80px;text-align:right;">
               ${isDed ? `+₩${number(saved, 0)}` : '절세제외(₩0)'}
             </span>
-            <button type="button" class="account-yearly-edit-btn" data-index="${idx}" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;" title="상단 입력창으로 불러와 수정">수정</button>
-            <button type="button" class="account-yearly-del-btn" data-index="${idx}" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#f87171;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;" title="삭제">✕</button>
+            <button type="button" class="account-yearly-edit-btn" data-index="${idx}" style="border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;" title="상단 입력창으로 불러와 수정">수정</button>
+            <button type="button" class="account-yearly-del-btn" data-index="${idx}" style="border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;" title="삭제">✕</button>
           </div>
         </div>
       `;
@@ -10447,9 +10447,11 @@ async function loadLedger() {
 function renderLedger(data) {
   if (!data) return;
 
-  // 1. 헤더 월 텍스트 & 소유자 뱃지
+  // 1. 헤더 월 텍스트 & 소유자 뱃지 & 월 피커 동기화
   const monthText = document.getElementById("ledgerCurrentMonthText");
   if (monthText) monthText.textContent = `${data.year}년 ${data.month}월`;
+  const monthPicker = document.getElementById("ledgerMonthPicker");
+  if (monthPicker) monthPicker.value = `${data.year}-${String(data.month).padStart(2, '0')}`;
   const ownerPill = document.getElementById("ledgerOwnerPill");
   if (ownerPill) ownerPill.textContent = `소유자: ${data.owner || "모두"}`;
 
@@ -10487,8 +10489,8 @@ function renderLedgerCategories(cats) {
     return `
       <div class="ledger-cat-row">
         <div class="ledger-cat-head">
-          <span style="font-weight:600;color:#f1f5f9;">${html(c.category)}</span>
-          <span style="font-weight:700;color:#38bdf8;">₩${number(c.amount, 0)} <small style="color:#94a3b8;font-weight:normal;">(${c.percent}%)</small></span>
+          <span class="ledger-cat-name">${html(c.category)}</span>
+          <span class="ledger-cat-amt">₩${number(c.amount, 0)} <small class="ledger-cat-pct">(${c.percent}%)</small></span>
         </div>
         <div class="ledger-cat-bar-track">
           <div class="ledger-cat-bar-fill" style="width:${Math.min(100, Math.max(2, c.percent))}%;"></div>
@@ -10519,13 +10521,13 @@ function renderLedgerTrend(trend) {
           <div class="ledger-bar-inc" style="height:${Math.max(2, incH)}%;" title="수입 ₩${number(t.income, 0)}"></div>
           <div class="ledger-bar-exp" style="height:${Math.max(2, expH)}%;" title="지출 ₩${number(t.expense, 0)}"></div>
         </div>
-        <span style="font-size:11px;font-weight:${isCurrent ? '800' : '500'};color:${isCurrent ? '#38bdf8' : '#94a3b8'};">${html(t.label)}</span>
+        <span class="ledger-trend-label ${isCurrent ? 'current' : ''}">${html(t.label)}</span>
       </div>
     `;
   }).join("");
 
   container.innerHTML = `
-    <div style="display:flex;justify-content:flex-end;gap:12px;font-size:11px;color:#94a3b8;margin-bottom:8px;">
+    <div class="ledger-trend-legend" style="display:flex;justify-content:flex-end;gap:12px;font-size:11px;margin-bottom:8px;">
       <span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:8px;height:8px;border-radius:2px;background:#4ade80;display:inline-block;"></i> 수입</span>
       <span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:8px;height:8px;border-radius:2px;background:#f43f5e;display:inline-block;"></i> 지출</span>
     </div>
@@ -10541,7 +10543,7 @@ function renderLedgerTransactions(txs) {
   if (countBadge) countBadge.textContent = `${txs.length}건`;
 
   if (!txs || txs.length === 0) {
-    container.innerHTML = `<div class="empty" style="padding:40px 0;"><p style="margin:0;font-size:13px;color:#94a3b8;">등록된 거래 내역이 없습니다. [➕ 내역 등록]을 눌러 첫 거래를 추가해 보세요!</p></div>`;
+    container.innerHTML = `<div class="empty" style="padding:40px 0;"><p style="margin:0;font-size:13px;color:#94a3b8;">등록된 거래 내역이 없습니다. [➕ 내역 추가]를 눌러 첫 거래를 추가해 보세요!</p></div>`;
     return;
   }
 
@@ -10555,20 +10557,20 @@ function renderLedgerTransactions(txs) {
 
     return `
       <tr class="ledger-tx-row">
-        <td style="color:#94a3b8;font-size:12px;white-space:nowrap;">${html(t.date)}</td>
-        <td style="white-space:nowrap;"><span class="ledger-badge ${badgeClass}">${typeLabel}</span></td>
-        <td style="white-space:nowrap;"><span style="font-size:11.5px;color:#cbd5e1;">${html(t.category)}</span></td>
-        <td style="font-weight:600;color:#f8fafc;">
-          ${html(t.merchant || t.description || '-')}
-          ${t.memo ? `<small style="display:block;color:#64748b;font-size:11px;font-weight:normal;">${html(t.memo)}</small>` : ''}
+        <td class="ledger-tx-cell-date">${html(t.date)}</td>
+        <td class="ledger-tx-cell-type"><span class="ledger-badge ${badgeClass}">${typeLabel}</span></td>
+        <td class="ledger-tx-cell-cat"><span class="ledger-cat-badge">${html(t.category)}</span></td>
+        <td class="ledger-tx-cell-merchant">
+          <strong>${html(t.merchant || t.description || '-')}</strong>
+          ${t.memo ? `<small class="ledger-tx-memo">${html(t.memo)}</small>` : ''}
         </td>
-        <td style="white-space:nowrap;"><span class="saving-owner-badge" style="font-size:10px;padding:2px 6px;">${html(t.owner || '모두')}</span></td>
-        <td style="color:#94a3b8;font-size:11.5px;white-space:nowrap;">
-          ${html(t.pay_method || '-')}
-          ${t.is_card_payment && !t.is_settled ? `<span style="font-size:9.5px;color:#f43f5e;background:rgba(244,63,94,0.1);padding:1px 4px;border-radius:3px;margin-left:4px;">미결제</span>` : ''}
-          ${t.is_card_payment && t.is_settled ? `<span style="font-size:9.5px;color:#38bdf8;background:rgba(56,189,248,0.1);padding:1px 4px;border-radius:3px;margin-left:4px;">정산완료</span>` : ''}
+        <td class="ledger-tx-cell-owner"><span class="saving-owner-badge">${html(t.owner || '모두')}</span></td>
+        <td class="ledger-tx-cell-pay">
+          <span>${html(t.pay_method || '-')}</span>
+          ${t.is_card_payment && !t.is_settled ? `<span class="ledger-status-pill unsettled">미결제</span>` : ''}
+          ${t.is_card_payment && t.is_settled ? `<span class="ledger-status-pill settled">정산완료</span>` : ''}
         </td>
-        <td style="text-align:right;font-weight:700;font-size:13.5px;color:${amtColor};white-space:nowrap;">
+        <td class="ledger-tx-cell-amt" style="color:${amtColor};">
           ${amtSign}₩${number(t.amount, 0)}
         </td>
         <td style="text-align:right;white-space:nowrap;">
@@ -11070,31 +11072,31 @@ function renderLedgerCardsList(cards) {
     const hasUnpaid = unpaid > 0;
 
     return `
-      <div style="background:linear-gradient(135deg,#0d1527,#131f37);border:1px solid #23314f;border-radius:10px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+      <div class="ledger-credit-card-item">
         <div>
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <div>
-              <span style="font-size:11px;font-weight:700;color:#38bdf8;background:rgba(56,189,248,0.1);padding:2px 6px;border-radius:4px;">${html(c.card_company)}</span>
-              <span style="font-size:11px;color:#cbd5e1;margin-left:4px;">(${html(c.owner || '모두')})</span>
+              <span class="ledger-card-company-tag">${html(c.card_company)}</span>
+              <span class="ledger-card-owner-tag">(${html(c.owner || '모두')})</span>
             </div>
             <div style="display:flex;gap:4px;">
               <button class="account-action-button" onclick="editLedgerCard('${c.id}')" title="카드 정보 수정" type="button">✎</button>
-              <button class="account-action-button" onclick="deleteLedgerCard('${c.id}')" title="카드 삭제" type="button" style="color:#f43f5e;">🗑</button>
+              <button class="account-action-button mini-delete-button" onclick="deleteLedgerCard('${c.id}')" title="카드 삭제" type="button">🗑</button>
             </div>
           </div>
-          <h4 style="margin:6px 0 2px 0;font-size:14px;font-weight:800;color:#f8fafc;">${html(c.card_name)}</h4>
-          <p style="margin:0;font-size:11.5px;color:#94a3b8;">
-            📅 매월 <strong style="color:#f1f5f9;">${c.payment_day}일</strong> 결제 · 결제계좌: <strong style="color:#cbd5e1;">${html(c.linked_account_name || '미지정')}</strong>
+          <h4 class="ledger-card-name">${html(c.card_name)}</h4>
+          <p class="ledger-card-meta">
+            📅 매월 <strong class="ledger-card-day">${c.payment_day}일</strong> 결제 · 결제계좌: <strong class="ledger-card-acct">${html(c.linked_account_name || '미지정')}</strong>
           </p>
-          ${c.memo ? `<p style="margin:4px 0 0 0;font-size:11px;color:#64748b;">${html(c.memo)}</p>` : ''}
+          ${c.memo ? `<p class="ledger-card-memo">${html(c.memo)}</p>` : ''}
         </div>
 
-        <div style="border-top:1px dashed #23314f;padding-top:8px;display:flex;justify-content:space-between;align-items:center;">
+        <div class="ledger-card-foot">
           <div>
-            <span style="font-size:11px;color:#94a3b8;">청구 예정액</span>
-            <div style="font-size:14px;font-weight:800;color:${hasUnpaid ? '#f43f5e' : '#94a3b8'};">₩${number(unpaid, 0)} <span style="font-size:11px;font-weight:normal;color:#64748b;">(${count}건)</span></div>
+            <span class="ledger-card-unpaid-label">청구 예정액</span>
+            <div class="ledger-card-unpaid-val" style="color:${hasUnpaid ? '#f43f5e' : 'inherit'};">₩${number(unpaid, 0)} <span class="ledger-card-unpaid-count">(${count}건)</span></div>
           </div>
-          <button class="button compact ${hasUnpaid ? 'primary' : 'secondary'}" type="button" onclick="openLedgerCardPayModal('${c.id}')" ${!hasUnpaid ? 'disabled style="opacity:0.5;"' : 'style="font-size:11.5px;padding:4px 10px;background:linear-gradient(135deg,#38bdf8,#2563eb);color:#fff;"'}>
+          <button class="button compact ${hasUnpaid ? 'primary' : 'secondary'}" type="button" onclick="openLedgerCardPayModal('${c.id}')" ${!hasUnpaid ? 'disabled style="opacity:0.5;"' : ''}>
             💳 결제/정산
           </button>
         </div>
@@ -11357,14 +11359,14 @@ function openLedgerRecurringModal() {
       ` : "";
 
       return `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#090e1c;border:1px solid #23314f;border-radius:8px;">
+        <div class="ledger-recurring-item">
           <div>
-            <div style="font-weight:700;color:#f8fafc;font-size:13.5px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+            <div class="ledger-recurring-title">
               <span>${html(r.name)}</span>
               <span class="saving-owner-badge" style="font-size:10px;padding:1px 5px;">${html(r.owner || '모두')}</span>
               ${acctBadge}
             </div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <div class="ledger-recurring-meta">
               <span>매월 ${r.day_of_month}일</span>
               <span>·</span>
               <span>${html(r.category)}</span>
@@ -11375,7 +11377,7 @@ function openLedgerRecurringModal() {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
-            <strong style="color:#c084fc;font-size:14px;margin-right:2px;">₩${number(r.amount, 0)}</strong>
+            <strong class="ledger-recurring-amt">₩${number(r.amount, 0)}</strong>
             <button class="account-action-button" onclick="editRecurringItem('${r.id}')" title="수정" type="button" style="padding:3px 7px;font-size:12px;">✎</button>
             <button class="account-action-button mini-delete-button" onclick="deleteRecurringItem('${r.id}')" title="삭제" type="button" style="padding:3px 7px;font-size:12px;">🗑️</button>
           </div>
@@ -11708,6 +11710,36 @@ function initLedgerListeners() {
     currentLedgerMonth = now.getMonth() + 1;
     loadLedger();
   });
+
+  // 📅 년/월 직접 선택 (HTML5 month picker)
+  const monthPicker = document.getElementById("ledgerMonthPicker");
+  if (monthPicker) {
+    monthPicker.addEventListener("change", (e) => {
+      if (e.target.value) {
+        const parts = e.target.value.split("-");
+        if (parts.length === 2) {
+          currentLedgerYear = parseInt(parts[0], 10);
+          currentLedgerMonth = parseInt(parts[1], 10);
+          loadLedger();
+        }
+      }
+    });
+  }
+  const monthText = document.getElementById("ledgerCurrentMonthText");
+  if (monthText && monthPicker) {
+    monthText.addEventListener("click", () => {
+      try {
+        if (typeof monthPicker.showPicker === "function") {
+          monthPicker.showPicker();
+        } else {
+          monthPicker.focus();
+          monthPicker.click();
+        }
+      } catch (err) {
+        monthPicker.click();
+      }
+    });
+  }
 }
 
 // ── APP BOOTSTRAP ─────────────────────────────────────────────────────────────
