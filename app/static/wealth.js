@@ -9677,25 +9677,31 @@ async function openUserOpenApiModal() {
 
   try {
     const config = await api('/api/user/openapi-config');
-    
+    function updateBadge(badge, isConnected) {
+      if (!badge) return;
+      if (isConnected) {
+        badge.textContent = '연결됨';
+        badge.className = 'openapi-badge connected';
+        badge.style.background = '';
+        badge.style.color = '';
+      } else {
+        badge.textContent = '미연결';
+        badge.className = 'openapi-badge disconnected';
+        badge.style.background = '';
+        badge.style.color = '';
+      }
+    }
+
     // 토스
     const tossBadge = document.getElementById('openapiTossBadge');
     const tossDelBtn = document.getElementById('openapiTossDeleteBtn');
-    if (config.toss && config.toss.configured) {
-      if (tossBadge) {
-        tossBadge.textContent = '연결됨';
-        tossBadge.style.background = 'rgba(66,213,163,0.15)';
-        tossBadge.style.color = '#42d5a3';
-      }
+    const tossConfigured = !!(config.toss && config.toss.configured);
+    updateBadge(tossBadge, tossConfigured);
+    if (tossConfigured) {
       if (tossDelBtn) tossDelBtn.style.display = 'inline-flex';
       if (tossKey) tossKey.value = config.toss.app_key || '';
       if (tossSec) tossSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
     } else {
-      if (tossBadge) {
-        tossBadge.textContent = '미연결';
-        tossBadge.style.background = 'rgba(255,255,255,0.06)';
-        tossBadge.style.color = '#91a0c1';
-      }
       if (tossDelBtn) tossDelBtn.style.display = 'none';
       if (tossSec) tossSec.placeholder = 'Client Secret 입력';
     }
@@ -9703,21 +9709,13 @@ async function openUserOpenApiModal() {
     // KB
     const kbBadge = document.getElementById('openapiKbBadge');
     const kbDelBtn = document.getElementById('openapiKbDeleteBtn');
-    if (config.kb && config.kb.configured) {
-      if (kbBadge) {
-        kbBadge.textContent = '연결됨';
-        kbBadge.style.background = 'rgba(66,213,163,0.15)';
-        kbBadge.style.color = '#42d5a3';
-      }
+    const kbConfigured = !!(config.kb && config.kb.configured);
+    updateBadge(kbBadge, kbConfigured);
+    if (kbConfigured) {
       if (kbDelBtn) kbDelBtn.style.display = 'inline-flex';
       if (kbKey) kbKey.value = config.kb.app_key || '';
       if (kbSec) kbSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
     } else {
-      if (kbBadge) {
-        kbBadge.textContent = '미연결';
-        kbBadge.style.background = 'rgba(255,255,255,0.06)';
-        kbBadge.style.color = '#91a0c1';
-      }
       if (kbDelBtn) kbDelBtn.style.display = 'none';
       if (kbSec) kbSec.placeholder = 'KB App Secret 입력';
     }
@@ -9725,21 +9723,13 @@ async function openUserOpenApiModal() {
     // NH (나무)
     const nhBadge = document.getElementById('openapiNhBadge');
     const nhDelBtn = document.getElementById('openapiNhDeleteBtn');
-    if (config.nh && config.nh.configured) {
-      if (nhBadge) {
-        nhBadge.textContent = '연결됨';
-        nhBadge.style.background = 'rgba(66,213,163,0.15)';
-        nhBadge.style.color = '#42d5a3';
-      }
+    const nhConfigured = !!(config.nh && config.nh.configured);
+    updateBadge(nhBadge, nhConfigured);
+    if (nhConfigured) {
       if (nhDelBtn) nhDelBtn.style.display = 'inline-flex';
       if (nhKey) nhKey.value = config.nh.app_key || '';
       if (nhSec) nhSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
     } else {
-      if (nhBadge) {
-        nhBadge.textContent = '미연결';
-        nhBadge.style.background = 'rgba(255,255,255,0.06)';
-        nhBadge.style.color = '#91a0c1';
-      }
       if (nhDelBtn) nhDelBtn.style.display = 'none';
       if (nhSec) nhSec.placeholder = '나무 App Secret 입력';
     }
@@ -9747,22 +9737,14 @@ async function openUserOpenApiModal() {
     // KIS (한국투자증권)
     const kisBadge = document.getElementById('openapiKisBadge');
     const kisDelBtn = document.getElementById('openapiKisDeleteBtn');
-    if (config.kis && config.kis.configured) {
-      if (kisBadge) {
-        kisBadge.textContent = '연결됨';
-        kisBadge.style.background = 'rgba(66,213,163,0.15)';
-        kisBadge.style.color = '#42d5a3';
-      }
+    const kisConfigured = !!(config.kis && config.kis.configured);
+    updateBadge(kisBadge, kisConfigured);
+    if (kisConfigured) {
       if (kisDelBtn) kisDelBtn.style.display = 'inline-flex';
       if (kisKey) kisKey.value = config.kis.app_key || '';
       if (kisSec) kisSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
       if (kisAcc) kisAcc.value = config.kis.account_no || '';
     } else {
-      if (kisBadge) {
-        kisBadge.textContent = '미연결';
-        kisBadge.style.background = 'rgba(255,255,255,0.06)';
-        kisBadge.style.color = '#91a0c1';
-      }
       if (kisDelBtn) kisDelBtn.style.display = 'none';
       if (kisSec) kisSec.placeholder = '한투 App Secret 입력';
       if (kisAcc) kisAcc.value = (config.kis && config.kis.account_no) || '';
@@ -9771,22 +9753,14 @@ async function openUserOpenApiModal() {
     // Kiwoom (키움증권)
     const kiwoomBadge = document.getElementById('openapiKiwoomBadge');
     const kiwoomDelBtn = document.getElementById('openapiKiwoomDeleteBtn');
-    if (config.kiwoom && config.kiwoom.configured) {
-      if (kiwoomBadge) {
-        kiwoomBadge.textContent = '연결됨';
-        kiwoomBadge.style.background = 'rgba(66,213,163,0.15)';
-        kiwoomBadge.style.color = '#42d5a3';
-      }
+    const kiwoomConfigured = !!(config.kiwoom && config.kiwoom.configured);
+    updateBadge(kiwoomBadge, kiwoomConfigured);
+    if (kiwoomConfigured) {
       if (kiwoomDelBtn) kiwoomDelBtn.style.display = 'inline-flex';
       if (kiwoomKey) kiwoomKey.value = config.kiwoom.app_key || '';
       if (kiwoomSec) kiwoomSec.placeholder = '******** (등록됨 - 변경 시만 입력)';
       if (kiwoomAcc) kiwoomAcc.value = config.kiwoom.account_no || '';
     } else {
-      if (kiwoomBadge) {
-        kiwoomBadge.textContent = '미연결';
-        kiwoomBadge.style.background = 'rgba(255,255,255,0.06)';
-        kiwoomBadge.style.color = '#91a0c1';
-      }
       if (kiwoomDelBtn) kiwoomDelBtn.style.display = 'none';
       if (kiwoomSec) kiwoomSec.placeholder = '키움 App Secret 입력';
       if (kiwoomAcc) kiwoomAcc.value = (config.kiwoom && config.kiwoom.account_no) || '';

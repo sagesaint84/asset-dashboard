@@ -2603,160 +2603,158 @@
     </dialog>
 
     <!-- 8. 증권사별 OpenAPI 연동 설정 모달 -->
-    <dialog id="userOpenApiModal" class="dashboard-dialog" style="max-width:620px;width:92vw;border:1px solid #263558;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.4);">
-      <div class="dialog-content" style="padding:22px;">
-        <div class="dialog-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #263558;padding-bottom:12px;">
-          <div>
-            <h2 style="font-size:17px;margin:0;color:#f3f5ff;display:flex;align-items:center;gap:8px;">
-              ⚙️ 증권사 OpenAPI 설정
-            </h2>
-            <p style="margin:4px 0 0;font-size:12px;color:#91a0c1;">
-              각 증권사에서 발급받은 AppKey/AppSecret을 등록하면 내 계좌만 안전하게 동기화됩니다.
-            </p>
+    <dialog id="userOpenApiModal" class="dialog" style="max-width:620px;width:92vw;">
+      <div class="dialog-head" style="margin-bottom:16px;border-bottom:1px solid var(--line, #263558);padding-bottom:12px;">
+        <div>
+          <h2 style="font-size:17px;margin:0;display:flex;align-items:center;gap:8px;">
+            ⚙️ 증권사 OpenAPI 설정
+          </h2>
+          <p class="dialog-description" style="margin:4px 0 0;font-size:12px;">
+            각 증권사에서 발급받은 AppKey/AppSecret을 등록하면 내 계좌만 안전하게 동기화됩니다.
+          </p>
+        </div>
+        <button type="button" class="close" data-close-dialog="userOpenApiModal" onclick="closeDialog('userOpenApiModal')" aria-label="닫기">✕</button>
+      </div>
+
+      <form id="userOpenApiForm" onsubmit="handleSaveUserOpenApi(event)" style="display:flex;flex-direction:column;gap:14px;padding:0;">
+        
+        <!-- 1. 토스증권 -->
+        <div class="openapi-broker-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:700;color:#60a5fa;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+              🟦 토스증권 (Toss)
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="openapiTossBadge" class="openapi-badge disconnected">확인 중...</span>
+              <button id="openapiTossDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('toss')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="토스증권 연결 삭제">🗑️ 삭제</button>
+            </div>
           </div>
-          <button type="button" class="close" data-close-dialog="userOpenApiModal" onclick="closeDialog('userOpenApiModal')" aria-label="닫기" style="background:transparent;border:none;color:#91a0c1;font-size:18px;cursor:pointer;">✕</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">Client ID (App Key)</label>
+              <input id="openapiTossKey" class="openapi-input" type="text" placeholder="Client ID 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+            </div>
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">Client Secret</label>
+              <input id="openapiTossSecret" class="openapi-input" type="password" placeholder="Client Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+            </div>
+          </div>
         </div>
 
-        <form id="userOpenApiForm" onsubmit="handleSaveUserOpenApi(event)" style="display:flex;flex-direction:column;gap:16px;">
-          
-          <!-- 1. 토스증권 -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-weight:700;color:#60a5fa;font-size:13.5px;display:flex;align-items:center;gap:6px;">
-                🟦 토스증권 (Toss)
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span id="openapiTossBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
-                <button id="openapiTossDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('toss')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="토스증권 연결 삭제">🗑️ 삭제</button>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">Client ID (App Key)</label>
-                <input id="openapiTossKey" type="text" placeholder="Client ID 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">Client Secret</label>
-                <input id="openapiTossSecret" type="password" placeholder="Client Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
+        <!-- 2. KB증권 -->
+        <div class="openapi-broker-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:700;color:#facc15;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+              🟨 KB증권
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="openapiKbBadge" class="openapi-badge disconnected">확인 중...</span>
+              <button id="openapiKbDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kb')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="KB증권 연결 삭제">🗑️ 삭제</button>
             </div>
           </div>
-
-          <!-- 2. KB증권 -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-weight:700;color:#facc15;font-size:13.5px;display:flex;align-items:center;gap:6px;">
-                🟨 KB증권
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span id="openapiKbBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
-                <button id="openapiKbDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kb')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="KB증권 연결 삭제">🗑️ 삭제</button>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Key</label>
-                <input id="openapiKbKey" type="text" placeholder="KB App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Secret</label>
-                <input id="openapiKbSecret" type="password" placeholder="KB App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-            </div>
-          </div>
-
-          <!-- 3. NH투자증권 (나무) -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-weight:700;color:#4ade80;font-size:13.5px;display:flex;align-items:center;gap:6px;">
-                🟩 NH투자증권 (나무)
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span id="openapiNhBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
-                <button id="openapiNhDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('nh')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="나무증권 연결 삭제">🗑️ 삭제</button>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Key</label>
-                <input id="openapiNhKey" type="text" placeholder="나무 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Secret</label>
-                <input id="openapiNhSecret" type="password" placeholder="나무 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-            </div>
-          </div>
-
-          <!-- 4. 한국투자증권 (KIS) -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-weight:700;color:#f97316;font-size:13.5px;display:flex;align-items:center;gap:6px;">
-                🟧 한국투자증권 (KIS)
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span id="openapiKisBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
-                <button id="openapiKisDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kis')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="한국투자증권 연결 삭제">🗑️ 삭제</button>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Key</label>
-                <input id="openapiKisKey" type="text" placeholder="한투 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Secret</label>
-                <input id="openapiKisSecret" type="password" placeholder="한투 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Key</label>
+              <input id="openapiKbKey" class="openapi-input" type="text" placeholder="KB App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
             </div>
             <div>
-              <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">계좌번호 (CANO 8자리 또는 8자리-01)</label>
-              <input id="openapiKisAccountNo" type="text" placeholder="예: 12345678-01 또는 12345678" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Secret</label>
+              <input id="openapiKbSecret" class="openapi-input" type="password" placeholder="KB App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
             </div>
           </div>
+        </div>
 
-          <!-- 5. 키움증권 (Kiwoom) -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid #263558;border-radius:10px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-weight:700;color:#c084fc;font-size:13.5px;display:flex;align-items:center;gap:6px;">
-                🟪 키움증권 (Kiwoom)
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span id="openapiKiwoomBadge" style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:rgba(255,255,255,0.06);color:#91a0c1;">확인 중...</span>
-                <button id="openapiKiwoomDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kiwoom')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="키움증권 연결 삭제">🗑️ 삭제</button>
-              </div>
+        <!-- 3. NH투자증권 (나무) -->
+        <div class="openapi-broker-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:700;color:#4ade80;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+              🟩 NH투자증권 (나무)
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="openapiNhBadge" class="openapi-badge disconnected">확인 중...</span>
+              <button id="openapiNhDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('nh')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="나무증권 연결 삭제">🗑️ 삭제</button>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Key</label>
-                <input id="openapiKiwoomKey" type="text" placeholder="키움 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
-              <div>
-                <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">App Secret</label>
-                <input id="openapiKiwoomSecret" type="password" placeholder="키움 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
-              </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Key</label>
+              <input id="openapiNhKey" class="openapi-input" type="text" placeholder="나무 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
             </div>
             <div>
-              <label style="display:block;font-size:11.5px;color:#aeb8d8;margin-bottom:4px;">계좌번호 (8자리 또는 8자리-01)</label>
-              <input id="openapiKiwoomAccountNo" type="text" placeholder="예: 12345678-01 또는 12345678" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;background:#091024;border:1px solid #263558;color:#f3f5ff;font-size:12.5px;" />
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Secret</label>
+              <input id="openapiNhSecret" class="openapi-input" type="password" placeholder="나무 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
             </div>
           </div>
+        </div>
 
-          <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:8px;padding:10px 12px;font-size:11.5px;color:#bae6fd;line-height:1.5;">
-            💡 <strong>안내</strong>: 이미 등록된 인증키는 마스킹(<code>****</code>)되어 표시되며, 변경하지 않고 비워두면 기존 키가 안전하게 보존됩니다.
+        <!-- 4. 한국투자증권 (KIS) -->
+        <div class="openapi-broker-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:700;color:#f97316;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+              🟧 한국투자증권 (KIS)
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="openapiKisBadge" class="openapi-badge disconnected">확인 중...</span>
+              <button id="openapiKisDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kis')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="한국투자증권 연결 삭제">🗑️ 삭제</button>
+            </div>
           </div>
-
-          <div id="openapiStatusMsg" style="display:none;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
-
-          <div class="dialog-actions" style="margin-top:4px;display:flex;justify-content:flex-end;gap:8px;">
-            <button class="button secondary" type="button" data-close-dialog="userOpenApiModal" onclick="closeDialog('userOpenApiModal')">취소</button>
-            <button id="saveUserOpenApiBtn" class="button primary" type="submit" style="background:#3b82f6;border-color:#3b82f6;font-weight:700;">💾 설정 저장</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Key</label>
+              <input id="openapiKisKey" class="openapi-input" type="text" placeholder="한투 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+            </div>
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Secret</label>
+              <input id="openapiKisSecret" class="openapi-input" type="password" placeholder="한투 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+            </div>
           </div>
-        </form>
-      </div>
+          <div>
+            <label class="openapi-label" style="display:block;margin-bottom:4px;">계좌번호 (CANO 8자리 또는 8자리-01)</label>
+            <input id="openapiKisAccountNo" class="openapi-input" type="text" placeholder="예: 12345678-01 또는 12345678" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+          </div>
+        </div>
+
+        <!-- 5. 키움증권 (Kiwoom) -->
+        <div class="openapi-broker-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:700;color:#c084fc;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+              🟪 키움증권 (Kiwoom)
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span id="openapiKiwoomBadge" class="openapi-badge disconnected">확인 중...</span>
+              <button id="openapiKiwoomDeleteBtn" type="button" class="button secondary compact" onclick="handleDeleteBrokerApi('kiwoom')" style="display:none;font-size:11px;padding:2px 7px;border-radius:6px;color:#ff718c;border:1px solid rgba(255,113,140,0.3);background:rgba(255,113,140,0.08);cursor:pointer;" title="키움증권 연결 삭제">🗑️ 삭제</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Key</label>
+              <input id="openapiKiwoomKey" class="openapi-input" type="text" placeholder="키움 App Key 입력" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+            </div>
+            <div>
+              <label class="openapi-label" style="display:block;margin-bottom:4px;">App Secret</label>
+              <input id="openapiKiwoomSecret" class="openapi-input" type="password" placeholder="키움 App Secret 입력" autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+            </div>
+          </div>
+          <div>
+            <label class="openapi-label" style="display:block;margin-bottom:4px;">계좌번호 (8자리 또는 8자리-01)</label>
+            <input id="openapiKiwoomAccountNo" class="openapi-input" type="text" placeholder="예: 12345678-01 또는 12345678" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;font-size:12.5px;" />
+          </div>
+        </div>
+
+        <div class="openapi-info-box" style="border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.5;">
+          💡 <strong>안내</strong>: 이미 등록된 인증키는 마스킹(<code>****</code>)되어 표시되며, 변경하지 않고 비워두면 기존 키가 안전하게 보존됩니다.
+        </div>
+
+        <div id="openapiStatusMsg" style="display:none;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
+
+        <div class="dialog-actions" style="margin-top:4px;display:flex;justify-content:flex-end;gap:8px;">
+          <button class="button secondary" type="button" data-close-dialog="userOpenApiModal" onclick="closeDialog('userOpenApiModal')">취소</button>
+          <button id="saveUserOpenApiBtn" class="button primary" type="submit">💾 설정 저장</button>
+        </div>
+      </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260906-v5543"></script>
+    <script src="/static/wealth.js?v=20260906-v5544"></script>
   </body>
 </html>
 

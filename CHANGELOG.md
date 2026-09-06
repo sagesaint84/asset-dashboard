@@ -1,3 +1,16 @@
+v5.5.44
+
+(fix) 🎨 기본 테마 및 OLED 테마에서 증권사 OpenAPI 설정 모달 화이트 톤 노출 현상 해결
+- **증권사 OpenAPI 설정 모달(`userOpenApiModal`) 표준 다이얼로그 규격 통일**:
+  - 기존 비표준 클래스(`.dashboard-dialog`)를 시스템 표준 다이얼로그 클래스(`.dialog`)로 일원화
+  - 기본 테마(다크/퍼플)에서 브라우저 기본 흰색 캔버스(`canvas`) 배경으로 노출되던 문제를 해결하고, 고유의 다크 네이비 배경(`#0e162b`) 및 테두리(`#263558`), 그림자 효과 완벽 복원
+  - OLED 모드(`[data-theme="oled"]`)에서도 순수 블랙(`#070709`) 배경 및 네온 테두리로 일관성 있게 렌더링되도록 스타일 규칙 추가
+- **모달 내부 증권사 카드 및 컴포넌트 테마별 전용 클래스화**:
+  - 개별 증권사 카드(`.openapi-broker-card`), 입력창(`.openapi-input`), 라벨(`.openapi-label`), 상태 뱃지(`.openapi-badge`), 안내 박스(`.openapi-info-box`) 스타일을 테마별(기본, OLED, 화이트)로 완벽 분리
+  - JavaScript 동적 뱃지 렌더링 시 인라인 컬러를 강제 주입하지 않고 `.openapi-badge.connected` 및 `.openapi-badge.disconnected` 클래스를 토글하도록 개선하여 모든 테마에서 시인성 극대화
+  - 화이트 테마 전용 최상단 툴바 버튼(`.userOpenApiBtn`) 및 서브 닫기 버튼 톤 정돈
+(perf) 서비스 워커 캐시 버전(`wealth-cache-v144`) 및 정적 자산 쿼리(`v5544`) 갱신
+
 v5.5.43
 
 (fix) 🎨 가계부 월 선택 컨트롤러 고도화, 카테고리 시인성 개선, 테마별 카드 배경색 특성화 및 버튼 일관성 통일

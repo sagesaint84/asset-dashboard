@@ -4573,6 +4573,152 @@ dialog.dialog .dialog-actions {
   color: #0f172a !important;
 }
 
+/* ── OpenAPI 모달 컴포넌트: 기본 테마 (다크/퍼플) ── */
+#userOpenApiModal {
+  background: #0e162b;
+  border: 1px solid #263558;
+  color: #f3f5ff;
+}
+.openapi-broker-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #263558;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.openapi-label {
+  color: #aeb8d8;
+  font-size: 11.5px;
+}
+.openapi-input {
+  background: #091024;
+  border: 1px solid #263558;
+  color: #f3f5ff;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  box-sizing: border-box;
+}
+.openapi-input:focus {
+  border-color: #818cf8;
+  outline: none;
+}
+.openapi-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  display: inline-block;
+}
+.openapi-badge.disconnected {
+  background: rgba(255, 255, 255, 0.06);
+  color: #91a0c1;
+}
+.openapi-badge.connected {
+  background: rgba(66, 213, 163, 0.15);
+  color: #42d5a3;
+}
+.openapi-info-box {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #bae6fd;
+}
+
+/* ── OpenAPI 모달 컴포넌트: OLED 다크 테마 ── */
+[data-theme="oled"] #userOpenApiModal {
+  background: #070709 !important;
+  border-color: #1a1a24 !important;
+  color: #f8fafc !important;
+}
+[data-theme="oled"] #userOpenApiModal .dialog-head {
+  border-bottom-color: #1a1a24 !important;
+}
+[data-theme="oled"] .openapi-broker-card {
+  background: #0b0b10 !important;
+  border-color: #1a1a26 !important;
+}
+[data-theme="oled"] .openapi-label {
+  color: #94a3b8 !important;
+}
+[data-theme="oled"] .openapi-input {
+  background: #050508 !important;
+  border-color: #222230 !important;
+  color: #f8fafc !important;
+}
+[data-theme="oled"] .openapi-input:focus {
+  border-color: #3b82f6 !important;
+}
+[data-theme="oled"] .openapi-badge.disconnected {
+  background: #15151e !important;
+  color: #818cf8 !important;
+}
+[data-theme="oled"] .openapi-badge.connected {
+  background: rgba(66, 213, 163, 0.12) !important;
+  color: #42d5a3 !important;
+}
+[data-theme="oled"] .openapi-info-box {
+  background: #08111f !important;
+  border-color: #1e3a8a !important;
+  color: #93c5fd !important;
+}
+
+/* ── OpenAPI 모달 컴포넌트: 화이트 테마 ── */
+[data-theme="white"] #userOpenApiModal {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.15) !important;
+}
+[data-theme="white"] #userOpenApiModal .dialog-head {
+  border-bottom-color: #e2e8f0 !important;
+}
+[data-theme="white"] #userOpenApiModal .dialog-head h2 {
+  color: #0f172a !important;
+}
+[data-theme="white"] #userOpenApiModal .dialog-description {
+  color: #64748b !important;
+}
+[data-theme="white"] .openapi-broker-card {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+[data-theme="white"] .openapi-label {
+  color: #334155 !important;
+}
+[data-theme="white"] .openapi-input {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="white"] .openapi-input:focus {
+  border-color: #2563eb !important;
+}
+[data-theme="white"] .openapi-badge.disconnected {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  border: 1px solid #cbd5e1 !important;
+}
+[data-theme="white"] .openapi-badge.connected {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #86efac !important;
+}
+[data-theme="white"] .openapi-info-box {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
+}
+[data-theme="white"] #userOpenApiModal .button.secondary {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+[data-theme="white"] #userOpenApiBtn {
+  color: #0284c7 !important;
+  border-color: #bae6fd !important;
+  background: #f0f9ff !important;
+}
+
+
 
 
 
