@@ -1573,26 +1573,26 @@ function renderAccounts(items) {
         }
       }
 
-      return `<div class="account-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:9px;margin-bottom:8px;">
-        <div class="account-row-info" style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      return `<div class="account-row">
+        <div class="account-row-info">
+          <div class="account-row-title-line" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             ${typeBadge}
-            <strong style="font-size:14px;font-weight:700;">${html(account.name)}</strong>
+            <strong class="account-name-text" style="font-size:14px;font-weight:700;">${html(account.name)}</strong>
             <span class="saving-owner-badge" style="font-size:10.5px;padding:1px 6px;">${html(account.owner || '모두')}</span>
           </div>
-          <div style="font-size:12px;color:#94a3b8;margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div class="account-row-sub-line" style="font-size:12px;color:#94a3b8;margin-top:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span>주식자산 <strong style="font-weight:600;">₩${number(stockVal, 0)}</strong> (${number(account.holding_count, 0)}종목)</span>
             <span style="color:#475569;">·</span>
             <span>예수금 <strong style="color:#38bdf8;font-weight:600;">${cashFormatted}</strong></span>
           </div>
           ${taxBenefitBox}
         </div>
-        <div class="account-row-right" style="display:flex;align-items:center;gap:14px;margin-left:14px;flex-shrink:0;">
-          <div class="account-row-values" style="text-align:right;">
-            <div style="font-size:10.5px;color:#94a3b8;margin-bottom:1px;font-weight:500;">통장 총 자산</div>
-            <strong style="font-size:15px;font-weight:800;letter-spacing:-0.3px;">₩${number(totalVal, 0)}</strong>
+        <div class="account-row-right">
+          <div class="account-row-values">
+            <div class="account-total-label" style="font-size:10.5px;color:#94a3b8;margin-bottom:1px;font-weight:500;">통장 총 자산</div>
+            <strong class="account-total-val" style="font-size:15px;font-weight:800;letter-spacing:-0.3px;">₩${number(totalVal, 0)}</strong>
             ${profitVal !== 0 ? `
-              <div style="font-size:11.5px;margin-top:2px;font-weight:700;" class="${signClass(profitVal)}">
+              <div class="account-profit-val ${signClass(profitVal)}" style="font-size:11.5px;margin-top:2px;font-weight:700;">
                 ${profitVal > 0 ? '+' : ''}₩${number(profitVal, 0)}
               </div>
             ` : ''}
@@ -4559,6 +4559,10 @@ function renderAssetRecords(records) {
     $("#recordsPanel")?.classList.add("is-tax-view");
     const sideSummaryEl = document.querySelector(".record-side-summary");
     if (sideSummaryEl) sideSummaryEl.style.display = "none";
+    if ($("#recordPeriodTabs")) $("#recordPeriodTabs").style.display = "none";
+    if ($("#snapshotButton")) $("#snapshotButton").style.display = "none";
+    if ($("#addRecordButton")) $("#addRecordButton").style.display = "none";
+    if ($("#recordCount")) $("#recordCount").style.display = "none";
     renderTaxAccountHoldings(currentOwner);
     return;
   }
@@ -4569,7 +4573,9 @@ function renderAssetRecords(records) {
   if (sideSummaryEl) sideSummaryEl.style.display = "";
   if ($("#snapshotButton")) $("#snapshotButton").style.display = "";
   if ($("#addRecordButton")) $("#addRecordButton").style.display = "";
+  if ($("#recordPeriodTabs")) $("#recordPeriodTabs").style.display = "";
   if ($("#recordPeriodTabs")) $("#recordPeriodTabs").style.opacity = "1";
+  if ($("#recordCount")) $("#recordCount").style.display = "";
   const sideSummarySmall = document.querySelector(".record-side-summary small");
   if (sideSummarySmall) sideSummarySmall.textContent = "저장된 날짜별 자산 추이";
 
@@ -9977,10 +9983,11 @@ async function applyUserRoleView(me) {
     brandEyebrow.textContent = isAdminUser ? 'SYSTEM ADMIN CONSOLE' : 'Wealth';
   }
 
-  // 관리자 팝업 버튼 (admin 메인 계정은 메인에 노출되므로 숨김, sagesaint 등 admin 권한 유저는 팝업용 버튼 표시)
+  // 관리자 팝업 버튼: admin 계정(username === 'admin')으로 접속 시에만 노출 (sagesaint 등 계정은 완전 숨김)
   const adminBtn = document.getElementById('adminUserBtn');
   if (adminBtn) {
-    adminBtn.style.display = (!isAdminUser && me.role === 'admin') ? 'inline-flex' : 'none';
+    const showAdminBtn = Boolean(me && me.username === 'admin');
+    adminBtn.style.setProperty('display', showAdminBtn ? 'inline-flex' : 'none', 'important');
   }
 
   // 증권사 OpenAPI 설정 버튼 (admin은 숨김, 일반 자산 관리 유저에게 표시)
