@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="모든 증권사의 투자자산을 통합해 보는 개인 대시보드" />
-    <title>Wealth · 투자 대시보드</title>
+    <title>Wealth · 자산</title>
     <meta name="theme-color" content="#0b1120" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,16 +15,16 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
     <link rel="stylesheet" href="/static/wealth.css?v=20260906-v5538" />
-    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260907-v5550" />
+    <link rel="stylesheet" href="/static/wealth-overrides.css?v=20260907-v5551" />
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
         <div class="topbar-brand-wrap">
           <a class="brand" href="/" aria-label="시작 화면">W</a>
-          <div class="title"><p>Human Index INVESTMENT</p><h1>인간지표의 투자 대시보드</h1></div>
+          <div class="title"><p>Wealth</p><h1>자산</h1></div>
         </div>
-        <div class="topbar-actions" style="margin-left:auto;display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+        <div class="topbar-actions top-actions" style="margin-left:auto;display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
           <button id="pwaInstallButton" class="button primary compact" type="button" onclick="triggerPwaInstall()" style="display:none;font-size:11.5px;padding:5px 10px;gap:4px;border-radius:8px;background:linear-gradient(135deg, #6366f1, #8b5cf6);color:#fff;border:none;box-shadow:0 2px 8px rgba(99,102,241,0.35);cursor:pointer;">📱 앱 설치</button>
           <div class="user-pill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid #263558;font-size:12px;color:#dbe4ff;">
             <span>👤</span> <strong id="topbarUsername">sagesaint</strong>
@@ -783,9 +783,9 @@
 
       <!-- 8. 📒 스마트 가족 가계부 섹션 -->
       <section id="ledgerSectionPanel" class="panel ledger-section-panel" style="margin-top:18px;">
-        <div class="panel-head" style="flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div>
+        <div class="panel-head ledger-panel-head" style="flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">
+          <div class="ledger-head-left" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div class="ledger-title-wrap">
               <p class="eyebrow">HOUSEHOLD LEDGER</p>
               <h2>가계부 <button type="button" class="section-collapse-btn" data-section="ledger" title="접기/펼치기" aria-label="가계부 접기/펼치기">▼</button></h2>
             </div>
@@ -801,7 +801,7 @@
             </div>
           </div>
 
-          <div class="toolbar" style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <div class="toolbar ledger-toolbar" style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <button id="ledgerOpenCardsBtn" class="button secondary compact" type="button" onclick="openLedgerCardsModal()">💳 카드 관리</button>
             <button id="ledgerOpenRecurringBtn" class="button secondary compact" type="button" onclick="openLedgerRecurringModal()">🛡️ 고정지출</button>
             <button id="ledgerOpenExcelBtn" class="button secondary compact" type="button" onclick="openLedgerExcelModal()">📂 가져오기</button>
@@ -811,7 +811,7 @@
 
         <div id="ledgerSectionContent" class="section-collapsible-content">
           <!-- 1. 월간 현금흐름 요약 카드 4종 -->
-          <div class="savings-summary-grid loan-summary-grid ledger-summary-grid" style="grid-template-columns:repeat(4,1fr);margin-top:14px;">
+          <div class="savings-summary-grid loan-summary-grid ledger-summary-grid">
             <div class="saving-stat-card ledger-stat-income">
               <span class="saving-stat-label">💰 이번 달 총 수입</span>
               <strong id="ledgerTotalIncomeVal">₩0</strong>
@@ -2786,7 +2786,7 @@
       </form>
     </dialog>
 
-    <script src="/static/wealth.js?v=20260907-v5550"></script>
+    <script src="/static/wealth.js?v=20260907-v5551"></script>
   </body>
 </html>
 

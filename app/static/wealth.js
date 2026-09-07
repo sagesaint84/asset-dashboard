@@ -9971,10 +9971,10 @@ async function applyUserRoleView(me) {
   const brandTitle = document.querySelector('.topbar .title h1');
   const brandEyebrow = document.querySelector('.topbar .title p');
   if (brandTitle) {
-    brandTitle.textContent = isAdminUser ? '👑 시스템 관리자 - 사용자 계정 관리' : '인간지표의 투자 대시보드';
+    brandTitle.textContent = isAdminUser ? '👑 시스템 관리자 - 사용자 계정 관리' : '자산';
   }
   if (brandEyebrow) {
-    brandEyebrow.textContent = isAdminUser ? 'SYSTEM ADMIN CONSOLE' : 'Human Index INVESTMENT';
+    brandEyebrow.textContent = isAdminUser ? 'SYSTEM ADMIN CONSOLE' : 'Wealth';
   }
 
   // 관리자 팝업 버튼 (admin 메인 계정은 메인에 노출되므로 숨김, sagesaint 등 admin 권한 유저는 팝업용 버튼 표시)
