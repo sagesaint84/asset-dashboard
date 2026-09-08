@@ -2371,7 +2371,17 @@ function openLoanAccountDialog(loan = null) {
       rawBankAccounts.map(b => `<option value="${b.id}">${html(b.bank_name)} ${html(b.account_name)} (${html(b.owner || '모두')})</option>`).join('');
   }
 
+  const odSelect = $("#loanOverdraftAccountSelect");
+  if (odSelect) {
+    odSelect.innerHTML = '<option value="">-- 자동 상계 연결 계좌 선택 (선택사항) --</option>' +
+      rawBankAccounts.map(b => `<option value="${b.id}">${html(b.bank_name)} ${html(b.account_name)} (${html(b.owner || '모두')})</option>`).join('');
+  }
+
+  const odRow = $("#loanOverdraftAccountRow");
+  const limitLabel = document.getElementById("loanLimitLabel");
+
   if (loan) {
+    const isMinus = (loan.loan_type || "minus") === "minus";
     form.querySelector("[name='loan_type']").value = loan.loan_type || "minus";
     form.querySelector("[name='owner']").value = loan.owner || "모두";
     form.querySelector("[name='bank_name']").value = loan.bank_name || "";
@@ -2381,12 +2391,19 @@ function openLoanAccountDialog(loan = null) {
     form.querySelector("[name='interest_rate']").value = loan.interest_rate || "";
     form.querySelector("[name='repayment_type']").value = loan.repayment_type || "bullet";
     if (select) select.value = loan.linked_account_id || "";
+    if (odSelect) odSelect.value = loan.overdraft_bank_account_id || "";
+    if (odRow) odRow.style.display = isMinus ? "" : "none";
+    if (limitLabel) limitLabel.style.display = isMinus ? "" : "none";
     form.querySelector("[name='maturity_date']").value = loan.maturity_date || "";
     form.querySelector("[name='memo']").value = loan.memo || "";
   } else {
     form.querySelector("[name='owner']").value = currentOwner !== "모두" ? currentOwner : "모두";
     form.querySelector("[name='loan_type']").value = "minus";
     form.querySelector("[name='repayment_type']").value = "bullet";
+    if (select) select.value = "";
+    if (odSelect) odSelect.value = "";
+    if (odRow) odRow.style.display = "";
+    if (limitLabel) limitLabel.style.display = "";
   }
 
   calcLoanPreview();
@@ -10825,6 +10842,7 @@ function initSavingsListeners() {
         interest_rate: Number(fd.get("interest_rate")) || 0,
         repayment_type: fd.get("repayment_type") || "bullet",
         linked_account_id: fd.get("linked_account_id") || "",
+        overdraft_bank_account_id: fd.get("overdraft_bank_account_id") || "",
         maturity_date: fd.get("maturity_date") || "",
         memo: fd.get("memo") || "",
       };
@@ -10852,6 +10870,8 @@ function initSavingsListeners() {
       const isMinus = e.target.value === "minus";
       const limitLabel = document.getElementById("loanLimitLabel");
       if (limitLabel) limitLabel.style.display = isMinus ? "" : "none";
+      const odRow = document.getElementById("loanOverdraftAccountRow");
+      if (odRow) odRow.style.display = isMinus ? "" : "none";
     });
   }
 

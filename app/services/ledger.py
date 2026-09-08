@@ -9,6 +9,7 @@ import json
 import os
 import uuid
 from datetime import datetime, date
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -203,53 +204,304 @@ def _apply_account_balance_delta(
     acc_id: str | None,
     delta: float,
     username: str | None = None,
-) -> bool:
-    """Adjust balance of a linked bank account, savings account, or brokerage account."""
+    overdraft_loan_id: Any = "__AUTO__",
+) -> dict[str, Any] | None:
+    """Adjust balance of a linked bank account (and its minus/overdraft loan), savings account, or brokerage account.
+    Returns balance_effect dict: {bank_account_id, overdraft_loan_id, net_delta, bank_delta, loan_delta}.
+    """
     if not acc_id or abs(delta) < 1e-6:
-        return False
-    try:
-        from app.services.portfolio import read_portfolio, write_portfolio
-        pf = read_portfolio(username)
-        applied = False
+        return None
 
-        # 1. Bank accounts
-        for b in pf.get("bank_accounts", []):
-            if b.get("id") == acc_id:
-                curr = float(b.get("balance") or 0.0)
-                b["balance"] = max(0.0, curr + delta)
-                b["updated_at"] = datetime.now().astimezone().isoformat()
+    from app.services.portfolio import read_portfolio, write_portfolio
+    pf = read_portfolio(username)
+    now_iso = datetime.now().astimezone().isoformat()
+    applied = False
+    effect: dict[str, Any] | None = None
+
+    # 1. Look for matching bank account or minus loan in loan_accounts
+    target_bank = next((b for b in pf.get("bank_accounts", []) if b.get("id") == acc_id), None)
+    target_loan = next((l for l in pf.get("loan_accounts", []) if l.get("id") == acc_id), None)
+
+    # Determine linked_loan based on overdraft_loan_id mode
+    if overdraft_loan_id == "__AUTO__":
+        if not target_bank and target_loan and target_loan.get("loan_type") == "minus":
+            od_bank_id = target_loan.get("overdraft_bank_account_id")
+            if od_bank_id:
+                target_bank = next((b for b in pf.get("bank_accounts", []) if b.get("id") == od_bank_id), None)
+            linked_loan = target_loan
+        elif target_bank:
+            target_bank_owner = (target_bank.get("owner") or "모두").strip()
+            linked_loan = next(
+                (
+                    l for l in pf.get("loan_accounts", [])
+                    if l.get("loan_type") == "minus"
+                    and l.get("overdraft_bank_account_id") == target_bank.get("id")
+                    and (l.get("owner") or "모두").strip() == target_bank_owner
+                ),
+                None
+            )
+        else:
+            linked_loan = None
+    elif overdraft_loan_id is None:
+        linked_loan = None
+    else:
+        # Explicit overdraft loan ID (historical transaction rollback / restore)
+        linked_loan = next((l for l in pf.get("loan_accounts", []) if l.get("id") == overdraft_loan_id), None)
+        if not linked_loan:
+            raise ValueError(f"거래에 연동되었던 마이너스통장 대출(ID: {overdraft_loan_id})을 찾을 수 없어 안전하게 수정/삭제할 수 없습니다.")
+        if not target_bank and linked_loan.get("overdraft_bank_account_id"):
+            target_bank = next((b for b in pf.get("bank_accounts", []) if b.get("id") == linked_loan.get("overdraft_bank_account_id")), None)
+            if not target_bank:
+                raise ValueError(f"거래에 연동되었던 은행 계좌(ID: {linked_loan.get('overdraft_bank_account_id')})가 삭제되어 안전하게 수정/삭제할 수 없습니다.")
+
+    if target_bank and linked_loan:
+        # Bank account with linked minus loan (loan_accounts)
+        curr_bank_bal = float(target_bank.get("balance") or 0.0)
+        loan_limit = float(linked_loan.get("limit_amount") or target_bank.get("limit_amount") or 0.0)
+        loan_used = float(linked_loan.get("current_balance") or 0.0)
+
+        if delta < 0:
+            # Expense / Withdrawal
+            expense = -delta
+            avail_loan = max(0.0, loan_limit - loan_used)
+            total_avail = max(0.0, curr_bank_bal) + avail_loan
+            if expense > total_avail + 1e-6:
+                raise ValueError(
+                    f"출금 가능 금액(통장잔액 ₩{int(max(0.0, curr_bank_bal)):,} + 마이너스통장 한도 ₩{int(avail_loan):,})을 초과했습니다. "
+                    f"(요청: ₩{int(expense):,}, 부족: ₩{int(expense - total_avail):,})"
+                )
+            if curr_bank_bal > 0:
+                if expense <= curr_bank_bal:
+                    new_bank_bal = curr_bank_bal - expense
+                    new_loan_used = loan_used
+                    bank_delta = -expense
+                    loan_delta = 0.0
+                else:
+                    deficit = expense - curr_bank_bal
+                    new_bank_bal = 0.0
+                    new_loan_used = loan_used + deficit
+                    bank_delta = -curr_bank_bal
+                    loan_delta = deficit
+            else:
+                new_bank_bal = 0.0
+                new_loan_used = loan_used + expense
+                bank_delta = 0.0
+                loan_delta = expense
+        else:
+            # Deposit / Income
+            deposit = delta
+            if loan_used > 0:
+                repay = min(loan_used, deposit)
+                new_loan_used = loan_used - repay
+                rem_dep = deposit - repay
+                new_bank_bal = max(0.0, curr_bank_bal) + rem_dep
+                loan_delta = -repay
+                bank_delta = rem_dep
+            else:
+                new_loan_used = 0.0
+                new_bank_bal = max(0.0, curr_bank_bal) + deposit
+                loan_delta = 0.0
+                bank_delta = deposit
+
+        target_bank["balance"] = round(new_bank_bal, 2)
+        target_bank["updated_at"] = now_iso
+        linked_loan["current_balance"] = round(new_loan_used, 2)
+        linked_loan["updated_at"] = now_iso
+        effect = {
+            "bank_account_id": target_bank["id"],
+            "overdraft_loan_id": linked_loan["id"],
+            "net_delta": round(delta, 2),
+            "bank_delta": round(bank_delta, 2),
+            "loan_delta": round(loan_delta, 2),
+        }
+        applied = True
+
+    elif target_bank:
+        # Bank account without linked minus loan in loan_accounts
+        curr_bank_bal = float(target_bank.get("balance") or 0.0)
+        bank_limit = float(target_bank.get("limit_amount") or 0.0)
+
+        if bank_limit > 0:
+            # Overdraft facility configured directly on bank_accounts
+            if curr_bank_bal >= 0:
+                total_avail = curr_bank_bal + bank_limit
+            else:
+                total_avail = max(0.0, bank_limit + curr_bank_bal)
+
+            if delta < 0:
+                expense = -delta
+                if expense > total_avail + 1e-6:
+                    raise ValueError(
+                        f"출금 가능 금액(통장잔액 및 마이너스 한도 ₩{int(total_avail):,})을 초과했습니다. "
+                        f"(요청: ₩{int(expense):,})"
+                    )
+                new_bank_bal = curr_bank_bal - expense
+            else:
+                new_bank_bal = curr_bank_bal + delta
+        else:
+            # Ordinary bank account with no limit (clamping to 0)
+            if delta < 0:
+                expense = -delta
+                if curr_bank_bal > 0:
+                    if expense <= curr_bank_bal:
+                        actual_bank_delta = -expense
+                        new_bank_bal = curr_bank_bal - expense
+                    else:
+                        actual_bank_delta = -curr_bank_bal
+                        new_bank_bal = 0.0
+                else:
+                    actual_bank_delta = 0.0
+                    new_bank_bal = curr_bank_bal
+            else:
+                actual_bank_delta = delta
+                new_bank_bal = curr_bank_bal + delta
+
+            target_bank["balance"] = round(new_bank_bal, 2)
+            target_bank["updated_at"] = now_iso
+            effect = {
+                "bank_account_id": target_bank["id"],
+                "overdraft_loan_id": None,
+                "net_delta": round(actual_bank_delta, 2),
+                "bank_delta": round(actual_bank_delta, 2),
+                "loan_delta": 0.0,
+            }
+            applied = True
+
+    elif target_loan and target_loan.get("loan_type") == "minus":
+        # Direct minus loan without bank link
+        loan_limit = float(target_loan.get("limit_amount") or 0.0)
+        loan_used = float(target_loan.get("current_balance") or 0.0)
+        if delta < 0:
+            expense = -delta
+            avail_loan = max(0.0, loan_limit - loan_used)
+            if expense > avail_loan + 1e-6:
+                raise ValueError(
+                    f"마이너스통장 잔여 한도(₩{int(avail_loan):,})를 초과했습니다. (요청: ₩{int(expense):,})"
+                )
+            target_loan["current_balance"] = round(loan_used + expense, 2)
+        else:
+            deposit = delta
+            target_loan["current_balance"] = round(max(0.0, loan_used - deposit), 2)
+        target_loan["updated_at"] = now_iso
+        effect = {
+            "bank_account_id": None,
+            "overdraft_loan_id": target_loan["id"],
+            "net_delta": round(delta, 2),
+            "bank_delta": 0.0,
+            "loan_delta": round(-delta, 2),
+        }
+        applied = True
+
+    # 2. Savings accounts
+    if not applied:
+        for s in pf.get("savings_accounts", []):
+            if s.get("id") == acc_id:
+                curr = float(s.get("balance") or 0.0)
+                if delta < 0 and curr + delta < -1e-6:
+                    raise ValueError(f"예·적금 잔액이 부족합니다. (현재 잔액: ₩{int(curr):,}, 요청: ₩{int(-delta):,})")
+                s["balance"] = round(curr + delta, 2)
+                s["updated_at"] = now_iso
+                effect = {
+                    "bank_account_id": s["id"],
+                    "overdraft_loan_id": None,
+                    "net_delta": round(delta, 2),
+                    "bank_delta": round(delta, 2),
+                    "loan_delta": 0.0,
+                }
                 applied = True
                 break
 
-        # 2. Savings accounts
-        if not applied:
-            for s in pf.get("savings_accounts", []):
-                if s.get("id") == acc_id:
-                    curr = float(s.get("balance") or 0.0)
-                    s["balance"] = max(0.0, curr + delta)
-                    s["updated_at"] = datetime.now().astimezone().isoformat()
-                    applied = True
-                    break
+    # 3. Brokerage accounts
+    if not applied:
+        for a in pf.get("accounts", []):
+            if a.get("id") == acc_id:
+                curr = float(a.get("cash") or 0.0)
+                if delta < 0 and curr + delta < -1e-6:
+                    raise ValueError(f"증권사 예수금이 부족합니다. (현재 예수금: ₩{int(curr):,}, 요청: ₩{int(-delta):,})")
+                a["cash"] = round(curr + delta, 2)
+                settings = pf.setdefault("settings", {})
+                cb = settings.setdefault("cash_balances", {})
+                if acc_id in cb and isinstance(cb[acc_id], dict):
+                    cb_krw = float(cb[acc_id].get("krw") or 0.0)
+                    cb[acc_id]["krw"] = round(max(0.0, cb_krw + delta), 2)
+                effect = {
+                    "bank_account_id": a["id"],
+                    "overdraft_loan_id": None,
+                    "net_delta": round(delta, 2),
+                    "bank_delta": round(delta, 2),
+                    "loan_delta": 0.0,
+                }
+                applied = True
+                break
 
-        # 3. Brokerage accounts
-        if not applied:
-            for a in pf.get("accounts", []):
-                if a.get("id") == acc_id:
-                    curr = float(a.get("cash") or 0.0)
-                    a["cash"] = max(0.0, curr + delta)
-                    settings = pf.setdefault("settings", {})
-                    cb = settings.setdefault("cash_balances", {})
-                    if acc_id in cb and isinstance(cb[acc_id], dict):
-                        cb[acc_id]["krw"] = max(0.0, float(cb[acc_id].get("krw") or 0.0) + delta)
-                    applied = True
-                    break
+    if applied:
+        write_portfolio(pf, username)
+        return effect
+    else:
+        raise ValueError(f"연동된 계좌(ID: {acc_id})를 포트폴리오에서 찾을 수 없습니다.")
 
-        if applied:
-            write_portfolio(pf, username)
-            return True
-    except Exception as e:
-        print(f"Error applying balance delta for account {acc_id}: {e}")
-    return False
+
+def _rollback_balance_effect(
+    effect: dict[str, Any] | None,
+    username: str | None = None,
+) -> bool:
+    """Safely roll back a previously applied balance effect using net_delta and historical account IDs."""
+    if not effect:
+        return False
+    net_delta = float(effect.get("net_delta") or 0.0)
+    if abs(net_delta) < 1e-6:
+        return False
+
+    bank_id = effect.get("bank_account_id")
+    loan_id = effect.get("overdraft_loan_id")
+    target_id = bank_id or loan_id
+    if not target_id:
+        return False
+
+    # The inverse economic delta to apply: -net_delta
+    rollback_delta = -net_delta
+
+    _apply_account_balance_delta(
+        acc_id=target_id,
+        delta=rollback_delta,
+        username=username,
+        overdraft_loan_id=loan_id,  # Target the exact historical loan (or None if no overdraft loan)
+    )
+    return True
+
+
+def _rollback_transaction_effect_or_legacy(
+    tx: dict[str, Any],
+    username: str | None = None,
+) -> bool:
+    """Roll back a transaction's balance effect safely. If legacy, prevents unsafe ambiguous guesses."""
+    effect = tx.get("balance_effect")
+    if effect:
+        return _rollback_balance_effect(effect, username=username)
+
+    # Legacy transaction fallback
+    old_acc_id = tx.get("account_id")
+    old_delta = float(tx.get("applied_delta") or 0.0)
+    if not old_acc_id or abs(old_delta) < 1e-6:
+        return False
+
+    from app.services.portfolio import read_portfolio
+    pf = read_portfolio(username)
+    target_bank = next((b for b in pf.get("bank_accounts", []) if b.get("id") == old_acc_id), None)
+    if target_bank:
+        # Check if there is any overdraft loan currently linked
+        linked = next((l for l in pf.get("loan_accounts", []) if l.get("loan_type") == "minus" and l.get("overdraft_bank_account_id") == target_bank.get("id")), None)
+        if linked:
+            raise ValueError(
+                "과거 거래에 마이너스통장 연결 기록(balance_effect)이 없고 현재 계좌에 마이너스통장이 연결되어 있어 안전하게 수정/삭제할 수 없습니다."
+            )
+        _apply_account_balance_delta(old_acc_id, -old_delta, username=username, overdraft_loan_id=None)
+        return True
+
+    # Savings, loan, or brokerage
+    _apply_account_balance_delta(old_acc_id, -old_delta, username=username, overdraft_loan_id=None)
+    return True
+
 
 
 # ---------------------------------------------------------------------------
@@ -348,8 +600,9 @@ def settle_card_payment(card_id: str, payload: dict[str, Any], username: str | N
         raise ValueError("결제할 카드 청구 금액이 없습니다 (0원).")
 
     # 1. 은행 계좌에서 카드 대금 출금 차감
+    settle_effect = None
     if acc_id:
-        _apply_account_balance_delta(acc_id, -amount_to_pay, username=username)
+        settle_effect = _apply_account_balance_delta(acc_id, -amount_to_pay, username=username)
 
     # 2. 가계부에 카드대금결제 거래 생성
     settle_tx_id = str(uuid.uuid4())
@@ -364,6 +617,7 @@ def settle_card_payment(card_id: str, payload: dict[str, Any], username: str | N
         "account_id": acc_id,
         "account_name": acc_name,
         "applied_delta": -amount_to_pay if acc_id else 0.0,
+        "balance_effect": settle_effect,
         "merchant": f"[{target_card.get('card_name', '신용카드')}] 카드대금 결제",
         "memo": f"{len(unpaid_txs)}건 카드 이용대금 결제 완료",
         "is_recurring": False,
@@ -401,10 +655,13 @@ def add_transaction(payload: dict[str, Any], username: str | None = None) -> dic
     # Calculate delta for account balance
     # 신용카드 지출인 경우 즉시 은행 계좌를 차감하지 않고 카드에 누적
     applied_delta = 0.0
+    balance_effect = None
     apply_to_account = bool(payload.get("apply_to_account", False) or linked_acc_id)
     if apply_to_account and linked_acc_id and amount > 0 and not is_card:
         applied_delta = amount if tx_type == "income" else -amount
-        _apply_account_balance_delta(linked_acc_id, applied_delta, username=username)
+        balance_effect = _apply_account_balance_delta(linked_acc_id, applied_delta, username=username)
+        if balance_effect:
+            applied_delta = float(balance_effect.get("net_delta") or applied_delta)
 
     tx = {
         "id": tx_id,
@@ -421,6 +678,7 @@ def add_transaction(payload: dict[str, Any], username: str | None = None) -> dic
         "account_id": linked_acc_id,
         "account_name": linked_acc_name,
         "applied_delta": applied_delta,
+        "balance_effect": balance_effect,
         "merchant": str(payload.get("merchant") or payload.get("description") or "").strip(),
         "memo": str(payload.get("memo") or "").strip(),
         "is_recurring": bool(payload.get("is_recurring", False)),
@@ -435,39 +693,69 @@ def update_transaction(tx_id: str, payload: dict[str, Any], username: str | None
     data = read_ledger(username=username)
     for idx, tx in enumerate(data.get("transactions", [])):
         if tx.get("id") == tx_id:
+            old_effect = tx.get("balance_effect")
             old_delta = float(tx.get("applied_delta") or 0.0)
             old_acc_id = tx.get("account_id")
 
             # 1. Rollback old balance delta if existed
-            if old_acc_id and abs(old_delta) > 1e-6:
-                _apply_account_balance_delta(old_acc_id, -old_delta, username=username)
+            rolled_back = False
+            if old_effect or (old_acc_id and abs(old_delta) > 1e-6):
+                _rollback_transaction_effect_or_legacy(tx, username=username)
+                rolled_back = True
 
-            for k in ["date", "type", "category", "owner", "pay_method", "card_id", "card_name", "is_card_payment", "is_settled", "account_id", "account_name", "merchant", "memo", "is_recurring"]:
-                if k in payload:
-                    if k in ["is_recurring", "is_card_payment", "is_settled"]:
-                        tx[k] = bool(payload[k])
-                    else:
-                        tx[k] = str(payload[k]).strip() if payload[k] is not None else ""
-            if "amount" in payload:
-                tx["amount"] = max(0.0, float(payload["amount"]))
+            tx_backup = deepcopy(tx)
+            try:
+                for k in ["date", "type", "category", "owner", "pay_method", "card_id", "card_name", "is_card_payment", "is_settled", "account_id", "account_name", "merchant", "memo", "is_recurring"]:
+                    if k in payload:
+                        if k in ["is_recurring", "is_card_payment", "is_settled"]:
+                            tx[k] = bool(payload[k])
+                        else:
+                            tx[k] = str(payload[k]).strip() if payload[k] is not None else ""
+                if "amount" in payload:
+                    tx["amount"] = max(0.0, float(payload["amount"]))
 
-            # 2. Apply new delta
-            new_acc_id = str(tx.get("account_id") or "").strip()
-            new_amount = float(tx.get("amount") or 0.0)
-            new_type = str(tx.get("type") or "expense")
-            is_card = bool(tx.get("card_id") or tx.get("is_card_payment", False))
-            apply_to_account = bool(payload.get("apply_to_account", False) or new_acc_id)
+                # 2. Apply new delta
+                new_acc_id = str(tx.get("account_id") or "").strip()
+                new_amount = float(tx.get("amount") or 0.0)
+                new_type = str(tx.get("type") or "expense")
+                is_card = bool(tx.get("card_id") or tx.get("is_card_payment", False))
+                apply_to_account = bool(payload.get("apply_to_account", False) or new_acc_id)
 
-            new_delta = 0.0
-            if apply_to_account and new_acc_id and new_amount > 0 and not is_card:
-                new_delta = new_amount if new_type == "income" else -new_amount
-                _apply_account_balance_delta(new_acc_id, new_delta, username=username)
+                new_delta = 0.0
+                new_effect = None
+                if apply_to_account and new_acc_id and new_amount > 0 and not is_card:
+                    new_delta = new_amount if new_type == "income" else -new_amount
+                    new_effect = _apply_account_balance_delta(new_acc_id, new_delta, username=username)
+                    if new_effect:
+                        new_delta = float(new_effect.get("net_delta") or new_delta)
 
-            tx["applied_delta"] = new_delta
-            tx["updated_at"] = datetime.now().isoformat()
-            data["transactions"][idx] = tx
-            write_ledger(data, username=username)
-            return tx
+                tx["applied_delta"] = new_delta
+                tx["balance_effect"] = new_effect
+                tx["updated_at"] = datetime.now().isoformat()
+                data["transactions"][idx] = tx
+                write_ledger(data, username=username)
+                return tx
+            except Exception as e:
+                # Rollback failed new delta: restore old state!
+                if rolled_back:
+                    if old_effect:
+                        try:
+                            target_id = old_effect.get("bank_account_id") or old_effect.get("overdraft_loan_id")
+                            _apply_account_balance_delta(
+                                acc_id=target_id,
+                                delta=float(old_effect.get("net_delta") or 0.0),
+                                username=username,
+                                overdraft_loan_id=old_effect.get("overdraft_loan_id"),
+                            )
+                        except Exception as re_err:
+                            print(f"Error restoring old balance effect during update failure: {re_err}")
+                    elif old_acc_id and abs(old_delta) > 1e-6:
+                        try:
+                            _apply_account_balance_delta(old_acc_id, old_delta, username=username, overdraft_loan_id=None)
+                        except Exception as re_err:
+                            print(f"Error restoring old balance delta during update failure: {re_err}")
+                data["transactions"][idx] = tx_backup
+                raise e
     return None
 
 
@@ -476,12 +764,18 @@ def delete_transaction(tx_id: str, username: str | None = None) -> bool:
     before = len(data.get("transactions", []))
     target_tx = next((t for t in data.get("transactions", []) if t.get("id") == tx_id), None)
 
-    # Rollback account balance delta if existed
-    if target_tx:
-        old_delta = float(target_tx.get("applied_delta") or 0.0)
-        old_acc_id = target_tx.get("account_id")
-        if old_acc_id and abs(old_delta) > 1e-6:
-            _apply_account_balance_delta(old_acc_id, -old_delta, username=username)
+    if not target_tx:
+        return False
+
+    # 1. Rollback account balance delta if existed
+    _rollback_transaction_effect_or_legacy(target_tx, username=username)
+
+    # 2. If this was a card settlement transaction, reset settled status for linked card txs
+    for t in data.get("transactions", []):
+        if t.get("settled_tx_id") == tx_id:
+            t["is_settled"] = False
+            t.pop("settled_at", None)
+            t.pop("settled_tx_id", None)
 
     data["transactions"] = [t for t in data.get("transactions", []) if t.get("id") != tx_id]
     after = len(data["transactions"])
@@ -588,9 +882,14 @@ def process_recurring_deductions(username: str | None = None) -> list[dict[str, 
         if today >= due_date:
             last_deducted = str(rec.get("last_deducted_date") or "")
             if not last_deducted.startswith(cur_prefix):
-                # 1. 연동 계좌 잔액 차감
-                applied_ok = _apply_account_balance_delta(linked_acc_id, -amount, username=username)
-                applied_delta = -amount if applied_ok else 0.0
+                # 1. 연동 계좌 잔액 차감 시도
+                try:
+                    applied_effect = _apply_account_balance_delta(linked_acc_id, -amount, username=username)
+                except ValueError as e:
+                    # 한도 초과 또는 잔액 부족으로 출금 실패: 가계부 거래를 생성하지 않고 건너뜀
+                    print(f"Recurring deduction failed for {rec.get('name')}: {e}")
+                    continue
+                applied_delta = float(applied_effect.get("net_delta") or -amount) if applied_effect else 0.0
 
                 # 2. 가계부 지출 내역 1건 생성
                 tx_date_str = due_date.isoformat()
@@ -610,6 +909,7 @@ def process_recurring_deductions(username: str | None = None) -> list[dict[str, 
                     "merchant": rec_name,
                     "memo": f"[정기 자동이체] {rec_name}",
                     "applied_delta": applied_delta,
+                    "balance_effect": applied_effect,
                     "is_recurring": True,
                     "recurring_id": rec.get("id"),
                     "created_at": datetime.now().isoformat(),
@@ -622,7 +922,7 @@ def process_recurring_deductions(username: str | None = None) -> list[dict[str, 
                     "amount": amount,
                     "account_name": acc_name,
                     "deducted_date": tx_date_str,
-                    "balance_deducted": applied_ok,
+                    "balance_deducted": bool(applied_effect),
                 })
                 has_changes = True
 

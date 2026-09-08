@@ -487,13 +487,32 @@ def save_loan_account(payload: dict[str, Any], username: str | None = None) -> d
     limit = max(0.0, float(payload.get("limit_amount") or 0.0))
     rate = max(0.0, float(payload.get("interest_rate") or 0.0))
     repay_type = (payload.get("repayment_type") or "bullet").strip()
+    owner = (payload.get("owner") or "모두").strip()
+
+    overdraft_bank_id = (payload.get("overdraft_bank_account_id") or "").strip()
+    if overdraft_bank_id:
+        if loan_type != "minus":
+            raise ValueError("마이너스통장 연결(overdraft_bank_account_id)은 loan_type이 'minus'인 대출에만 설정할 수 있습니다.")
+        banks = data.get("bank_accounts", [])
+        matched_bank = next((b for b in banks if b.get("id") == overdraft_bank_id), None)
+        if not matched_bank:
+            raise ValueError(f"연결할 은행 계좌(ID: {overdraft_bank_id})를 찾을 수 없습니다.")
+        bank_currency = str(matched_bank.get("currency") or "KRW").upper()
+        if bank_currency != "KRW":
+            raise ValueError(f"마이너스통장 자동 상계는 원화(KRW) 계좌만 지원합니다. (선택 계좌: {bank_currency})")
+        bank_owner = (matched_bank.get("owner") or "모두").strip()
+        if owner != bank_owner:
+            raise ValueError(f"마이너스통장 자동 상계를 연동하려면 대출 소유자('{owner}')와 은행 계좌 소유자('{bank_owner}')가 완전히 일치해야 합니다.")
+        for other_l in loans:
+            if other_l.get("id") != lid and other_l.get("loan_type") == "minus" and other_l.get("overdraft_bank_account_id") == overdraft_bank_id:
+                raise ValueError(f"해당 은행 계좌({matched_bank.get('bank_name')} {matched_bank.get('account_name')})에는 이미 연결된 마이너스통장이 존재합니다.")
 
     record = {
         "id": lid,
         "loan_type": loan_type,
         "bank_name": (payload.get("bank_name") or "").strip() or "은행",
         "product_name": (payload.get("product_name") or "").strip() or "마이너스통장/신용대출",
-        "owner": (payload.get("owner") or "모두").strip(),
+        "owner": owner,
         "limit_amount": limit,
         "current_balance": balance,
         "interest_rate": rate,
@@ -501,6 +520,7 @@ def save_loan_account(payload: dict[str, Any], username: str | None = None) -> d
         "start_date": (payload.get("start_date") or "").strip(),
         "maturity_date": (payload.get("maturity_date") or "").strip(),
         "linked_account_id": (payload.get("linked_account_id") or "").strip(),
+        "overdraft_bank_account_id": overdraft_bank_id,
         "linked_property_id": (payload.get("linked_property_id") or "").strip(),
         "memo": (payload.get("memo") or "").strip(),
         "updated_at": datetime.now().astimezone().isoformat(),

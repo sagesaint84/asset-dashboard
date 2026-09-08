@@ -1093,7 +1093,10 @@ async def save_loan_account_endpoint(request: Request) -> dict:
     from app.services.savings import save_loan_account
     username = get_current_username(request)
     body = await request.json()
-    record = save_loan_account(body, username=username)
+    try:
+        record = save_loan_account(body, username=username)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"message": "대출·마이너스통장이 저장되었습니다.", "loan": record}
 
 @app.delete("/api/loan-accounts/{loan_id}")
@@ -2267,7 +2270,10 @@ async def create_ledger_transaction(request: Request) -> dict:
     payload = await request.json()
     if not payload.get("amount"):
         raise HTTPException(400, "금액을 입력해 주세요.")
-    tx = add_transaction(payload, username=username)
+    try:
+        tx = add_transaction(payload, username=username)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return {"message": "내역이 등록되었습니다.", "transaction": tx}
 
 
@@ -2276,7 +2282,10 @@ async def edit_ledger_transaction(tx_id: str, request: Request) -> dict:
     """Update an existing transaction."""
     username = get_current_username(request)
     payload = await request.json()
-    tx = update_transaction(tx_id, payload, username=username)
+    try:
+        tx = update_transaction(tx_id, payload, username=username)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if not tx:
         raise HTTPException(404, "수정할 내역을 찾을 수 없습니다.")
     return {"message": "내역이 수정되었습니다.", "transaction": tx}
@@ -2286,7 +2295,10 @@ async def edit_ledger_transaction(tx_id: str, request: Request) -> dict:
 async def remove_ledger_transaction(tx_id: str, request: Request) -> dict:
     """Delete a transaction."""
     username = get_current_username(request)
-    success = delete_transaction(tx_id, username=username)
+    try:
+        success = delete_transaction(tx_id, username=username)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if not success:
         raise HTTPException(404, "삭제할 내역을 찾을 수 없습니다.")
     return {"message": "내역이 삭제되었습니다."}
