@@ -347,6 +347,12 @@ def delete_bank_account(acc_id: str, username: str | None = None) -> bool:
     data["bank_accounts"] = [a for a in accounts if a.get("id") != acc_id]
     if len(data["bank_accounts"]) == before:
         return False
+    # Clear dangling references in loan accounts
+    for loan in data.get("loan_accounts", []):
+        if loan.get("overdraft_bank_account_id") == acc_id:
+            loan["overdraft_bank_account_id"] = ""
+        if loan.get("linked_account_id") == acc_id:
+            loan["linked_account_id"] = ""
     write_portfolio(data, username)
     return True
 

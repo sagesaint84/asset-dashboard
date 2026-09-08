@@ -249,10 +249,6 @@ def _apply_account_balance_delta(
         linked_loan = next((l for l in pf.get("loan_accounts", []) if l.get("id") == overdraft_loan_id), None)
         if not linked_loan:
             raise ValueError(f"거래에 연동되었던 마이너스통장 대출(ID: {overdraft_loan_id})을 찾을 수 없어 안전하게 수정/삭제할 수 없습니다.")
-        if not target_bank and linked_loan.get("overdraft_bank_account_id"):
-            target_bank = next((b for b in pf.get("bank_accounts", []) if b.get("id") == linked_loan.get("overdraft_bank_account_id")), None)
-            if not target_bank:
-                raise ValueError(f"거래에 연동되었던 은행 계좌(ID: {linked_loan.get('overdraft_bank_account_id')})가 삭제되어 안전하게 수정/삭제할 수 없습니다.")
 
     if target_bank and linked_loan:
         # Bank account with linked minus loan (loan_accounts)
@@ -457,6 +453,22 @@ def _rollback_balance_effect(
     target_id = bank_id or loan_id
     if not target_id:
         return False
+
+    from app.services.portfolio import read_portfolio
+    pf = read_portfolio(username)
+    if bank_id:
+        bank_exists = (
+            any(b.get("id") == bank_id for b in pf.get("bank_accounts", []))
+            or any(s.get("id") == bank_id for s in pf.get("savings_accounts", []))
+            or any(a.get("id") == bank_id for a in pf.get("accounts", []))
+        )
+        if not bank_exists:
+            raise ValueError(f"거래에 연결되었던 은행 계좌(ID: {bank_id})가 삭제되어 안전하게 수정/삭제할 수 없습니다.")
+
+    if loan_id:
+        loan_exists = any(l.get("id") == loan_id for l in pf.get("loan_accounts", []))
+        if not loan_exists:
+            raise ValueError(f"거래에 연동되었던 마이너스통장 대출(ID: {loan_id})을 찾을 수 없어 안전하게 수정/삭제할 수 없습니다.")
 
     # The inverse economic delta to apply: -net_delta
     rollback_delta = -net_delta
